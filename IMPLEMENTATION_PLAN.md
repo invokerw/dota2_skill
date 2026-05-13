@@ -87,11 +87,12 @@ Compiler targets: AppleClang 15+, Clang 15+, GCC 12+, MSVC 19.30+.
 - Error handling: Lua errors log & degrade, never crash world tick
 
 **Tests**:
-- `test_lua_ability`: minimal Lua ability, lifecycle hooks called with correct args
-- `test_lua_modifier`: Lua modifier declares a property, C++ reads aggregated stat
-- `test_lua_error_safety`: broken Lua script doesn't crash the world
+- `test_lua_bindings`: enum tables, Unit/World methods reachable, `apply_damage` flows through full pipeline
+- `test_lua_ability`: Blade Fury (channel + AoE) pulses damage, stun interrupts, cooldown starts on end
+- `test_lua_modifier`: Lua `modifier_test_shield` declares MagicResistBonus property, absorbs only magical damage
+- `test_lua_error_safety`: runtime errors in Lua hooks are trapped via `sol::protected_function`; error callback counts upward
 
-**Status**: Not Started
+**Status**: Complete (64/64 tests passing; Lua 5.4 + sol2 via CPM; ScriptedAbility + ScriptedModifier both exercised by tests; Juggernaut Blade Fury runs from YAML+Lua)
 
 ---
 

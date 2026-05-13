@@ -27,7 +27,7 @@ UnitStats hero_stats() {
 }
 
 // Helper: instantiate Lion's Earth Spike from YAML on `caster`.
-DataDrivenAbility* attach_earth_spike(AbilityRegistry& reg, Unit& caster) {
+Ability* attach_earth_spike(AbilityRegistry& reg, Unit& caster) {
     reg.load_file(std::string(kDataDir) + "/heroes/lion.yaml");
     return reg.instantiate("lion_earth_spike", caster);
 }

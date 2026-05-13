@@ -1,7 +1,9 @@
 #include "dota/ability/registry.hpp"
 
 #include "dota/ability/manager.hpp"
+#include "dota/ability/scripted.hpp"
 #include "dota/core/unit.hpp"
+#include "dota/script/lua_state.hpp"
 
 #include <yaml-cpp/yaml.h>
 
@@ -193,14 +195,25 @@ const AbilityDef* AbilityRegistry::find(const std::string& name) const {
     return it == defs_.end() ? nullptr : &it->second;
 }
 
-DataDrivenAbility* AbilityRegistry::instantiate(const std::string& name, Unit& caster) {
+Ability* AbilityRegistry::instantiate(const std::string& name, Unit& caster,
+                                      LuaState* lua) {
     const AbilityDef* def = find(name);
     if (!def) return nullptr;
-    if (def->base_class != "ability_datadriven") return nullptr;
-    auto ability = std::make_unique<DataDrivenAbility>(caster, *def);
-    DataDrivenAbility* raw = ability.get();
-    caster.abilities().attach(std::move(ability));
-    return raw;
+    if (def->base_class == "ability_datadriven") {
+        auto ability = std::make_unique<DataDrivenAbility>(caster, *def);
+        Ability* raw = ability.get();
+        caster.abilities().attach(std::move(ability));
+        return raw;
+    }
+    if (def->base_class == "ability_lua") {
+        LuaState* state = lua ? lua : default_lua_;
+        if (!state) return nullptr;
+        auto ability = std::make_unique<ScriptedAbility>(caster, *def, *state);
+        Ability* raw = ability.get();
+        caster.abilities().attach(std::move(ability));
+        return raw;
+    }
+    return nullptr;
 }
 
 } // namespace dota

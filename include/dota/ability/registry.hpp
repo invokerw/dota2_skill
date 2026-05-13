@@ -8,10 +8,12 @@
 
 namespace dota {
 
+class Ability;
+class LuaState;
 class Unit;
 
 // Stores parsed AbilityDefs indexed by name. Loading a YAML file registers
-// every ability inside it. Construct a runtime DataDrivenAbility with
+// every ability inside it. Construct a runtime Ability with
 // `instantiate(name, caster)`.
 class AbilityRegistry {
 public:
@@ -25,13 +27,22 @@ public:
 
     const AbilityDef* find(const std::string& name) const;
 
-    // Construct a runtime DataDrivenAbility and hand it off to the caster's
-    // AbilityManager. Returns a non-owning pointer on success, nullptr if
-    // there is no definition for `name` or it is Lua-based (Stage 4).
-    DataDrivenAbility* instantiate(const std::string& name, Unit& caster);
+    // Construct a runtime Ability (DataDriven or Scripted depending on
+    // def.base_class) and attach it to the caster. Returns a non-owning
+    // pointer on success, nullptr if the ability is not registered or the
+    // required Lua backing is missing.
+    //
+    // For Lua-based abilities the caller must supply the LuaState. If the
+    // registry has a default LuaState set via `set_lua()`, that one is used.
+    Ability* instantiate(const std::string& name, Unit& caster,
+                         LuaState* lua = nullptr);
+
+    void      set_lua(LuaState* lua) { default_lua_ = lua; }
+    LuaState* lua() const            { return default_lua_; }
 
 private:
     std::unordered_map<std::string, AbilityDef> defs_;
+    LuaState* default_lua_ = nullptr;
 };
 
 } // namespace dota
