@@ -73,7 +73,7 @@ Compiler targets: AppleClang 15+, Clang 15+, GCC 12+, MSVC 19.30+.
 - `test_ability_lifecycle`: stun during cast_point aborts `on_spell_start`; cooldown gates recast
 - `test_lion_earth_spike`: end-to-end damage + stun application
 
-**Status**: Not Started
+**Status**: Complete (47/47 tests passing; yaml-cpp 0.8.0 wired; Lion Earth Spike runs end-to-end from YAML)
 
 ---
 

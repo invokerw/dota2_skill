@@ -87,6 +87,12 @@ void World::tick_once() {
     for (auto& u : units_) {
         if (u->alive()) u->tick_modifiers(kTickDt);
     }
+    // Advance abilities (cast-point timers, channel thinks, cooldowns) after
+    // modifiers so a just-expired stun doesn't interrupt the cast that would
+    // otherwise resolve this tick.
+    for (auto& u : units_) {
+        if (u->alive()) u->tick_abilities(kTickDt);
+    }
 
     // Decrement all attack cooldowns first so scheduling a new attack in the
     // same tick is consistent.

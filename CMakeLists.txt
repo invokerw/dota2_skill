@@ -23,6 +23,21 @@ CPMAddPackage(
         "gtest_force_shared_crt ON"
 )
 
+# --- Stage 3 dependency: yaml-cpp ---
+# yaml-cpp 0.8.0 still declares an ancient minimum CMake version; let the
+# configure pass through until they bump it upstream.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+CPMAddPackage(
+    NAME yaml-cpp
+    GITHUB_REPOSITORY jbeder/yaml-cpp
+    GIT_TAG 0.8.0
+    OPTIONS
+        "YAML_CPP_BUILD_TESTS OFF"
+        "YAML_CPP_BUILD_TOOLS OFF"
+        "YAML_CPP_INSTALL OFF"
+        "YAML_CPP_FORMAT_SOURCE OFF"
+)
+
 # --- Core library ---
 add_library(dota_core
     src/core/event_bus.cpp
@@ -30,9 +45,15 @@ add_library(dota_core
     src/core/world.cpp
     src/modifier/modifier.cpp
     src/modifier/manager.cpp
+    src/ability/ability.cpp
+    src/ability/behavior_parse.cpp
+    src/ability/datadriven.cpp
+    src/ability/manager.cpp
+    src/ability/registry.cpp
 )
 target_include_directories(dota_core PUBLIC include)
 target_compile_features(dota_core PUBLIC cxx_std_20)
+target_link_libraries(dota_core PUBLIC yaml-cpp::yaml-cpp)
 
 # --- Example ---
 add_executable(duel examples/duel.cpp)
@@ -47,8 +68,13 @@ add_executable(dota_tests
     tests/test_modifier_state.cpp
     tests/test_modifier_event.cpp
     tests/test_modifier_lifecycle.cpp
+    tests/test_ability_lifecycle.cpp
+    tests/test_datadriven_loader.cpp
+    tests/test_lion_earth_spike.cpp
 )
 target_link_libraries(dota_tests PRIVATE dota_core GTest::gtest_main)
+target_compile_definitions(dota_tests PRIVATE
+    DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
 
 include(GoogleTest)
 gtest_discover_tests(dota_tests)

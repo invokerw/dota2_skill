@@ -1,5 +1,6 @@
 #include "dota/core/unit.hpp"
 
+#include "dota/ability/manager.hpp"
 #include "dota/modifier/manager.hpp"
 #include "dota/modifier/modifier.hpp"
 
@@ -15,7 +16,8 @@ Unit::Unit(EntityId id, std::string name, Team team, UnitStats stats)
     , stats_(stats)
     , health_(stats.max_health)
     , mana_(stats.max_mana)
-    , modifiers_(std::make_unique<ModifierManager>(*this)) {}
+    , modifiers_(std::make_unique<ModifierManager>(*this))
+    , abilities_(std::make_unique<AbilityManager>(*this)) {}
 
 Unit::~Unit() = default;
 
@@ -166,6 +168,10 @@ void Unit::tick_attack_cd(double dt) {
 
 void Unit::tick_modifiers(double dt) {
     modifiers_->advance(dt);
+}
+
+void Unit::tick_abilities(double dt) {
+    abilities_->advance(dt);
 }
 
 } // namespace dota
