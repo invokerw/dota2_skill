@@ -1,6 +1,8 @@
 #include "dota/core/unit.hpp"
 
 #include "dota/ability/manager.hpp"
+#include "dota/combat/damage.hpp"
+#include "dota/core/world.hpp"
 #include "dota/modifier/manager.hpp"
 #include "dota/modifier/modifier.hpp"
 
@@ -93,7 +95,9 @@ bool Unit::can_move() const {
 
 void Unit::heal(double amount) {
     if (amount <= 0.0 || !alive()) return;
-    health_ = std::min(max_health(), health_ + amount);
+    // Route through the heal pipeline so heal-amp modifiers (including the
+    // break-the-healing Stage 5 debuff) fire consistently.
+    deal_heal({nullptr, this, amount});
 }
 
 void Unit::spend_mana(double amount) {
@@ -113,53 +117,10 @@ double Unit::apply_raw_damage(double amount) {
 }
 
 double Unit::apply_damage(DamageType type, double amount, EntityId attacker) {
-    if (amount <= 0.0 || !alive()) return 0.0;
-
-    // Pre-damage: modifiers may mutate amount or record absorption. Shields
-    // are expected to decrement ev.amount directly; ev.absorbed is recorded
-    // for observers (Stage 5 reflect/lifesteal) but we do not subtract it a
-    // second time.
-    PreTakeDamageEvent pre{attacker, id_, type, amount, 0.0};
-    modifiers_->dispatch_pre_take_damage(pre);
-
-    double effective = std::max(0.0, pre.amount);
-    if (effective == 0.0) {
-        PostTakeDamageEvent post{attacker, id_, type, 0.0};
-        modifiers_->dispatch_post_take_damage(post);
-        return 0.0;
-    }
-
-    // Magic immunity fully blocks Magical unless pre.amount already zeroed.
-    if (type == DamageType::Magical &&
-        modifiers_->has_state(ModifierState::MagicImmune)) {
-        PostTakeDamageEvent post{attacker, id_, type, 0.0};
-        modifiers_->dispatch_post_take_damage(post);
-        return 0.0;
-    }
-
-    // Type resistance.
-    double after_resist = effective;
-    switch (type) {
-        case DamageType::Physical: {
-            const double a = armor();
-            const double reduction = (0.06 * a) / (1.0 + 0.06 * std::abs(a));
-            const double mult = a >= 0.0 ? 1.0 - reduction
-                                         : 2.0 - std::pow(0.94, -a);
-            after_resist = effective * mult;
-            break;
-        }
-        case DamageType::Magical:
-            after_resist = effective * (1.0 - magic_resist());
-            break;
-        case DamageType::Pure:
-            break;
-    }
-
-    const double applied = apply_raw_damage(std::max(0.0, after_resist));
-
-    PostTakeDamageEvent post{attacker, id_, type, applied};
-    modifiers_->dispatch_post_take_damage(post);
-    return applied;
+    Unit* attacker_unit = (world_ && attacker != kInvalidEntityId)
+                              ? world_->find(attacker)
+                              : nullptr;
+    return deal_damage({attacker_unit, this, type, amount, 0});
 }
 
 void Unit::tick_attack_cd(double dt) {

@@ -28,19 +28,55 @@ enum class DamageType : std::uint8_t {
 // The Stage 5 damage pipeline will publish these events itself; for Stage 2
 // the tests invoke Unit::apply_damage() which is a thin wrapper.
 
+// Flag bitmask applied to a DamageInstance. Mirrors Valve's DOTA_DAMAGE_FLAG_*
+// — only the flags Stage 5 actually branches on are enumerated.
+enum class DamageFlag : std::uint32_t {
+    None                  = 0,
+    BypassMagicImmune     = 1u << 0,   // Magical goes through MagicImmune
+    HPLoss                = 1u << 1,   // Skips shields + type resist
+    NoSpellAmplification  = 1u << 2,   // Skips incoming/outgoing damage pct
+    Reflection            = 1u << 3,   // Tagged reflected damage — never reflects again
+    NoLifesteal           = 1u << 4,   // Used by Stage 5 lifesteal modifier
+};
+
+constexpr std::uint32_t to_mask(DamageFlag f) {
+    return static_cast<std::uint32_t>(f);
+}
+constexpr std::uint32_t operator|(DamageFlag a, DamageFlag b) {
+    return to_mask(a) | to_mask(b);
+}
+constexpr bool has_flag(std::uint32_t mask, DamageFlag f) {
+    return (mask & to_mask(f)) != 0;
+}
+
 struct PreTakeDamageEvent {
-    EntityId    attacker{kInvalidEntityId};
-    EntityId    victim{kInvalidEntityId};
-    DamageType  type{DamageType::Physical};
-    double      amount{0.0};      // mutable
-    double      absorbed{0.0};    // modifiers record absorption here
+    EntityId      attacker{kInvalidEntityId};
+    EntityId      victim{kInvalidEntityId};
+    DamageType    type{DamageType::Physical};
+    std::uint32_t flags{0};
+    double        amount{0.0};      // mutable
+    double        absorbed{0.0};    // modifiers record absorption here
 };
 
 struct PostTakeDamageEvent {
-    EntityId    attacker{kInvalidEntityId};
-    EntityId    victim{kInvalidEntityId};
-    DamageType  type{DamageType::Physical};
-    double      amount{0.0};      // final amount applied
+    EntityId      attacker{kInvalidEntityId};
+    EntityId      victim{kInvalidEntityId};
+    DamageType    type{DamageType::Physical};
+    std::uint32_t flags{0};
+    double        amount{0.0};      // final amount applied
+};
+
+// Heal events. Modifiers may reduce (or amplify) healing via on_pre_take_heal.
+struct PreTakeHealEvent {
+    EntityId      healer{kInvalidEntityId};
+    EntityId      target{kInvalidEntityId};
+    double        amount{0.0};      // mutable
+};
+
+struct PostTakeHealEvent {
+    EntityId      healer{kInvalidEntityId};
+    EntityId      target{kInvalidEntityId};
+    double        amount{0.0};      // final amount applied
 };
 
 struct ModifierProvidedProperty {
@@ -98,6 +134,8 @@ public:
     virtual void on_interval_think()               {}  // fires every think_interval_
     virtual void on_pre_take_damage(PreTakeDamageEvent&)  {}
     virtual void on_post_take_damage(PostTakeDamageEvent&){}
+    virtual void on_pre_take_heal(PreTakeHealEvent&)      {}
+    virtual void on_post_take_heal(PostTakeHealEvent&)    {}
 
 protected:
     void set_think_interval(double s) { think_interval_ = s; think_accum_ = 0.0; }

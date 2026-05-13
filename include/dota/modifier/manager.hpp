@@ -64,6 +64,10 @@ public:
     void dispatch_pre_take_damage(PreTakeDamageEvent& ev);
     void dispatch_post_take_damage(PostTakeDamageEvent& ev);
 
+    // Heal equivalents.
+    void dispatch_pre_take_heal(PreTakeHealEvent& ev);
+    void dispatch_post_take_heal(PostTakeHealEvent& ev);
+
 private:
     Unit& owner_;
     std::vector<std::unique_ptr<Modifier>> modifiers_;

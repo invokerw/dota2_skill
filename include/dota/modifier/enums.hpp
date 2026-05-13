@@ -36,6 +36,10 @@ enum class ModifierProperty : std::uint16_t {
     MoveSpeedBonusConstant,            // CONSTANT (flat MS bonus, e.g. +30)
     MoveSpeedBonusPct,                 // PERCENTAGE
 
+    // Healing amplification (Stage 5 heal pipeline). Values are summed and
+    // applied as (1 + sum). A value of -0.4 models break-the-healing (-40%).
+    HealAmpPct,                        // PERCENTAGE on incoming heals
+
     Count_                             // sentinel
 };
 
@@ -78,6 +82,7 @@ constexpr PropertyLayer layer_of(ModifierProperty p) {
         case ModifierProperty::IncomingDamagePct:
         case ModifierProperty::OutgoingDamagePct:
         case ModifierProperty::MoveSpeedBonusPct:
+        case ModifierProperty::HealAmpPct:
             return PropertyLayer::Percentage;
         default:
             return PropertyLayer::Constant;

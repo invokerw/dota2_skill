@@ -77,6 +77,7 @@ endif()
 
 # --- Core library ---
 add_library(dota_core
+    src/combat/damage.cpp
     src/core/event_bus.cpp
     src/core/unit.cpp
     src/core/world.cpp
@@ -118,6 +119,8 @@ add_executable(dota_tests
     tests/test_lua_ability.cpp
     tests/test_lua_modifier.cpp
     tests/test_lua_error_safety.cpp
+    tests/test_damage_pipeline.cpp
+    tests/test_heal_pipeline.cpp
 )
 target_link_libraries(dota_tests PRIVATE dota_core GTest::gtest_main)
 target_compile_definitions(dota_tests PRIVATE

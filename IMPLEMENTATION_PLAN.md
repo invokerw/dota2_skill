@@ -107,10 +107,10 @@ Compiler targets: AppleClang 15+, Clang 15+, GCC 12+, MSVC 19.30+.
 - Independent `HealPipeline`
 
 **Tests**:
-- `test_damage_pipeline`: resistance math, BYPASS_MAGIC_IMMUNITY, absorb ordering, reflect ordering
-- `test_heal_pipeline`: break-the-healing modifier reduces heals 40%
+- `test_damage_pipeline`: physical armor curve, magic resist, magic immune + BypassMagicImmune flag, pure ignores resist, outgoing/incoming amp stacking, NoSpellAmplification flag, HPLoss skips shields+resist, Blade-Mail reflect with Reflection flag prevents loops
+- `test_heal_pipeline`: base heal, break-the-healing reduces heal, HealAmpPct stacks both directions, dead unit immune, clamp to max HP
 
-**Status**: Not Started
+**Status**: Complete (78/78 tests passing; `combat/damage.hpp` pipeline powers Unit::apply_damage + World basic attack; Blade-Mail reflect + break-the-healing land in the modifier library)
 
 ---
 

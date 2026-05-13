@@ -92,4 +92,12 @@ void ModifierManager::dispatch_post_take_damage(PostTakeDamageEvent& ev) {
     for (auto& m : modifiers_) m->on_post_take_damage(ev);
 }
 
+void ModifierManager::dispatch_pre_take_heal(PreTakeHealEvent& ev) {
+    for (auto& m : modifiers_) m->on_pre_take_heal(ev);
+}
+
+void ModifierManager::dispatch_post_take_heal(PostTakeHealEvent& ev) {
+    for (auto& m : modifiers_) m->on_post_take_heal(ev);
+}
+
 } // namespace dota

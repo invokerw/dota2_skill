@@ -1,5 +1,6 @@
 #include "dota/core/world.hpp"
 
+#include "dota/combat/damage.hpp"
 #include "dota/modifier/modifier.hpp"
 
 #include <algorithm>
@@ -12,6 +13,7 @@ World::World() = default;
 Unit* World::spawn(std::string name, Team team, UnitStats stats, Vec2 position) {
     auto unit = std::make_unique<Unit>(next_id_++, std::move(name), team, stats);
     unit->set_position(position);
+    unit->set_world(this);
     Unit* raw = unit.get();
     units_.push_back(std::move(unit));
     return raw;
@@ -127,7 +129,8 @@ void World::resolve_attack(Unit& attacker, Unit& target) {
     // Basic attacks use the physical damage pipeline so modifiers can hook in
     // (shield absorb in Stage 2, damage block / reflect in Stage 5).
     const double raw     = attacker.attack_damage();
-    const double applied = target.apply_damage(DamageType::Physical, raw, attacker.id());
+    const double applied = deal_damage({&attacker, &target,
+                                         DamageType::Physical, raw, 0});
 
     AttackLandedEvent ev{attacker.id(), target.id(), applied};
     events_.publish(ev);

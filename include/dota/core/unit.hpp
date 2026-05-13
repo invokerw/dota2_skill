@@ -90,6 +90,12 @@ public:
     AbilityManager&       abilities()       { return *abilities_; }
     const AbilityManager& abilities() const { return *abilities_; }
 
+    // World back-pointer. Set by World::spawn so the damage/heal pipeline can
+    // resolve attacker EntityIds into Unit*. Null for tests that build Units
+    // outside a World.
+    void   set_world(World* w) { world_ = w; }
+    World* world() const       { return world_; }
+
     // Attack cooldown bookkeeping (seconds remaining until next swing).
     double attack_cd() const { return attack_cd_; }
     void   set_attack_cd(double t) { attack_cd_ = t; }
@@ -113,6 +119,7 @@ private:
 
     std::unique_ptr<ModifierManager> modifiers_;
     std::unique_ptr<AbilityManager>  abilities_;
+    World* world_{nullptr};
 };
 
 } // namespace dota
