@@ -53,7 +53,7 @@ Compiler targets: AppleClang 15+, Clang 15+, GCC 12+, MSVC 19.30+.
 - `test_modifier_state`: stun gates `can_cast / can_attack`, auto-expires
 - `test_modifier_event`: `on_take_damage` can mutate damage (shield / reflect)
 
-**Status**: Not Started
+**Status**: Complete (33/33 tests passing; Unit stat getters route through aggregator; basic attacks flow through `apply_damage` pipeline)
 
 ---
 

@@ -1,5 +1,7 @@
 #include "dota/core/world.hpp"
 
+#include "dota/modifier/modifier.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -80,6 +82,12 @@ void World::advance(double dt) {
 void World::tick_once() {
     time_ += kTickDt;
 
+    // Advance modifier durations/thinks before resolving orders so an expiring
+    // stun lets a unit swing on the same tick it expires.
+    for (auto& u : units_) {
+        if (u->alive()) u->tick_modifiers(kTickDt);
+    }
+
     // Decrement all attack cooldowns first so scheduling a new attack in the
     // same tick is consistent.
     for (auto& u : units_) {
@@ -95,6 +103,7 @@ void World::tick_once() {
         if (!attacker || !target) continue;
         if (!attacker->alive() || !target->alive()) continue;
         if (attacker->attack_cd() > 0.0) continue;
+        if (!attacker->can_attack()) continue;   // stunned/disarmed/etc.
         resolve_attack(*attacker, *target);
     }
 
@@ -109,16 +118,10 @@ void World::tick_once() {
 }
 
 void World::resolve_attack(Unit& attacker, Unit& target) {
-    // Stage 1: physical damage reduced by armor only. Magic resist does not
-    // apply to basic attacks in Dota. Formula below matches Dota's convention
-    // with positive armor.
-    const double armor = target.armor();
-    const double reduction = (0.06 * armor) / (1.0 + 0.06 * std::abs(armor));
-    const double mult = armor >= 0.0 ? 1.0 - reduction : 2.0 - std::pow(0.94, -armor);
-    const double raw  = attacker.attack_damage();
-    const double dmg  = std::max(0.0, raw * mult);
-
-    const double applied = target.apply_raw_damage(dmg);
+    // Basic attacks use the physical damage pipeline so modifiers can hook in
+    // (shield absorb in Stage 2, damage block / reflect in Stage 5).
+    const double raw     = attacker.attack_damage();
+    const double applied = target.apply_damage(DamageType::Physical, raw, attacker.id());
 
     AttackLandedEvent ev{attacker.id(), target.id(), applied};
     events_.publish(ev);

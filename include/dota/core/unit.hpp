@@ -1,7 +1,11 @@
 #pragma once
 
 #include "dota/core/types.hpp"
+#include "dota/modifier/enums.hpp"
+#include "dota/modifier/manager.hpp"
+#include "dota/modifier/modifier.hpp"  // for DamageType used in apply_damage
 
+#include <memory>
 #include <string>
 
 namespace dota {
@@ -28,6 +32,10 @@ struct UnitStats {
 class Unit {
 public:
     Unit(EntityId id, std::string name, Team team, UnitStats stats);
+    ~Unit();
+
+    Unit(const Unit&) = delete;
+    Unit& operator=(const Unit&) = delete;
 
     EntityId  id()   const { return id_; }
     const std::string& name() const { return name_; }
@@ -37,32 +45,54 @@ public:
 
     double health() const { return health_; }
     double mana()   const { return mana_; }
+    double max_health() const;
+    double max_mana()   const;
     bool   alive()  const { return health_ > 0.0; }
 
     Vec2   position() const { return position_; }
     void   set_position(Vec2 p) { position_ = p; }
 
-    // --- Combat helpers (pre-modifier; later stages will aggregate) ---
-    double armor()          const { return stats_.base_armor; }
-    double attack_damage()  const { return stats_.attack_damage; }
-    double magic_resist()   const { return stats_.magic_resist; }
+    // --- Combat stats (aggregated through the ModifierManager) ---
+    double armor()          const;
+    double attack_damage()  const;
+    double magic_resist()   const;
+    double move_speed()     const;
 
     // Seconds between attacks given current attack speed.
     double seconds_per_attack() const;
 
-    // Apply raw health/mana deltas. Stage 1 direct apply; later stages route
-    // through a damage pipeline.
+    // --- Action gating (consults modifier states) ---
+    bool can_attack() const;
+    bool can_cast()   const;
+    bool can_move()   const;
+
+    // Apply raw health/mana deltas. Used by the damage pipeline post-resistance.
     void heal(double amount);
     void spend_mana(double amount);
     void set_health(double hp);
 
     // Raw damage apply that clamps to zero. Returns the actual amount applied.
+    // Does not publish events; call apply_damage() for the full pipeline.
     double apply_raw_damage(double amount);
+
+    // Stage 2 damage entry-point: dispatch pre-damage to modifiers on this
+    // unit (they may mutate `amount` or record `absorbed`), apply type
+    // resistance (physical via armor, magical via magic_resist, pure
+    // untouched), subtract HP, dispatch post-damage. Returns the HP actually
+    // removed. The Stage 5 pipeline will grow more layers (shields, reflect)
+    // but keep this signature.
+    double apply_damage(DamageType type, double amount, EntityId attacker = 0);
+
+    ModifierManager&       modifiers()       { return *modifiers_; }
+    const ModifierManager& modifiers() const { return *modifiers_; }
 
     // Attack cooldown bookkeeping (seconds remaining until next swing).
     double attack_cd() const { return attack_cd_; }
     void   set_attack_cd(double t) { attack_cd_ = t; }
     void   tick_attack_cd(double dt);
+
+    // Called once per tick by World; advances modifiers on this unit.
+    void tick_modifiers(double dt);
 
 private:
     EntityId    id_;
@@ -74,6 +104,8 @@ private:
     double mana_{0.0};
     double attack_cd_{0.0};
     Vec2   position_{};
+
+    std::unique_ptr<ModifierManager> modifiers_;
 };
 
 } // namespace dota

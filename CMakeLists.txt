@@ -28,6 +28,8 @@ add_library(dota_core
     src/core/event_bus.cpp
     src/core/unit.cpp
     src/core/world.cpp
+    src/modifier/modifier.cpp
+    src/modifier/manager.cpp
 )
 target_include_directories(dota_core PUBLIC include)
 target_compile_features(dota_core PUBLIC cxx_std_20)
@@ -41,6 +43,10 @@ enable_testing()
 add_executable(dota_tests
     tests/test_event_bus.cpp
     tests/test_unit_basic.cpp
+    tests/test_modifier_property.cpp
+    tests/test_modifier_state.cpp
+    tests/test_modifier_event.cpp
+    tests/test_modifier_lifecycle.cpp
 )
 target_link_libraries(dota_tests PRIVATE dota_core GTest::gtest_main)
 
