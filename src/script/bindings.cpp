@@ -113,6 +113,15 @@ void register_bindings(sol::state& lua) {
         [](Unit& u, double duration) {
             u.modifiers().attach(modifiers::make_hexed(u, duration));
         },
+        "add_periodic_heal",
+        [](Unit& u, double heal_per_tick, double interval, double duration) {
+            u.modifiers().attach(
+                modifiers::make_periodic_heal(u, heal_per_tick, interval, duration));
+        },
+        "has_modifier",
+        [](const Unit& u, const std::string& name) {
+            return u.modifiers().find(name) != nullptr;
+        },
         "remove_modifier",
         [](Unit& u, const std::string& name) {
             return u.modifiers().remove(name);

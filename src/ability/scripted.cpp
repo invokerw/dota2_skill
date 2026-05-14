@@ -30,6 +30,8 @@ ScriptedAbility::ScriptedAbility(Unit& caster, const AbilityDef& def, LuaState& 
     self_["get_caster"]  = [this](sol::object) -> Unit* { return &this->caster(); };
     self_["level"]       = [this](sol::object) { return this->level(); };
     self_["name"]        = this->name();
+    self_["target_point"] = [this](sol::object) { return last_target_point_; };
+    self_["target_unit"]  = [this](sol::object) -> Unit* { return last_target_unit_; };
 }
 
 double ScriptedAbility::get_special(const std::string& key) const {
@@ -48,6 +50,8 @@ void ScriptedAbility::call_hook(const char* hook_name,
 }
 
 void ScriptedAbility::on_spell_start(CastContext& ctx) {
+    last_target_point_ = ctx.target.point;
+    last_target_unit_  = ctx.target.unit;
     call_hook("on_spell_start", [&](sol::protected_function& fn) {
         auto r = fn(self_, ctx.caster, ctx.target.unit, ctx.world);
         if (!r.valid()) {
@@ -58,6 +62,8 @@ void ScriptedAbility::on_spell_start(CastContext& ctx) {
 }
 
 void ScriptedAbility::on_channel_think(CastContext& ctx, double dt) {
+    last_target_point_ = ctx.target.point;
+    last_target_unit_  = ctx.target.unit;
     call_hook("on_channel_think", [&](sol::protected_function& fn) {
         auto r = fn(self_, ctx.caster, ctx.target.unit, ctx.world, dt);
         if (!r.valid()) {

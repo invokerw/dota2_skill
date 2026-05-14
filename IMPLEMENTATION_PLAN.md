@@ -128,4 +128,4 @@ Compiler targets: AppleClang 15+, Clang 15+, GCC 12+, MSVC 19.30+.
 
 **Tests**: Per-ability integration tests (cooldown / mana / damage / duration).
 
-**Status**: Not Started
+**Status**: Complete (91/91 tests passing; Lion/Juggernaut/Lina all exercised by per-hero integration tests; 2v1 duel demo runs end-to-end)

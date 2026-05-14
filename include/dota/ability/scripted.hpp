@@ -36,6 +36,11 @@ private:
     LuaState*  lua_;
     sol::table script_;
     sol::table self_;     // wraps `this` for Lua calls
+
+    // Snapshot of the last CastContext target so Lua closures installed at
+    // construction can retrieve the point/unit for the current cast.
+    Vec2   last_target_point_{};
+    Unit*  last_target_unit_{nullptr};
 };
 
 } // namespace dota

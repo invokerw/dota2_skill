@@ -102,6 +102,8 @@ target_compile_definitions(dota_core PUBLIC
 # --- Example ---
 add_executable(duel examples/duel.cpp)
 target_link_libraries(duel PRIVATE dota_core)
+target_compile_definitions(duel PRIVATE
+    DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
 
 # --- Tests ---
 enable_testing()
@@ -121,6 +123,9 @@ add_executable(dota_tests
     tests/test_lua_error_safety.cpp
     tests/test_damage_pipeline.cpp
     tests/test_heal_pipeline.cpp
+    tests/test_hero_lion.cpp
+    tests/test_hero_juggernaut.cpp
+    tests/test_hero_lina.cpp
 )
 target_link_libraries(dota_tests PRIVATE dota_core GTest::gtest_main)
 target_compile_definitions(dota_tests PRIVATE

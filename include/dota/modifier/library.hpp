@@ -111,6 +111,31 @@ private:
     double remaining_;
 };
 
+// --- Periodic heal (Healing Ward style) ------------------------------------
+//
+// Heals `heal_per_tick` to the owner every `interval` seconds, for `duration`
+// seconds total. Runs through the heal pipeline so break-the-healing works.
+class PeriodicHeal : public Modifier {
+public:
+    PeriodicHeal(Unit& owner, double heal_per_tick, double interval, double duration)
+        : Modifier("modifier_periodic_heal", owner, duration)
+        , amount_(heal_per_tick) {
+        set_think_interval(interval);
+    }
+
+    void on_interval_think() override {
+        deal_heal({nullptr, &owner(), amount_});
+    }
+
+private:
+    double amount_;
+};
+
+inline std::unique_ptr<PeriodicHeal>
+make_periodic_heal(Unit& owner, double heal_per_tick, double interval, double duration) {
+    return std::make_unique<PeriodicHeal>(owner, heal_per_tick, interval, duration);
+}
+
 // --- Reflect (Blade Mail style) --------------------------------------------
 //
 // Reflects a fraction of the pre-resistance damage back to the attacker as
