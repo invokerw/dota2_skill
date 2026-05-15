@@ -1,7 +1,6 @@
--- Juggernaut's Blade Fury. Channelled AoE spin that pulses magical damage on
--- a fixed tick interval. The C++ side invokes on_channel_think every world
--- tick (1/30s), so we accumulate dt and emit damage whenever we cross the
--- ability-special tick_interval.
+-- Juggernaut 的剑刃风暴。持续引导的范围旋转技能，按固定时间间隔
+-- 脉冲式造成魔法伤害。C++ 端在每个世界 tick（1/30秒）调用 on_channel_think，
+-- 因此我们累积 dt，并在跨越技能特殊值 tick_interval 时释放伤害。
 
 local M = {}
 

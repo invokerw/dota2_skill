@@ -50,14 +50,14 @@ TEST_F(HeroLionTest, EarthSpikeStunsDealsDamage) {
     t.unit = enemy_;
     EXPECT_EQ(spike->order_cast(t, world_), CastError::None);
 
-    // Advance past cast point (0.3s)
+    // 施法前摇 0.3 秒后
     world_.advance(0.35);
 
     const double hp_after = enemy_->health();
-    // 80 magical at level 1, after 25% resist → 60 damage
+    // 1 级 80 魔法伤害，经过 25% 抗性后 → 60 伤害
     EXPECT_NEAR(1000.0 - hp_after, 60.0, 1.0);
 
-    // Enemy should be stunned (1.7s at level 1)
+    // 敌人应该被眩晕（1 级持续 1.7 秒）
     EXPECT_TRUE(enemy_->modifiers().has_state(ModifierState::Stunned));
     EXPECT_FALSE(enemy_->can_attack());
     EXPECT_FALSE(enemy_->can_cast());
@@ -71,13 +71,13 @@ TEST_F(HeroLionTest, HexDisablesTarget) {
     t.unit = enemy_;
     EXPECT_EQ(hex->order_cast(t, world_), CastError::None);
 
-    // Cast point is 0.1s
+    // 施法前摇 0.1 秒
     world_.advance(0.15);
 
     EXPECT_TRUE(enemy_->modifiers().has_state(ModifierState::Hexed));
     EXPECT_FALSE(enemy_->can_attack());
     EXPECT_FALSE(enemy_->can_cast());
-    // Hex allows movement in Dota
+    // 在 Dota 中妖术允许移动
     EXPECT_TRUE(enemy_->can_move());
 }
 
@@ -89,10 +89,10 @@ TEST_F(HeroLionTest, FingerOfDeathDealsMassiveMagical) {
     t.unit = enemy_;
     EXPECT_EQ(finger->order_cast(t, world_), CastError::None);
 
-    // Cast point is 0.5s
+    // 施法前摇 0.5 秒
     world_.advance(0.55);
 
-    // 600 magical at level 1, after 25% resist → 450
+    // 1 级 600 魔法伤害，经过 25% 抗性后 → 450
     const double dealt = 1000.0 - enemy_->health();
     EXPECT_NEAR(dealt, 450.0, 1.0);
 }

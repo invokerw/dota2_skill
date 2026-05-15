@@ -10,6 +10,7 @@
 namespace dota {
 
 // --- AbilitySpecialValue ---------------------------------------------------
+// 技能特殊值
 
 double AbilitySpecialValue::get_float(int level) const {
     const int idx = std::clamp(level - 1, 0, static_cast<int>(
@@ -28,6 +29,7 @@ long AbilitySpecialValue::get_int(int level) const {
 }
 
 // --- Ability ---------------------------------------------------------------
+// 技能
 
 Ability::Ability(std::string name, std::uint32_t behavior, TargetTeam team, Unit& caster)
     : name_(std::move(name)), behavior_(behavior), target_team_(team), caster_(caster) {}
@@ -107,8 +109,7 @@ CastError Ability::order_cast(const CastTarget& target, World& world) {
     pending_target_ = target;
     world_          = &world;
 
-    // Zero cast point → resolve immediately so the first `advance()` isn't
-    // needed for instant abilities (tests rely on this).
+    // 零施法前摇 → 立即执行，这样瞬发技能不需要第一次 `advance()` 调用（测试依赖此行为）
     if (cast_point_ <= 0.0) {
         CastContext ctx{&caster_, world_, pending_target_, level_};
         on_spell_start(ctx);
@@ -139,7 +140,7 @@ bool Ability::current_target_still_valid() const {
 }
 
 void Ability::advance(double dt) {
-    // Tick cooldown regardless of phase.
+    // 无论处于哪个阶段都要更新冷却时间
     if (cooldown_ > 0.0) {
         cooldown_ = std::max(0.0, cooldown_ - dt);
         if (cooldown_ == 0.0 && phase_ == CastPhase::OnCooldown) {
@@ -149,7 +150,7 @@ void Ability::advance(double dt) {
 
     if (phase_ == CastPhase::Ready || phase_ == CastPhase::OnCooldown) return;
 
-    // Interrupt if the caster can't act anymore.
+    // 如果施法者无法继续行动则中断施法
     const auto m = caster_.modifiers().aggregated_states();
     const bool stunned  = (m & state_bit(ModifierState::Stunned)) != 0;
     const bool silenced = (m & state_bit(ModifierState::Silenced)) != 0
@@ -163,7 +164,7 @@ void Ability::advance(double dt) {
             CastContext ctx{&caster_, world_, pending_target_, level_};
             on_channel_finish(ctx, /*interrupted*/ true);
         }
-        // Cooldown still ticks on interrupt (Dota convention).
+        // 中断时冷却时间仍然生效（Dota 惯例）
         cooldown_ = cooldown_for_level();
         phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
         phase_timer_ = 0.0;
@@ -179,7 +180,7 @@ void Ability::advance(double dt) {
     phase_timer_ = std::max(0.0, phase_timer_ - dt);
 
     if (phase_ == CastPhase::Channelling) {
-        // Fire think every tick while channelling.
+        // 持续施法期间每帧触发 think 回调
         CastContext ctx{&caster_, world_, pending_target_, level_};
         on_channel_think(ctx, dt);
         if (phase_timer_ == 0.0) {

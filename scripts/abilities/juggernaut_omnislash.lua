@@ -1,8 +1,8 @@
--- Juggernaut's Omnislash. A canonical multi-hit ultimate: the hero enters an
--- out-of-game state and strikes the target (and nearby enemies) N times. For
--- Stage 6 content we resolve all slashes instantly against the primary
--- target; modelling the hop-between-enemies + out-of-game state belongs in a
--- later pass (would require adding Team-pierce + Invulnerable state gating).
+-- Juggernaut 的无敌斩。经典的多段打击终极技能：英雄进入
+-- 脱离游戏状态并对目标（及附近敌人）进行 N 次打击。对于
+-- Stage 6 内容，我们将所有斩击瞬间作用于主要目标；
+-- 在敌人之间跳跃 + 脱离游戏状态的建模属于后续阶段
+--（需要添加穿透队伍 + 无敌状态判定）。
 
 local M = {}
 

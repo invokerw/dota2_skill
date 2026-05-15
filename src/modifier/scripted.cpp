@@ -92,7 +92,7 @@ void ScriptedModifier::on_pre_take_damage(PreTakeDamageEvent& ev) {
     if (!table_.valid()) return;
     sol::protected_function fn = table_["on_pre_take_damage"];
     if (!fn.valid()) return;
-    // Script receives (self, owner, amount, type) and returns absorbed amount.
+    // 脚本接收 (self, owner, amount, type) 并返回吸收的伤害量
     auto r = fn(table_, &owner(), ev.amount, static_cast<int>(ev.type));
     if (!r.valid()) {
         sol::error err = r;

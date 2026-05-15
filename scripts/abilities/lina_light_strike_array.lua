@@ -1,10 +1,8 @@
--- Lina's Light Strike Array. Delayed AoE stun + damage at target_point.
--- We model the delay by storing the cast parameters in self and using a
--- think-based approach. However, since our ScriptedAbility doesn't natively
--- support delayed actions within on_spell_start, we simulate the delay as
--- instantaneous for now (the `delay` special exists for data completeness but
--- the stun+damage resolve immediately). A proper implementation would use a
--- thinker entity or world timer.
+-- Lina 的光击阵。延迟范围眩晕 + 伤害，作用于目标点。
+-- 我们通过在 self 中存储施法参数并使用基于 think 的方法来模拟延迟。
+-- 然而，由于我们的 ScriptedAbility 在 on_spell_start 中不原生支持延迟动作，
+-- 目前我们将延迟模拟为瞬发（`delay` 特殊值的存在是为了数据完整性，但
+-- 眩晕和伤害会立即生效）。正确的实现应该使用 thinker 实体或世界计时器。
 
 local M = {}
 

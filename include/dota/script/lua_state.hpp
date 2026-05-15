@@ -9,10 +9,10 @@ namespace dota {
 
 class World;
 
-// RAII wrapper around sol::state. Keeps the default-open libs (base/table/
-// string/math) available to authored scripts. `register_bindings()` is called
-// once at construction; ScriptedAbility/ScriptedModifier assume the user-type
-// tables (Unit/World/Damage etc.) already exist in the global namespace.
+// sol::state 的 RAII 包装器。保持默认开放的库（base/table/string/math）
+// 对编写的脚本可用。`register_bindings()` 在构造时调用一次；
+// ScriptedAbility/ScriptedModifier 假定用户类型表（Unit/World/Damage 等）
+// 已经存在于全局命名空间中。
 class LuaState {
 public:
     LuaState();
@@ -20,24 +20,23 @@ public:
     sol::state&       state()       { return lua_; }
     const sol::state& state() const { return lua_; }
 
-    // Relative paths passed to load_module are resolved against this root. The
-    // default is DOTA_SCRIPT_DIR (the repo's scripts/ directory), which tests
-    // and the duel example rely on.
+    // 传递给 load_module 的相对路径会相对于此根目录解析。
+    // 默认值是 DOTA_SCRIPT_DIR（仓库的 scripts/ 目录），
+    // 测试和 duel 示例都依赖于此。
     void               set_script_root(std::string root) { script_root_ = std::move(root); }
     const std::string& script_root() const               { return script_root_; }
 
-    // Loads a file, returns the table it `return`s. Empty sol::table on any
-    // error; the error is reported via the registered error callback. Absolute
-    // paths (starting with '/') are used as-is; relative paths are joined with
-    // `script_root_`.
+    // 加载一个文件，返回它 `return` 的表。任何错误时返回空的 sol::table；
+    // 错误通过注册的错误回调报告。绝对路径（以 '/' 开头）按原样使用；
+    // 相对路径与 `script_root_` 拼接。
     sol::table load_module(const std::string& path);
 
-    // Install/replace the error callback. Default prints to stderr.
+    // 安装/替换错误回调。默认打印到 stderr。
     using ErrorHandler = std::function<void(const std::string&)>;
     void set_error_handler(ErrorHandler h) { error_handler_ = std::move(h); }
 
-    // Report a Lua error (used by ScriptedAbility/ScriptedModifier on pcall
-    // failures so the engine keeps ticking).
+    // 报告一个 Lua 错误（由 ScriptedAbility/ScriptedModifier 在 pcall
+    // 失败时使用，以便引擎继续运行）。
     void report_error(const std::string& where, const std::string& what);
 
 private:
@@ -46,8 +45,8 @@ private:
     std::string   script_root_;
 };
 
-// Register all C++ user_types / helpers on the given sol::state. Split out so
-// tests can build bindings onto a state they own.
+// 在给定的 sol::state 上注册所有 C++ user_types / 辅助函数。
+// 分离出来以便测试可以在它们自己拥有的 state 上构建绑定。
 void register_bindings(sol::state& lua);
 
 } // namespace dota

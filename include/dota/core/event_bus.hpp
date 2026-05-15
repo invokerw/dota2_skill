@@ -9,11 +9,11 @@
 
 namespace dota {
 
-// Minimal synchronous event bus.
+// 最小化同步事件总线
 //
-// Events are plain structs; listeners take a non-const reference so they can
-// mutate the event (Dota modifiers frequently rewrite fields on an event — e.g.
-// damage amount in OnTakeDamage). Publish order = subscribe order.
+// 事件是普通结构体；监听器接收非 const 引用以便可以
+// 修改事件（Dota 修饰器经常重写事件字段 —— 例如
+// OnTakeDamage 中的伤害数值）。发布顺序 = 订阅顺序。
 class EventBus {
 public:
     using Token = std::uint64_t;
@@ -44,8 +44,8 @@ public:
     void publish(E& event) {
         auto it = slots_.find(std::type_index(typeid(E)));
         if (it == slots_.end()) return;
-        // Copy the entries to a local vector so a handler can safely
-        // subscribe/unsubscribe during dispatch.
+        // 将条目复制到本地向量，以便处理器可以在分发期间安全地
+        // 订阅/取消订阅。
         auto snapshot = it->second;
         for (auto& entry : snapshot) {
             entry.invoke(&event);

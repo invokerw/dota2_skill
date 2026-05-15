@@ -69,17 +69,17 @@ TEST(LuaAbility, ChannelPulsesDamageOverTime) {
 
     CastTarget t; // NO_TARGET
     EXPECT_EQ(blade->order_cast(t, w), CastError::None);
-    // Cast-point is 0, so we enter Channelling immediately.
+    // 施法前摇为 0，所以立即进入引导状态
     EXPECT_EQ(blade->phase(), CastPhase::Channelling);
 
     const double hp_before = enemy->health();
-    // Channel 1 second ≈ 5 ticks at 0.2s interval → 5 * 80 * 0.2 = 80 magical
-    // → 60 after 25% resist.
+    // 引导 1 秒 ≈ 0.2 秒间隔 5 次跳动 → 5 * 80 * 0.2 = 80 魔法伤害
+    // → 经过 25% 抗性后 60
     w.advance(1.0);
 
     const double diff = hp_before - enemy->health();
-    EXPECT_GT(diff, 40.0);   // at least four pulses
-    EXPECT_LT(diff, 100.0);  // not all damage from a full channel
+    EXPECT_GT(diff, 40.0);   // 至少四次脉冲
+    EXPECT_LT(diff, 100.0);  // 不是完整引导的所有伤害
 }
 
 TEST(LuaAbility, OutOfRangeEnemyUnaffected) {
@@ -113,8 +113,8 @@ TEST(LuaAbility, ChannelEndsAfterDuration) {
     blade->order_cast(t, w);
     w.advance(5.5);
 
-    // 5 seconds at 0.2s interval → 25 pulses × 80 × 0.2 = 400 magical
-    // → 300 after 25% resist. (Some pulses may overlap tick boundaries.)
+    // 5 秒，0.2 秒间隔 → 25 次脉冲 × 80 × 0.2 = 400 魔法伤害
+    // → 经过 25% 抗性后 300（某些脉冲可能重叠跳动边界）
     const double dealt = hero_stats().max_health - enemy->health();
     EXPECT_GT(dealt, 250.0);
     EXPECT_LT(dealt, 360.0);
@@ -134,13 +134,13 @@ TEST(LuaAbility, StunDuringChannelInterrupts) {
 
     CastTarget t;
     blade->order_cast(t, w);
-    w.advance(0.5);  // some pulses land
+    w.advance(0.5);  // 一些脉冲命中
     const double after_half = enemy->health();
 
     jugg->modifiers().attach(modifiers::make_stunned(*jugg, 2.0));
     w.advance(3.0);
 
-    // After stun kicks in, no further damage should have been dealt.
+    // 眩晕生效后，不应再造成伤害
     EXPECT_NEAR(enemy->health(), after_half, 1e-3);
     EXPECT_EQ(blade->phase(), CastPhase::OnCooldown);
 }

@@ -10,9 +10,9 @@ namespace dota {
 
 class Unit;
 
-// Per-unit list of abilities. Mirrors ModifierManager in style (own by
-// unique_ptr, stable pointers). Abilities never self-expire, but they do
-// advance() every tick for cast / channel / cooldown bookkeeping.
+// 每个单位的技能列表。风格上对应 ModifierManager（通过
+// unique_ptr 拥有，指针稳定）。技能永不自动过期，但它们会
+// 在每个 tick 执行 advance() 以进行施法/引导/冷却记账。
 class AbilityManager {
 public:
     explicit AbilityManager(Unit& owner) : owner_(owner) {}

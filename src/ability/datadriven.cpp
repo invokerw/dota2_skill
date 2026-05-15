@@ -24,7 +24,7 @@ double resolve_expression(const std::string& expr,
         }
         return it->second.get_float(level);
     }
-    // Plain numeric literal.
+    // 纯数字字面量
     try {
         return std::stod(expr);
     } catch (...) {
@@ -67,8 +67,8 @@ void apply_action(const ActionApplyModifier& a, const CastContext& ctx,
                                 ? -1.0
                                 : resolve_expression(a.duration, special, level);
 
-    // Generic library modifiers recognised by name. Unknown names throw — the
-    // loader should catch this early. Stage 4 will extend this via Lua.
+    // 通过名称识别的通用库修饰器。未知名称会抛出异常 — 加载器应该尽早捕获。
+    // 第 4 阶段将通过 Lua 扩展此功能。
     const std::string& n = a.modifier_name;
     if (n == "modifier_stunned") {
         target->modifiers().attach(modifiers::make_stunned(*target, duration));

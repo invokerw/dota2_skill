@@ -21,7 +21,7 @@ UnitStats stats() {
 
 } // namespace
 
-// Sanity: the LuaState opens and exposes our enum tables.
+// 健全性检查：LuaState 打开并暴露我们的枚举表
 TEST(LuaBindings, EnumTablesArePresent) {
     LuaState lua;
     sol::state& s = lua.state();
@@ -68,7 +68,7 @@ TEST(LuaBindings, ApplyDamageFromLuaUsesFullPipeline) {
     lua.state()["attacker"] = hero;
     lua.state()["victim"]   = enemy;
 
-    // 200 magical damage → 150 after 25% magic resist.
+    // 200 魔法伤害 → 经过 25% 魔法抗性后 150
     const char* src = R"(
         victim:apply_damage(DamageType.MAGICAL, 200.0, attacker)
     )";

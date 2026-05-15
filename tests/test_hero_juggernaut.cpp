@@ -54,7 +54,7 @@ TEST_F(HeroJuggernautTest, BladeFuryChannelsDamage) {
     const double hp_before = enemy_->health();
     world_.advance(1.0);
 
-    // 80 dps at 0.2s interval = 5 pulses × 16 = 80 magical → 60 after resist
+    // 80 DPS，0.2 秒间隔 = 5 次脉冲 × 16 = 80 魔法伤害 → 经过抗性后 60
     const double dealt = hp_before - enemy_->health();
     EXPECT_GT(dealt, 40.0);
     EXPECT_LT(dealt, 100.0);
@@ -64,24 +64,24 @@ TEST_F(HeroJuggernautTest, HealingWardHealsOverTime) {
     Ability* ward = reg_.instantiate("juggernaut_healing_ward", *caster_);
     ASSERT_NE(ward, nullptr);
 
-    // Reduce caster HP first
+    // 先降低施法者生命值
     caster_->set_health(500.0);
 
     CastTarget t;
     EXPECT_EQ(ward->order_cast(t, world_), CastError::None);
 
-    // Cast point is 0.3s
+    // 施法前摇 0.3 秒
     world_.advance(0.35);
 
-    // After cast, caster should have the periodic heal modifier
+    // 施法后，施法者应该有周期性治疗修饰器
     EXPECT_TRUE(caster_->modifiers().find("modifier_periodic_heal") != nullptr);
 
     const double hp_after_cast = caster_->health();
-    // Let 3 ticks fire (tick_interval = 1s, heal = 2% of 1000 = 20 per tick)
+    // 让 3 次跳动触发（跳动间隔 = 1 秒，治疗 = 1000 的 2% = 每次 20）
     world_.advance(3.0);
 
     const double healed = caster_->health() - hp_after_cast;
-    // 3 ticks × 20 HP = 60
+    // 3 次跳动 × 20 生命值 = 60
     EXPECT_NEAR(healed, 60.0, 5.0);
 }
 
@@ -93,10 +93,10 @@ TEST_F(HeroJuggernautTest, OmnislashDealsPureDamage) {
     t.unit = enemy_;
     EXPECT_EQ(omni->order_cast(t, world_), CastError::None);
 
-    // Cast point is 0.3s
+    // 施法前摇 0.3 秒
     world_.advance(0.35);
 
-    // Level 1: 3 slashes × 200 pure = 600 pure (no resist)
+    // 1 级：3 次斩击 × 200 纯粹伤害 = 600 纯粹伤害（无抗性）
     const double dealt = 1000.0 - enemy_->health();
     EXPECT_NEAR(dealt, 600.0, 1.0);
 }
@@ -111,6 +111,6 @@ TEST_F(HeroJuggernautTest, OmnislashStopsOnTargetDeath) {
     omni->order_cast(t, world_);
     world_.advance(0.35);
 
-    // 300 HP, each hit = 200 pure → 2 hits kill, third slash should not happen
+    // 300 生命值，每次攻击 = 200 纯粹伤害 → 2 次攻击击杀，第三次斩击不应发生
     EXPECT_FALSE(enemy_->alive());
 }

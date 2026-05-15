@@ -1,60 +1,80 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文件为 Claude Code (claude.ai/code) 在此代码库中工作时提供指导。
 
-## Build & Test
+## 代码规范
+
+**重要：所有代码注释、文档字符串、README 文件和其他文档必须使用中文编写。**
+
+- C++ 代码注释使用中文
+- Lua 脚本注释使用中文
+- YAML 数据文件中的注释使用中文
+- 测试用例的描述和注释使用中文
+- 提交信息（commit message）使用中文
+- 所有 Markdown 文档使用中文
+
+### 术语使用规范
+
+- **游戏/MOBA/Dota 专业术语**：可以直接使用英文（如 buff、debuff、stun、silence、cooldown 等）
+- **技术术语**：常见的技术术语可以使用英文（如 pipeline、tick、modifier、ability 等）
+- **不常见术语**：对于较生僻或可能引起歧义的词汇，使用"英文（中文解释）"格式
+  - 例如：`cast point（施法前摇）`、`backswing（施法后摇）`、`amplification（增幅）`、`aggregation（聚合）`、`resistance（抗性）`、`absorption（吸收）`、`reflect（反射/反伤）`
+- **代码标识符**：类名、函数名、变量名等保持英文，注释中引用时可直接使用
+  - 例如：`ModifierProperty` 枚举、`deal_damage()` 函数
+
+## 构建与测试
 
 ```sh
 cmake -B build
 cmake --build build -j
-ctest --test-dir build --output-on-failure    # all 91 tests
-ctest --test-dir build -R "HeroLinaTest"      # run one test suite
-./build/duel                                   # 2v1 team-fight demo
+ctest --test-dir build --output-on-failure    # 运行全部 91 个测试
+ctest --test-dir build -R "HeroLinaTest"      # 运行单个测试套件
+./build/duel                                   # 2v1 团战演示
 ```
 
-Requires C++20 (AppleClang 15+, Clang 15+, GCC 12+). All dependencies (GoogleTest, yaml-cpp, Lua 5.4, sol2) auto-fetch via CPM.cmake on first configure.
+需要 C++20（AppleClang 15+、Clang 15+ 或 GCC 12+）。所有依赖项（GoogleTest、yaml-cpp、Lua 5.4、sol2）在首次配置时通过 CPM.cmake 自动获取。
 
-After any source change, rebuild with `cmake --build build -j` — there's no separate lint step.
+任何源代码修改后，使用 `cmake --build build -j` 重新构建 —— 没有单独的 lint 步骤。
 
-## Architecture
+## 架构
 
-This is a Dota 2–style ability and modifier system: C++20 engine core, Lua 5.4 scripting (via sol2), YAML data definitions (via yaml-cpp).
+这是一个 Dota 2 风格的技能和修饰器系统：C++20 引擎核心、Lua 5.4 脚本（通过 sol2）、YAML 数据定义（通过 yaml-cpp）。
 
-### Layers
+### 分层结构
 
-| Layer | Location | Role |
+| 层级 | 位置 | 职责 |
 |-------|----------|------|
-| Core engine | `include/dota/core/`, `src/core/` | Unit, World (30Hz tick), EventBus |
-| Modifier system | `include/dota/modifier/`, `src/modifier/` | Property aggregation, state bitmask, lifecycle hooks |
-| Ability framework | `include/dota/ability/`, `src/ability/` | Cast state machine, DataDriven (YAML) + Scripted (Lua) |
-| Combat pipeline | `include/dota/combat/`, `src/combat/` | Staged damage/heal pipeline with modifier intervention |
-| Lua bindings | `src/script/` | sol2 usertypes for Unit/World/Vec2, enum tables |
-| Data | `data/heroes/*.yaml` | Hero definitions with ability_special per-level values |
-| Scripts | `scripts/abilities/*.lua` | Lua ability implementations |
+| 核心引擎 | `include/dota/core/`, `src/core/` | Unit、World（30Hz tick）、EventBus |
+| 修饰器系统 | `include/dota/modifier/`, `src/modifier/` | 属性 aggregation（聚合）、状态位掩码、生命周期钩子 |
+| 技能框架 | `include/dota/ability/`, `src/ability/` | 施法状态机、DataDriven（YAML）+ Scripted（Lua）|
+| 战斗管线 | `include/dota/combat/`, `src/combat/` | 分阶段伤害/治疗管线，支持修饰器干预 |
+| Lua 绑定 | `src/script/` | Unit/World/Vec2 的 sol2 用户类型、枚举表 |
+| 数据 | `data/heroes/*.yaml` | 英雄定义，包含 ability_special 的每级数值 |
+| 脚本 | `scripts/abilities/*.lua` | Lua 技能实现 |
 
-### Key design patterns
+### 关键设计模式
 
-- **Two ability flavors**: `ability_datadriven` (pure YAML action list) vs `ability_lua` (Lua table with `on_spell_start`/`on_channel_think`/`on_channel_finish`). The `base_class` field in YAML controls which.
-- **Modifier three-part model**: `declared_properties()` (numeric bonuses aggregated by layer), `declared_states()` (bitmask), event hooks (`on_pre_take_damage`, `on_interval_think`, etc.). Property values multiply by `stack_count`.
-- **Damage pipeline** (`deal_damage` in `src/combat/damage.cpp`): OutgoingAmp → IncomingAmp → PreTake (shields) → MagicImmune check → TypeResistance → Apply → PostTake (reflect). DamageFlag bitmask gates each stage.
-- **Heal pipeline** (`deal_heal`): PreTakeHeal → HealAmpPct → clamp → PostTakeHeal.
-- **Cast lifecycle**: Ready → Casting (cast_point) → fires `on_spell_start` → Backswing → OnCooldown. Channelled abilities branch into Channelling with per-tick `on_channel_think`.
-- **ScriptedAbility self-table**: Lua hooks receive a `self` table with closures (`get_special`, `target_point`, `target_unit`, `level`, `get_caster`). The leading `sol::object` parameter handles colon-call syntax.
+- **两种技能类型**：`ability_datadriven`（纯 YAML 动作列表）vs `ability_lua`（Lua 表，包含 `on_spell_start`/`on_channel_think`/`on_channel_finish`）。YAML 中的 `base_class` 字段控制使用哪种类型。
+- **修饰器三部分模型**：`declared_properties()`（按层级 aggregation 聚合的数值加成）、`declared_states()`（位掩码）、事件钩子（`on_pre_take_damage`、`on_interval_think` 等）。属性值会乘以 `stack_count`。
+- **伤害管线**（`src/combat/damage.cpp` 中的 `deal_damage`）：OutgoingAmp（输出增幅）→ IncomingAmp（承受增幅）→ PreTake（护盾 absorption 吸收）→ MagicImmune 检查 → TypeResistance（类型 resistance 抗性）→ Apply → PostTake（reflect 反射/反伤）。DamageFlag 位掩码控制各阶段。
+- **治疗管线**（`deal_heal`）：PreTakeHeal → HealAmpPct（治疗 amplification 增幅）→ clamp → PostTakeHeal。
+- **施法生命周期**：Ready → Casting（cast point 施法前摇）→ 触发 `on_spell_start` → Backswing（施法后摇）→ OnCooldown。持续施法技能分支到 Channelling，每 tick 调用 `on_channel_think`。
+- **ScriptedAbility self 表**：Lua 钩子接收一个 `self` 表，包含闭包（`get_special`、`target_point`、`target_unit`、`level`、`get_caster`）。前导的 `sol::object` 参数处理冒号调用语法。
 
-### Compile-time defines
+### 编译时定义
 
-- `DOTA_SCRIPT_DIR` — absolute path to `scripts/` (set on `dota_core`)
-- `DOTA_DATA_DIR` — absolute path to `data/` (set on test and duel targets)
+- `DOTA_SCRIPT_DIR` —— `scripts/` 的绝对路径（在 `dota_core` 上设置）
+- `DOTA_DATA_DIR` —— `data/` 的绝对路径（在测试和 duel 目标上设置）
 
-### Adding a new hero
+### 添加新英雄
 
-1. Create `data/heroes/<name>.yaml` with hero stats + abilities list
-2. For `ability_lua` entries, create `scripts/abilities/<ability_name>.lua` returning a table with lifecycle hooks
-3. Add integration tests in `tests/test_hero_<name>.cpp` and register the file in `CMakeLists.txt`
+1. 创建 `data/heroes/<name>.yaml`，包含英雄属性和技能列表
+2. 对于 `ability_lua` 条目，创建 `scripts/abilities/<ability_name>.lua`，返回包含生命周期钩子的表
+3. 在 `tests/test_hero_<name>.cpp` 中添加集成测试，并在 `CMakeLists.txt` 中注册该文件
 
-### Adding a new modifier property
+### 添加新修饰器属性
 
-1. Add enum entry in `include/dota/modifier/enums.hpp` (`ModifierProperty`)
-2. Map its layer in `layer_of()` (same file)
-3. Route it through the relevant Unit stat getter in `src/core/unit.cpp`
-4. Expose to Lua in `src/script/bindings.cpp` → `property_table()`
+1. 在 `include/dota/modifier/enums.hpp` 中添加枚举条目（`ModifierProperty`）
+2. 在 `layer_of()` 中映射其层级（同一文件）
+3. 在 `src/core/unit.cpp` 中通过相关的 Unit 统计获取器路由它
+4. 在 `src/script/bindings.cpp` → `property_table()` 中暴露给 Lua

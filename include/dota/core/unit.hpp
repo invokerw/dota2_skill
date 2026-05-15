@@ -13,19 +13,19 @@ namespace dota {
 
 class World;
 
-// Base stats and combat state for a controllable entity (hero or creep).
+// 可控实体（英雄或小兵）的基础属性和战斗状态
 //
-// Stage 1 keeps this intentionally concrete — no modifiers, no abilities yet.
-// Later stages will route most getters through an aggregator so modifiers can
-// inject bonuses (armor/attack-speed/etc.) without touching base fields.
+// 阶段 1 保持这个结构体简单具体 —— 还没有修饰器和技能。
+// 后续阶段会将大部分 getter 通过聚合器路由，这样修饰器可以
+// 注入加成（护甲/攻速等）而不触碰基础字段。
 struct UnitStats {
     double max_health        = 100.0;
     double max_mana          = 0.0;
     double base_armor        = 0.0;
-    double magic_resist      = 0.25;   // 0..1, fraction of magical damage blocked
+    double magic_resist      = 0.25;   // 0..1，魔法伤害 resistance（抗性）减免比例
     double attack_damage     = 10.0;
-    double attack_speed      = 100.0;  // base 100 means 1 BAT between attacks
-    double base_attack_time  = 1.7;    // seconds between attacks at 100 AS
+    double attack_speed      = 100.0;  // 基础 100 表示 1 BAT 间隔攻击
+    double base_attack_time  = 1.7;    // 100 攻速时的攻击间隔（秒）
     double move_speed        = 300.0;
     double attack_range      = 150.0;
 };
@@ -53,35 +53,34 @@ public:
     Vec2   position() const { return position_; }
     void   set_position(Vec2 p) { position_ = p; }
 
-    // --- Combat stats (aggregated through the ModifierManager) ---
+    // --- 战斗属性（通过 ModifierManager aggregation 聚合）---
     double armor()          const;
     double attack_damage()  const;
     double magic_resist()   const;
     double move_speed()     const;
 
-    // Seconds between attacks given current attack speed.
+    // 根据当前攻速计算的攻击间隔（秒）
     double seconds_per_attack() const;
 
-    // --- Action gating (consults modifier states) ---
+    // --- 行动限制（查询修饰器状态）---
     bool can_attack() const;
     bool can_cast()   const;
     bool can_move()   const;
 
-    // Apply raw health/mana deltas. Used by the damage pipeline post-resistance.
+    // 应用原始生命值/魔法值变化。由伤害管线在抗性计算后使用。
     void heal(double amount);
     void spend_mana(double amount);
     void set_health(double hp);
 
-    // Raw damage apply that clamps to zero. Returns the actual amount applied.
-    // Does not publish events; call apply_damage() for the full pipeline.
+    // 应用原始伤害并限制到零。返回实际应用的数值。
+    // 不发布事件；调用 apply_damage() 以使用完整管线。
     double apply_raw_damage(double amount);
 
-    // Stage 2 damage entry-point: dispatch pre-damage to modifiers on this
-    // unit (they may mutate `amount` or record `absorbed`), apply type
-    // resistance (physical via armor, magical via magic_resist, pure
-    // untouched), subtract HP, dispatch post-damage. Returns the HP actually
-    // removed. The Stage 5 pipeline will grow more layers (shields, reflect)
-    // but keep this signature.
+    // 阶段 2 伤害入口点：向此单位上的修饰器分发伤害前事件
+    // （它们可能修改 `amount` 或记录 `absorbed`），应用类型
+    // resistance（抗性）（物理通过护甲，魔法通过魔抗，纯粹不变），
+    // 扣除生命值，分发伤害后事件。返回实际扣除的生命值。
+    // 阶段 5 管线会增加更多层（护盾、reflect 反射/反伤）但保持此签名。
     double apply_damage(DamageType type, double amount, EntityId attacker = 0);
 
     ModifierManager&       modifiers()       { return *modifiers_; }
@@ -90,20 +89,19 @@ public:
     AbilityManager&       abilities()       { return *abilities_; }
     const AbilityManager& abilities() const { return *abilities_; }
 
-    // World back-pointer. Set by World::spawn so the damage/heal pipeline can
-    // resolve attacker EntityIds into Unit*. Null for tests that build Units
-    // outside a World.
+    // World 反向指针。由 World::spawn 设置，以便伤害/治疗管线可以
+    // 将攻击者 EntityId 解析为 Unit*。对于在 World 外构建的测试 Unit 为 null。
     void   set_world(World* w) { world_ = w; }
     World* world() const       { return world_; }
 
-    // Attack cooldown bookkeeping (seconds remaining until next swing).
+    // 攻击冷却簿记（距离下次攻击的剩余秒数）
     double attack_cd() const { return attack_cd_; }
     void   set_attack_cd(double t) { attack_cd_ = t; }
     void   tick_attack_cd(double dt);
 
-    // Called once per tick by World; advances modifiers on this unit.
+    // 每 tick 由 World 调用一次；推进此单位上的修饰器
     void tick_modifiers(double dt);
-    // Called once per tick by World; advances abilities on this unit.
+    // 每 tick 由 World 调用一次；推进此单位上的技能
     void tick_abilities(double dt);
 
 private:

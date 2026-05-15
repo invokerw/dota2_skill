@@ -27,12 +27,11 @@ TEST(ModifierEvent, ShieldAbsorbsDamageBeforeResistance) {
     auto* shield = u->modifiers().attach_new<modifiers::ShieldAbsorb>(200.0, -1.0);
 
     const double applied = u->apply_damage(DamageType::Magical, 300.0);
-    // 200 eaten by shield; remaining 100 hits magic resist (25% => 75 applied)
+    // 护盾吸收 200；剩余 100 受魔抗影响（25% => 实际造成 75）
     EXPECT_DOUBLE_EQ(applied, 75.0);
     EXPECT_DOUBLE_EQ(shield->remaining(), 0.0);
 
-    // Shield now consumed; the unit should no longer have the modifier after
-    // an advance() purges it.
+    // 护盾现已耗尽；在 advance() 清除后，单位应不再拥有该修改器。
     w.advance(0.1);
     EXPECT_EQ(u->modifiers().find("modifier_shield_absorb"), nullptr);
 }
@@ -46,7 +45,7 @@ TEST(ModifierEvent, MagicImmuneBlocksMagicalFully) {
     EXPECT_DOUBLE_EQ(applied, 0.0);
     EXPECT_DOUBLE_EQ(u->health(), 1000.0);
 
-    // Physical still goes through.
+    // 物理伤害仍然有效。
     const double phys = u->apply_damage(DamageType::Physical, 100.0);
     EXPECT_GT(phys, 0.0);
 }
@@ -65,20 +64,20 @@ TEST(ModifierEvent, PostDamageEventCarriesFinalAmount) {
     auto* spy = u->modifiers().attach_new<PostSpy>();
 
     u->apply_damage(DamageType::Pure, 123.0);
-    EXPECT_DOUBLE_EQ(spy->seen, 123.0); // pure bypasses resistance
+    EXPECT_DOUBLE_EQ(spy->seen, 123.0); // 纯粹伤害无视抗性
 }
 
 TEST(ModifierEvent, ArmorReducesBasicAttackThroughPipeline) {
     World w;
     auto* u = w.spawn("u", Team::Radiant, basic_stats(1000.0));
 
-    // +20 armor via modifier -> ~54.5% physical reduction.
+    // 通过修改器 +20 护甲 -> 约 54.5% 物理伤害减免。
     u->modifiers().attach_new<modifiers::GenericStats>(
         "plated", -1.0,
         std::initializer_list<ModifierProvidedProperty>{
             {ModifierProperty::ArmorBonus, 20.0}});
 
     const double applied = u->apply_damage(DamageType::Physical, 100.0);
-    // expected mult = 1 - (0.06*20)/(1 + 0.06*20) = 1 - 1.2/2.2 ≈ 0.4545
+    // 预期倍率 = 1 - (0.06*20)/(1 + 0.06*20) = 1 - 1.2/2.2 ≈ 0.4545
     EXPECT_NEAR(applied, 45.45, 0.1);
 }

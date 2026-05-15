@@ -1,6 +1,5 @@
--- Lina's Laguna Blade. Massive single-target magical nuke. Straightforward
--- point-and-click damage, similar to Lion's Finger of Death but with higher
--- numbers.
+-- Lina 的神灭斩。大量单体目标魔法伤害。简单直接的
+-- 点击目标伤害技能，类似于 Lion 的死亡一指但数值更高。
 
 local M = {}
 

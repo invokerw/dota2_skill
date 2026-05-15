@@ -10,11 +10,11 @@
 
 namespace dota::modifiers {
 
-// --- State-only modifiers (name-driven stun/silence/root/etc.) -------------
+// --- 仅状态修饰器（名称驱动的眩晕/沉默/定身等） -------------
 
 class GenericState : public Modifier {
 public:
-    // Arg order matches ModifierManager::attach_new, which prepends owner.
+    // 参数顺序与 ModifierManager::attach_new 匹配，后者在前面添加 owner。
     GenericState(Unit& owner, std::string name, double duration, std::uint32_t state_mask)
         : Modifier(std::move(name), owner, duration), mask_(state_mask) {}
 
@@ -44,9 +44,9 @@ make_rooted(Unit& owner, double duration) {
 
 inline std::unique_ptr<GenericState>
 make_hexed(Unit& owner, double duration) {
-    // Hex (Lion) disables cast/attack but not movement in Dota. The Hexed
-    // state bit alone is enough — can_attack/can_cast block on it but
-    // can_move does not.
+    // 妖术（狮子）在 Dota 中禁用施法/攻击但不禁用移动。仅 Hexed
+    // 状态位就足够了 — can_attack/can_cast 会阻止它，但
+    // can_move 不会。
     return std::make_unique<GenericState>(
         owner, "modifier_hexed", duration,
         state_bit(ModifierState::Hexed));
@@ -64,7 +64,7 @@ make_magic_immune(Unit& owner, double duration) {
         owner, "modifier_magic_immune", duration, state_bit(ModifierState::MagicImmune));
 }
 
-// --- Numeric-stat modifier -------------------------------------------------
+// --- 数值属性修饰器 -------------------------------------------------
 
 class GenericStats : public Modifier {
 public:
@@ -80,12 +80,11 @@ private:
     std::vector<ModifierProvidedProperty> props_;
 };
 
-// --- Shield/Absorb modifier ------------------------------------------------
+// --- 护盾/吸收修饰器 ------------------------------------------------
 //
-// Dota examples: Pipe of Insight's barrier, Medusa's Mana Shield, etc. This
-// one simply absorbs up to `capacity` damage across any number of hits and
-// self-destructs when empty. Pre-resistance absorption mirrors how Dota
-// resolves most "shield" mechanics.
+// Dota 示例：洞察烟斗的屏障、美杜莎的魔法护盾等。这个修饰器
+// 简单地吸收最多 `capacity` 点伤害（跨任意次数的攻击），
+// 并在耗尽时自毁。抗性前吸收反映了 Dota 解决大多数"护盾"机制的方式。
 class ShieldAbsorb : public Modifier {
 public:
     ShieldAbsorb(Unit& owner, double capacity, double duration)
@@ -101,8 +100,8 @@ public:
         ev.absorbed += eat;
         remaining_  -= eat;
         if (remaining_ <= 0.0) {
-            // Consume the shield by collapsing its remaining duration. The
-            // manager will purge on the next advance().
+            // 通过将剩余持续时间归零来消耗护盾。
+            // 管理器将在下一次 advance() 时清除。
             refresh(0.0);
         }
     }
@@ -111,10 +110,10 @@ private:
     double remaining_;
 };
 
-// --- Periodic heal (Healing Ward style) ------------------------------------
+// --- 周期性治疗（治疗守卫风格） ------------------------------------
 //
-// Heals `heal_per_tick` to the owner every `interval` seconds, for `duration`
-// seconds total. Runs through the heal pipeline so break-the-healing works.
+// 每 `interval` 秒对拥有者治疗 `heal_per_tick`，总持续 `duration` 秒。
+// 通过治疗管线运行，因此破坏治疗有效。
 class PeriodicHeal : public Modifier {
 public:
     PeriodicHeal(Unit& owner, double heal_per_tick, double interval, double duration)
@@ -136,11 +135,10 @@ make_periodic_heal(Unit& owner, double heal_per_tick, double interval, double du
     return std::make_unique<PeriodicHeal>(owner, heal_per_tick, interval, duration);
 }
 
-// --- Reflect (Blade Mail style) --------------------------------------------
+// --- 反射（刃甲风格） --------------------------------------------
 //
-// Reflects a fraction of the pre-resistance damage back to the attacker as
-// Pure damage with DamageFlag::Reflection set, which the pipeline honours by
-// skipping any reflect modifiers on the attacker (preventing infinite loops).
+// 将抗性前伤害的一部分作为纯粹伤害反射回攻击者，并设置 DamageFlag::Reflection，
+// 管线通过跳过攻击者上的任何反射修饰器来遵守此标志（防止无限循环）。
 class ReflectDamage : public Modifier {
 public:
     ReflectDamage(Unit& owner, double fraction, double duration)
@@ -148,10 +146,9 @@ public:
         , fraction_(fraction) {}
 
     void on_pre_take_damage(PreTakeDamageEvent& ev) override {
-        // Record the pre-resistance amount so we can reflect that — Blade Mail
-        // in Dota reflects the amount the target would have taken, not the
-        // pre-resist headline number. This is an approximation acceptable for
-        // Stage 5 tests.
+        // 记录抗性前的数量以便反射 — Dota 中的刃甲
+        // 反射目标将承受的数量，而不是抗性前的标题数字。
+        // 这是 Stage 5 测试可接受的近似值。
         pending_reflect_ = fraction_ * ev.amount;
         pending_attacker_ = ev.attacker;
     }
@@ -159,7 +156,7 @@ public:
     void on_post_take_damage(PostTakeDamageEvent& ev) override {
         if (pending_reflect_ <= 0.0) return;
         if (has_flag(ev.flags, DamageFlag::Reflection)) {
-            pending_reflect_ = 0.0;     // never reflect reflected damage
+            pending_reflect_ = 0.0;     // 永不反射已反射的伤害
             return;
         }
         Unit* attacker = owner().world()
@@ -184,9 +181,9 @@ make_blade_mail(Unit& owner, double fraction, double duration) {
     return std::make_unique<ReflectDamage>(owner, fraction, duration);
 }
 
-// --- Break-the-healing -----------------------------------------------------
+// --- 破坏治疗 -----------------------------------------------------
 //
-// A debuff that reduces incoming heals by a fraction (e.g. 0.4 for -40%).
+// 一个减少承受治疗量的减益效果（例如 0.4 表示 -40%）。
 inline std::unique_ptr<GenericStats>
 make_break_healing(Unit& owner, double fraction, double duration) {
     return std::make_unique<GenericStats>(

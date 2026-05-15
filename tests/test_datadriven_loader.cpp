@@ -15,8 +15,8 @@ TEST(DataDrivenLoader, LoadsLionYaml) {
     AbilityRegistry reg;
     const std::string path = std::string(kDataDir) + "/heroes/lion.yaml";
     const auto n = reg.load_file(path);
-    // lion.yaml grew through Stage 6; the loader returns the count of
-    // datadriven entries it actually loaded (Lua entries are skipped).
+    // lion.yaml 在第 6 阶段增长；加载器返回它实际加载的
+    // 数据驱动条目的计数（Lua 条目被跳过）
     EXPECT_GE(n, 1u);
 
     const AbilityDef* def = reg.find("lion_earth_spike");
@@ -41,10 +41,10 @@ TEST(DataDrivenLoader, AbilitySpecialPerLevelLookup) {
     // damage: [80, 160, 240, 320]
     EXPECT_DOUBLE_EQ(resolve_expression("%damage", def->ability_special, 1), 80.0);
     EXPECT_DOUBLE_EQ(resolve_expression("%damage", def->ability_special, 3), 240.0);
-    // Beyond max level clamps to last entry.
+    // 超过最大等级时限制到最后一个条目
     EXPECT_DOUBLE_EQ(resolve_expression("%damage", def->ability_special, 10), 320.0);
 
-    // Float list too.
+    // 浮点数列表也一样
     EXPECT_DOUBLE_EQ(resolve_expression("%stun_duration", def->ability_special, 2), 1.9);
 }
 

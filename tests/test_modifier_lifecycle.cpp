@@ -14,7 +14,7 @@ UnitStats basic_stats() {
     return s;
 }
 
-// Test modifier that records lifecycle hook calls and supports think_interval.
+// 测试修改器，记录生命周期钩子调用并支持 think_interval。
 struct Tracker : public Modifier {
     int creates = 0;
     int destroys = 0;
@@ -42,9 +42,9 @@ TEST(ModifierLifecycle, CreatedAndDestroyedHooksFire) {
     EXPECT_EQ(t->creates, 1);
     EXPECT_EQ(t->destroys, 0);
 
-    // After expiry and purge, on_destroyed fires once.
+    // 过期并清除后，on_destroyed 触发一次。
     w.advance(1.0);
-    // t is now dangling; instead verify by trying to find it.
+    // t 现在是悬空指针；改为尝试查找它来验证。
     EXPECT_EQ(u->modifiers().find("tracker"), nullptr);
 }
 
@@ -63,7 +63,7 @@ TEST(ModifierLifecycle, ThinkIntervalFiresAtCadence) {
     auto* t = u->modifiers().attach_new<Tracker>(-1.0, 0.5);
 
     w.advance(2.0);
-    // 0.5s cadence over 2.0s → 4 ticks.
+    // 2.0 秒内以 0.5 秒节奏 → 4 次 tick。
     EXPECT_EQ(t->ticks, 4);
 }
 
@@ -75,7 +75,7 @@ TEST(ModifierLifecycle, StackCountTriggersCallback) {
 
     t->set_stack_count(3);
     EXPECT_EQ(t->stack_changes, 1);
-    t->set_stack_count(3);  // no-op
+    t->set_stack_count(3);  // 无操作
     EXPECT_EQ(t->stack_changes, 1);
 }
 
@@ -87,7 +87,7 @@ TEST(ModifierLifecycle, RefreshExtendsRemainingDuration) {
     w.advance(0.4);
     m->refresh(1.0);
     w.advance(0.7);
-    EXPECT_FALSE(u->can_cast()); // refreshed stun still active
+    EXPECT_FALSE(u->can_cast()); // 刷新的眩晕仍然生效
     w.advance(0.5);
     EXPECT_TRUE(u->can_cast());
 }

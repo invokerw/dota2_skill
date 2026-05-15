@@ -10,12 +10,11 @@
 
 namespace dota {
 
-// --- DataDriven action list ------------------------------------------------
+// --- DataDriven 动作列表 ------------------------------------------------
 //
-// Each entry in `on_spell_start:` is parsed into one of these structs. Fields
-// of type `std::string` that begin with '%' are templated references into
-// ability_special and resolved at action-execution time using the ability's
-// current level. Non-'%' numeric strings are parsed as plain numbers.
+// `on_spell_start:` 中的每个条目都会被解析为这些结构体之一。类型为
+// `std::string` 且以 '%' 开头的字段是对 ability_special 的模板引用，
+// 在动作执行时使用技能的当前等级解析。非 '%' 的数字字符串会被解析为普通数字。
 
 enum class ActionTargetSpec : std::uint8_t {
     Caster,
@@ -25,7 +24,7 @@ enum class ActionTargetSpec : std::uint8_t {
 struct ActionDamage {
     ActionTargetSpec target;
     DamageType       type;
-    std::string      amount;   // raw expression, resolved per level
+    std::string      amount;   // 原始表达式，按等级解析
 };
 
 struct ActionHeal {
@@ -36,16 +35,16 @@ struct ActionHeal {
 struct ActionApplyModifier {
     ActionTargetSpec target;
     std::string      modifier_name;
-    std::string      duration;     // "" → permanent
+    std::string      duration;     // "" → 永久
 };
 
 using SpellAction = std::variant<ActionDamage, ActionHeal, ActionApplyModifier>;
 
-// Parsed YAML ability definition — the recipe for constructing a runtime
-// DataDrivenAbility. Lives in the AbilityRegistry as an immutable record.
+// 解析后的 YAML 技能定义 — 构造运行时
+// DataDrivenAbility 的配方。作为不可变记录存在于 AbilityRegistry 中。
 struct AbilityDef {
     std::string    name;
-    std::string    base_class;       // "ability_datadriven" or "ability_lua"
+    std::string    base_class;       // "ability_datadriven" 或 "ability_lua"
     std::uint32_t  behavior = 0;
     TargetTeam     target_team = TargetTeam::None;
 
@@ -57,16 +56,15 @@ struct AbilityDef {
     std::vector<double> mana_costs;
     AbilitySpecial      ability_special;
 
-    // Present for base_class=="ability_datadriven".
+    // 当 base_class=="ability_datadriven" 时存在。
     std::vector<SpellAction> on_spell_start;
 
-    // Present for base_class=="ability_lua" (Stage 4).
+    // 当 base_class=="ability_lua" 时存在（阶段 4）。
     std::string script_path;
 };
 
-// Runtime DataDriven ability. Populates its timings/specials from an
-// AbilityDef at construction, then replays the recorded action list at
-// on_spell_start().
+// 运行时 DataDriven 技能。在构造时从 AbilityDef 填充其
+// 时间/特殊值，然后在 on_spell_start() 时重放记录的动作列表。
 class DataDrivenAbility : public Ability {
 public:
     DataDrivenAbility(Unit& caster, const AbilityDef& def);
@@ -77,8 +75,8 @@ private:
     std::vector<SpellAction> actions_;
 };
 
-// Resolve a `%var` expression (or a plain numeric literal) using the
-// ability's special table at `level`. Exposed for tests.
+// 使用技能在 `level` 等级的特殊值表解析 `%var` 表达式
+//（或普通数字字面量）。为测试而暴露。
 double resolve_expression(const std::string& expr,
                           const AbilitySpecial& special,
                           int level);

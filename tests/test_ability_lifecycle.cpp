@@ -26,7 +26,7 @@ UnitStats hero_stats() {
     return s;
 }
 
-// Helper: instantiate Lion's Earth Spike from YAML on `caster`.
+// 辅助函数：从 YAML 为 `caster` 实例化 Lion 的 Earth Spike。
 Ability* attach_earth_spike(AbilityRegistry& reg, Unit& caster) {
     reg.load_file(std::string(kDataDir) + "/heroes/lion.yaml");
     return reg.instantiate("lion_earth_spike", caster);
@@ -95,9 +95,9 @@ TEST(AbilityLifecycle, CastPointResolveTriggersOnSpellStart) {
     CastTarget t; t.unit = enemy;
     EXPECT_EQ(spike->order_cast(t, w), CastError::None);
     EXPECT_EQ(spike->phase(), CastPhase::Casting);
-    EXPECT_DOUBLE_EQ(enemy->health(), hero_stats().max_health); // not yet
+    EXPECT_DOUBLE_EQ(enemy->health(), hero_stats().max_health); // 尚未生效
 
-    // Advance past cast point (0.3s).
+    // 推进超过施法前摇（0.3 秒）。
     w.advance(0.35);
     EXPECT_LT(enemy->health(), hero_stats().max_health);
     EXPECT_EQ(spike->phase(), CastPhase::OnCooldown);
@@ -115,13 +115,13 @@ TEST(AbilityLifecycle, StunDuringCastPointInterruptsAndRefundsNothing) {
 
     CastTarget t; t.unit = enemy;
     EXPECT_EQ(spike->order_cast(t, w), CastError::None);
-    // Stun during cast-point: the cast should not resolve.
+    // 施法前摇期间眩晕：施法不应生效。
     lion->modifiers().attach(modifiers::make_stunned(*lion, 0.5));
     w.advance(0.5);
 
     EXPECT_DOUBLE_EQ(enemy->health(), hp_before);
-    EXPECT_LT(lion->mana(), mana_before);           // mana was already spent
-    EXPECT_EQ(spike->phase(), CastPhase::OnCooldown); // Dota: cooldown still starts
+    EXPECT_LT(lion->mana(), mana_before);           // 法力已经消耗
+    EXPECT_EQ(spike->phase(), CastPhase::OnCooldown); // Dota：冷却仍然开始
 }
 
 TEST(AbilityLifecycle, CooldownBlocksRecastUntilElapsed) {
@@ -154,6 +154,6 @@ TEST(AbilityLifecycle, LevelChoosesCorrectDamageTier) {
     spike->order_cast(t, w);
     w.advance(0.4);
 
-    // Level 4: 320 magical → 240 after 25% magic resist.
+    // 等级 4：320 魔法伤害 → 25% 魔抗后为 240。
     EXPECT_NEAR(hp_before - enemy->health(), 240.0, 0.5);
 }

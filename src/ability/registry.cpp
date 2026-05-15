@@ -15,7 +15,7 @@ namespace dota {
 
 namespace {
 
-// --- YAML helpers ---------------------------------------------------------
+// --- YAML 辅助函数 ---------------------------------------------------------
 
 std::vector<double> parse_number_list(const YAML::Node& n) {
     std::vector<double> out;

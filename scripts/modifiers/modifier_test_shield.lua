@@ -1,6 +1,6 @@
--- A magic-damage-only shield. Used by Stage 4 tests to verify that a Lua
--- modifier can (a) declare states/properties, (b) absorb damage via
--- on_pre_take_damage, and (c) return the absorbed amount.
+-- 仅吸收魔法伤害的护盾。由 Stage 4 测试使用，用于验证 Lua
+-- modifier 可以 (a) 声明状态/属性，(b) 通过 on_pre_take_damage 吸收伤害，
+-- 以及 (c) 返回吸收的数量。
 
 local M = {}
 

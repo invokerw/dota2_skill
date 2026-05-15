@@ -18,11 +18,10 @@ ScriptedAbility::ScriptedAbility(Unit& caster, const AbilityDef& def, LuaState& 
 
     script_ = lua.load_module(def.script_path);
 
-    // Build a thin self-table that Lua hooks can receive as `self`. Each
-    // entry is a closure that captures `this`. The lambdas accept a leading
-    // sol::object so scripts can invoke them with either colon syntax
-    // (`self:get_special("radius")`) or dot syntax — sol2 passes the table
-    // as the first argument under colon calls, and we simply ignore it.
+    // 构建一个轻量的 self 表，Lua 钩子可以接收它作为 `self`。每个条目都是
+    // 捕获 `this` 的闭包。lambda 接受一个前导 sol::object，这样脚本可以使用
+    // 冒号语法（`self:get_special("radius")`）或点语法调用 — sol2 在冒号调用时
+    // 将表作为第一个参数传递，我们只需忽略它。
     self_ = lua.state().create_table();
     self_["get_special"] = [this](sol::object, const std::string& k) {
         return get_special(k);

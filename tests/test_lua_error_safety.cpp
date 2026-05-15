@@ -22,8 +22,8 @@ UnitStats stats() {
     return s;
 }
 
-// Build a minimal "NO_TARGET, instant cast" AbilityDef pointing at the
-// intentionally broken script. Bypasses YAML so the test is self-contained.
+// 构建一个最小的 "NO_TARGET，即时施法" AbilityDef，指向
+// 故意损坏的脚本。绕过 YAML，使测试自包含
 AbilityDef broken_def(const char* script) {
     AbilityDef def;
     def.name        = "test_broken_ability";
@@ -39,8 +39,8 @@ AbilityDef broken_def(const char* script) {
 
 } // namespace
 
-// Lua runtime error inside on_spell_start must be caught; cast should still
-// transition into cooldown.
+// on_spell_start 内的 Lua 运行时错误必须被捕获；施法仍应
+// 转换到冷却状态
 TEST(LuaErrorSafety, OnSpellStartErrorDoesNotCrash) {
     LuaState lua;
 
@@ -57,10 +57,10 @@ TEST(LuaErrorSafety, OnSpellStartErrorDoesNotCrash) {
 
     CastTarget t;
     EXPECT_EQ(raw->order_cast(t, w), CastError::None);
-    // Zero cast-point → resolve immediately; error fires during that.
+    // 零施法前摇 → 立即解析；错误在此期间触发
     EXPECT_GE(error_count, 1);
 
-    // Engine keeps ticking; ability now on cooldown.
+    // 引擎继续运行；技能现在处于冷却状态
     w.advance(0.5);
     EXPECT_EQ(raw->phase(), CastPhase::OnCooldown);
     EXPECT_GT(raw->cooldown_remaining(), 0.0);
@@ -81,12 +81,12 @@ TEST(LuaErrorSafety, ModuleThatDoesNotReturnTableReportsError) {
     int error_count = 0;
     lua.set_error_handler([&](const std::string&) { ++error_count; });
 
-    // Use an inline script string that returns nil.
+    // 使用返回 nil 的内联脚本字符串
     sol::state& s = lua.state();
     auto r = s.safe_script("return nil", &sol::script_pass_on_error);
     EXPECT_TRUE(r.valid());
-    // And confirm load_module emits an error on a script that returns nothing.
-    // We rely on the earlier "does_not_exist.lua" test for the file-missing
-    // path; this test just confirms the handler is hooked and counts upward.
+    // 并确认 load_module 在脚本不返回任何内容时发出错误
+    // 我们依赖之前的 "does_not_exist.lua" 测试来处理文件缺失的路径；
+    // 此测试只是确认处理程序已挂钩并向上计数
     EXPECT_EQ(error_count, 0);
 }

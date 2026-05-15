@@ -25,7 +25,7 @@ UnitStats stats() {
 
 } // namespace
 
-// --- Type resistance --------------------------------------------------------
+// --- 类型抗性 --------------------------------------------------------
 
 TEST(DamagePipeline, PhysicalRespectsArmorCurve) {
     World w;
@@ -36,7 +36,7 @@ TEST(DamagePipeline, PhysicalRespectsArmorCurve) {
         std::initializer_list<ModifierProvidedProperty>{
             {ModifierProperty::ArmorBonus, 5.0}}));
 
-    // armor=5 → reduction = 0.06*5/(1+0.06*5) = 0.3/1.3 ≈ 0.2308
+    // 护甲=5 → 减伤 = 0.06*5/(1+0.06*5) = 0.3/1.3 ≈ 0.2308
     const double before = v->health();
     deal_damage({a, v, DamageType::Physical, 100.0, 0});
     const double dealt = before - v->health();
@@ -50,7 +50,7 @@ TEST(DamagePipeline, MagicResistHalvesMagical) {
         *v, "mr_buff", 30.0,
         std::initializer_list<ModifierProvidedProperty>{
             {ModifierProperty::MagicResistBonus, 0.25}}));
-    // base 0.25 + 0.25 = 0.50 → 200 magical → 100 applied.
+    // 基础 0.25 + 0.25 = 0.50 → 200 魔法伤害 → 实际造成 100
     deal_damage({nullptr, v, DamageType::Magical, 200.0, 0});
     EXPECT_NEAR(stats().max_health - v->health(), 100.0, 0.5);
 }
@@ -63,7 +63,7 @@ TEST(DamagePipeline, PureIgnoresResistance) {
     EXPECT_NEAR(stats().max_health - v->health(), 250.0, 0.5);
 }
 
-// --- Magic immunity + Bypass ------------------------------------------------
+// --- 魔法免疫 + 穿透 ------------------------------------------------
 
 TEST(DamagePipeline, MagicImmuneZerosOutMagical) {
     World w;
@@ -83,7 +83,7 @@ TEST(DamagePipeline, BypassMagicImmuneFlagStillApplies) {
     EXPECT_NEAR(stats().max_health - v->health(), 150.0, 0.5);
 }
 
-// --- Outgoing / incoming amp ------------------------------------------------
+// --- 输出/承受伤害增幅 ------------------------------------------------
 
 TEST(DamagePipeline, OutgoingAndIncomingAmpStack) {
     World w;
@@ -97,7 +97,7 @@ TEST(DamagePipeline, OutgoingAndIncomingAmpStack) {
         *v, "in_amp", 30.0,
         std::initializer_list<ModifierProvidedProperty>{
             {ModifierProperty::IncomingDamagePct, 0.10}})); // +10%
-    // 100 * 1.20 * 1.10 = 132 pure → 132 applied.
+    // 100 * 1.20 * 1.10 = 132 纯粹伤害 → 实际造成 132
     deal_damage({a, v, DamageType::Pure, 100.0, 0});
     EXPECT_NEAR(stats().max_health - v->health(), 132.0, 0.5);
 }
@@ -119,27 +119,27 @@ TEST(DamagePipeline, NoSpellAmpFlagSkipsBothPcts) {
     EXPECT_NEAR(stats().max_health - v->health(), 100.0, 0.5);
 }
 
-// --- HPLoss -----------------------------------------------------------------
+// --- 生命移除 -----------------------------------------------------------------
 
 TEST(DamagePipeline, HPLossSkipsResistAndShield) {
     World w;
     auto* v = w.spawn("V", Team::Dire, stats(), {});
-    // A shield that absorbs 300 pre-resist damage.
+    // 一个吸收 300 点抗性前伤害的护盾
     v->modifiers().attach(std::make_unique<modifiers::ShieldAbsorb>(*v, 300.0, 30.0));
-    // magic resist 0.25 would normally halve 200 to 150; HPLoss bypasses both.
+    // 魔法抗性 0.25 通常会将 200 减少到 150；HPLoss 绕过两者
     deal_damage({nullptr, v, DamageType::Magical, 200.0,
                   to_mask(DamageFlag::HPLoss)});
     EXPECT_NEAR(stats().max_health - v->health(), 200.0, 0.5);
 }
 
-// --- Reflection flag --------------------------------------------------------
+// --- 反弹标记 --------------------------------------------------------
 
 TEST(DamagePipeline, ReflectFlagSkipsReflectLoop) {
     World w;
     auto* a = w.spawn("A", Team::Radiant, stats(), {});
     auto* v = w.spawn("V", Team::Dire,    stats(), {});
-    // Both units carry Blade Mail at 50% reflect. Without the Reflection flag
-    // guard, they'd bounce forever.
+    // 两个单位都携带 50% 反弹的刃甲。如果没有反弹标记保护，
+    // 它们会无限反弹
     a->modifiers().attach(modifiers::make_blade_mail(*a, 0.5, 30.0));
     v->modifiers().attach(modifiers::make_blade_mail(*v, 0.5, 30.0));
 
@@ -147,8 +147,8 @@ TEST(DamagePipeline, ReflectFlagSkipsReflectLoop) {
     const double v_before = v->health();
     deal_damage({a, v, DamageType::Pure, 100.0, 0});
 
-    // v took 100 pure. a should take 50 reflected pure, but the reflected
-    // damage carries Reflection flag so v's Blade Mail does NOT reflect again.
+    // v 受到 100 纯粹伤害。a 应该受到 50 反弹纯粹伤害，但反弹伤害
+    // 携带反弹标记，所以 v 的刃甲不会再次反弹
     EXPECT_NEAR(v_before - v->health(), 100.0, 0.5);
     EXPECT_NEAR(a_before - a->health(), 50.0,  0.5);
 }

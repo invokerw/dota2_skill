@@ -1,108 +1,108 @@
-# Dota 2 Skill System
+# Dota 2 技能系统
 
-A production-quality Dota 2–style ability and modifier system implemented in C++20 with Lua scripting (sol2) and YAML data definitions (yaml-cpp). Features a complete combat pipeline, property aggregation system, and event-driven architecture.
+基于 C++20 实现的生产级 Dota 2 风格技能和修饰器系统，集成 Lua 脚本（sol2）和 YAML 数据定义（yaml-cpp）。包含完整的战斗管线、属性 aggregation（聚合）系统和事件驱动架构。
 
-![Architecture Diagram](doc/img/dota2-architecture.drawio.png)
+![架构图](doc/img/dota2-architecture.drawio.png)
 
-## Features
+## 特性
 
-- **Two ability flavors**: DataDriven (pure YAML) and Scripted (Lua hooks)
-- **Three-part modifier model**: Property aggregation, state bitmask, event hooks
-- **Staged combat pipelines**: 7-stage damage pipeline, 4-stage heal pipeline
-- **Event-driven core**: 30Hz fixed-tick World with publish/subscribe EventBus
-- **Full Lua integration**: sol2 bindings for all core types and enums
-- **Three playable heroes**: Lion, Lina, Juggernaut with 12 unique abilities
-- **91 passing tests**: Comprehensive test coverage with GoogleTest
+- **两种技能类型**：DataDriven（纯 YAML）和 Scripted（Lua 钩子）
+- **三部分修饰器模型**：属性 aggregation（聚合）、状态位掩码、事件钩子
+- **分阶段战斗管线**：7 阶段伤害管线、4 阶段治疗管线
+- **事件驱动核心**：30Hz 固定时钟的 World 和发布/订阅 EventBus
+- **完整 Lua 集成**：所有核心类型和枚举的 sol2 绑定
+- **三个可玩英雄**：Lion、Lina、Juggernaut，共 12 个独特技能
+- **91 个通过测试**：使用 GoogleTest 的全面测试覆盖
 
-## Quick Start
+## 快速开始
 
 ```sh
 cmake -B build
 cmake --build build -j
-ctest --test-dir build --output-on-failure    # run all 91 tests
-./build/duel                                   # 2v1 team-fight demo
+ctest --test-dir build --output-on-failure    # 运行全部 91 个测试
+./build/duel                                   # 2v1 团战演示
 ```
 
-Requires a C++20 compiler (AppleClang 15+, Clang 15+, GCC 12+, MSVC 19.30+). All dependencies (GoogleTest, yaml-cpp, Lua 5.4, sol2) are fetched automatically via [CPM.cmake](cmake/CPM.cmake) on first configure.
+需要 C++20 编译器（AppleClang 15+、Clang 15+、GCC 12+ 或 MSVC 19.30+）。所有依赖项（GoogleTest、yaml-cpp、Lua 5.4、sol2）在首次配置时通过 [CPM.cmake](cmake/CPM.cmake) 自动获取。
 
-## Architecture
+## 架构
 
-### Layers
+### 分层结构
 
-| Layer | Location | Responsibility |
+| 层级 | 位置 | 职责 |
 |-------|----------|----------------|
-| **Data** | `data/heroes/*.yaml` | Hero stats, ability definitions with per-level values |
-| **Scripts** | `scripts/abilities/*.lua` | Lua ability implementations with lifecycle hooks |
-| **Ability Framework** | `include/dota/ability/`, `src/ability/` | Cast state machine, DataDriven (YAML) + Scripted (Lua) |
-| **Modifier System** | `include/dota/modifier/`, `src/modifier/` | Property aggregation (4 layers), state bitmask, event hooks |
-| **Combat Pipeline** | `include/dota/combat/`, `src/combat/` | Staged damage/heal with modifier intervention |
-| **Core Engine** | `include/dota/core/`, `src/core/` | Unit, World (30Hz tick), EventBus |
-| **Lua Bindings** | `src/script/` | sol2 usertypes for Unit/World/Vec2, enum tables |
+| **数据** | `data/heroes/*.yaml` | 英雄属性、技能定义及每级数值 |
+| **脚本** | `scripts/abilities/*.lua` | Lua 技能实现及生命周期钩子 |
+| **技能框架** | `include/dota/ability/`, `src/ability/` | 施法状态机、DataDriven（YAML）+ Scripted（Lua）|
+| **修饰器系统** | `include/dota/modifier/`, `src/modifier/` | 属性 aggregation（聚合，4 层）、状态位掩码、事件钩子 |
+| **战斗管线** | `include/dota/combat/`, `src/combat/` | 分阶段伤害/治疗，支持修饰器干预 |
+| **核心引擎** | `include/dota/core/`, `src/core/` | Unit、World（30Hz tick）、EventBus |
+| **Lua 绑定** | `src/script/` | Unit/World/Vec2 的 sol2 用户类型、枚举表 |
 
-### Key Design Patterns
+### 关键设计模式
 
-#### Ability System
+#### 技能系统
 
-- **DataDriven** (`ability_datadriven`): Pure YAML action lists (ApplyModifier, Damage, Heal, RunScript)
-- **Scripted** (`ability_lua`): Lua table with `on_spell_start`, `on_channel_think`, `on_channel_finish` hooks
-- **Cast lifecycle**: Ready → Casting (cast_point) → fires `on_spell_start` → Backswing → OnCooldown
-- **Legality checks**: silence, cooldown, mana, target validity, magic immunity
+- **DataDriven**（`ability_datadriven`）：纯 YAML 动作列表（ApplyModifier、Damage、Heal、RunScript）
+- **Scripted**（`ability_lua`）：Lua 表，包含 `on_spell_start`、`on_channel_think`、`on_channel_finish` 钩子
+- **施法生命周期**：Ready → Casting（cast point 施法前摇）→ 触发 `on_spell_start` → Backswing（施法后摇）→ OnCooldown
+- **合法性检查**：沉默、冷却、魔法值、目标有效性、魔法免疫
 
-#### Modifier System
+#### 修饰器系统
 
-- **Properties**: Numeric bonuses aggregated in 4 layers (BONUS_CONSTANT → BONUS_PCT → TOTAL_PCT → OVERRIDE)
-- **States**: Bitmask (stunned, silenced, rooted, invulnerable, invisible)
-- **Events**: Hooks like `on_pre_take_damage`, `on_interval_think`, `on_attack_landed`
-- Property values multiply by `stack_count` for stacking modifiers
+- **属性**：数值加成按 4 层 aggregation（聚合）（BONUS_CONSTANT → BONUS_PCT → TOTAL_PCT → OVERRIDE）
+- **状态**：位掩码（眩晕、沉默、缠绕、无敌、隐身）
+- **事件**：钩子如 `on_pre_take_damage`、`on_interval_think`、`on_attack_landed`
+- 属性值会乘以 `stack_count` 以支持可叠加修饰器
 
-#### Combat Pipelines
+#### 战斗管线
 
-- **Damage**: OutgoingAmp → IncomingAmp → PreTake (shields) → MagicImmune check → TypeResistance → Apply → PostTake (reflect)
-- **Heal**: PreTakeHeal → HealAmpPct → clamp to max HP → PostTakeHeal
-- **DamageFlag bitmask**: HP_LOSS, REFLECTION, BYPASS_MAGIC_IMMUNITY, NO_SPELL_AMPLIFICATION
+- **伤害**：OutgoingAmp（输出增幅）→ IncomingAmp（承受增幅）→ PreTake（护盾 absorption 吸收）→ MagicImmune 检查 → TypeResistance（类型 resistance 抗性）→ Apply → PostTake（reflect 反射/反伤）
+- **治疗**：PreTakeHeal → HealAmpPct（治疗 amplification 增幅）→ 限制到最大生命值 → PostTakeHeal
+- **DamageFlag 位掩码**：HP_LOSS、REFLECTION、BYPASS_MAGIC_IMMUNITY、NO_SPELL_AMPLIFICATION
 
-#### Lua Integration
+#### Lua 集成
 
-- ScriptedAbility self-table with closures: `get_special`, `target_point`, `target_unit`, `level`, `get_caster`
-- Full bindings for Unit, World, Ability, Modifier, DamageContext, Vec2
-- Enum tables for DamageType, ModifierProperty, ModifierState, DamageFlag
+- ScriptedAbility self 表包含闭包：`get_special`、`target_point`、`target_unit`、`level`、`get_caster`
+- 完整绑定 Unit、World、Ability、Modifier、DamageContext、Vec2
+- DamageType、ModifierProperty、ModifierState、DamageFlag 的枚举表
 
-## Project Structure
+## 项目结构
 
 ```text
 dota2_skill/
-├── include/dota/          # Public headers
-│   ├── core/              # Unit, World, EventBus, Vec2
-│   ├── modifier/          # Modifier, ModifierManager, enums, library
-│   ├── ability/           # Ability, DataDriven, Scripted
-│   └── combat/            # Damage/heal pipelines, DamageContext
-├── src/                   # Implementation
-│   ├── core/              # Core engine implementation
-│   ├── modifier/          # Modifier system + generic modifiers
-│   ├── ability/           # Ability framework + YAML loader
-│   ├── combat/            # Combat pipeline implementation
-│   └── script/            # Lua bindings (sol2)
-├── data/heroes/           # YAML hero definitions
-│   ├── lion.yaml          # Lion (all DataDriven)
-│   ├── lina.yaml          # Lina (YAML + Lua passive)
-│   └── juggernaut.yaml    # Juggernaut (Lua-heavy)
-├── scripts/abilities/     # Lua ability implementations
-├── tests/                 # GoogleTest suites
+├── include/dota/          # 公共头文件
+│   ├── core/              # Unit、World、EventBus、Vec2
+│   ├── modifier/          # Modifier、ModifierManager、枚举、库
+│   ├── ability/           # Ability、DataDriven、Scripted
+│   └── combat/            # 伤害/治疗管线、DamageContext
+├── src/                   # 实现
+│   ├── core/              # 核心引擎实现
+│   ├── modifier/          # 修饰器系统 + 通用修饰器
+│   ├── ability/           # 技能框架 + YAML 加载器
+│   ├── combat/            # 战斗管线实现
+│   └── script/            # Lua 绑定（sol2）
+├── data/heroes/           # YAML 英雄定义
+│   ├── lion.yaml          # Lion（全部 DataDriven）
+│   ├── lina.yaml          # Lina（YAML + Lua 被动）
+│   └── juggernaut.yaml    # Juggernaut（Lua 为主）
+├── scripts/abilities/     # Lua 技能实现
+├── tests/                 # GoogleTest 测试套件
 │   ├── test_event_bus.cpp
 │   ├── test_unit_basic.cpp
 │   ├── test_modifier_*.cpp
 │   ├── test_ability_*.cpp
 │   ├── test_lua_*.cpp
 │   ├── test_damage_pipeline.cpp
-│   ├── test_hero_*.cpp    # Per-hero integration tests
+│   ├── test_hero_*.cpp    # 每个英雄的集成测试
 │   └── test_three_hero_kit.cpp
 └── examples/
-    └── duel.cpp           # 2v1 team-fight demo
+    └── duel.cpp           # 2v1 团战演示
 ```
 
-## Adding a New Hero
+## 添加新英雄
 
-1. **Create hero definition**: `data/heroes/<name>.yaml`
+1. **创建英雄定义**：`data/heroes/<name>.yaml`
 
    ```yaml
    hero_name: hero_example
@@ -113,7 +113,7 @@ dota2_skill/
      - ability_example_w
    ```
 
-2. **For DataDriven abilities**: Define actions in YAML
+2. **对于 DataDriven 技能**：在 YAML 中定义动作
 
    ```yaml
    ability_example_q:
@@ -125,31 +125,31 @@ dota2_skill/
          damage: "%damage"
    ```
 
-3. **For Scripted abilities**: Create `scripts/abilities/<ability_name>.lua`
+3. **对于 Scripted 技能**：创建 `scripts/abilities/<ability_name>.lua`
 
    ```lua
    return {
      on_spell_start = function(self)
        local caster = self:get_caster()
        local damage = self:get_special("damage")
-       -- implementation
+       -- 实现代码
      end
    }
    ```
 
-4. **Add integration tests**: `tests/test_hero_<name>.cpp`
+4. **添加集成测试**：`tests/test_hero_<name>.cpp`
 
    ```cpp
    TEST(HeroExampleTest, AbilityQ_DamagesTarget) {
-     // test implementation
+     // 测试实现
    }
    ```
 
-5. **Register in CMakeLists.txt**: Add test file to `add_executable(dota_tests ...)`
+5. **在 CMakeLists.txt 中注册**：将测试文件添加到 `add_executable(dota_tests ...)`
 
-## Adding a New Modifier Property
+## 添加新修饰器属性
 
-1. Add enum entry in [include/dota/modifier/enums.hpp](include/dota/modifier/enums.hpp):
+1. 在 [include/dota/modifier/enums.hpp](include/dota/modifier/enums.hpp) 中添加枚举条目：
 
    ```cpp
    enum class ModifierProperty {
@@ -158,31 +158,31 @@ dota2_skill/
    };
    ```
 
-2. Map its aggregation layer in `layer_of()` (same file)
+2. 在 `layer_of()` 中映射其聚合层级（同一文件）
 
-3. Route it through Unit stat getter in [src/core/unit.cpp](src/core/unit.cpp)
+3. 在 [src/core/unit.cpp](src/core/unit.cpp) 中通过 Unit 统计获取器路由它
 
-4. Expose to Lua in [src/script/bindings.cpp](src/script/bindings.cpp) → `property_table()`
+4. 在 [src/script/bindings.cpp](src/script/bindings.cpp) → `property_table()` 中暴露给 Lua
 
-## Running Tests
+## 运行测试
 
 ```sh
-# All tests (91 total)
+# 所有测试（共 91 个）
 ctest --test-dir build --output-on-failure
 
-# Specific test suite
+# 特定测试套件
 ctest --test-dir build -R "HeroLionTest"
 
-# Verbose output
+# 详细输出
 ctest --test-dir build -V
 
-# Run tests in parallel
+# 并行运行测试
 ctest --test-dir build -j8
 ```
 
-## Examples
+## 示例
 
-### DataDriven Ability (Lion Earth Spike)
+### DataDriven 技能（Lion Earth Spike）
 
 ```yaml
 lion_earth_spike:
@@ -208,7 +208,7 @@ lion_earth_spike:
       duration: "%stun_duration"
 ```
 
-### Scripted Ability (Juggernaut Blade Fury)
+### Scripted 技能（Juggernaut Blade Fury）
 
 ```lua
 return {
@@ -230,7 +230,7 @@ return {
 }
 ```
 
-### Custom Modifier (Lina Fiery Soul)
+### 自定义修饰器（Lina Fiery Soul）
 
 ```lua
 return {
@@ -250,36 +250,36 @@ return {
 }
 ```
 
-## Compile-Time Defines
+## 编译时定义
 
-- `DOTA_SCRIPT_DIR`: Absolute path to `scripts/` (set on `dota_core` target)
-- `DOTA_DATA_DIR`: Absolute path to `data/` (set on test and duel targets)
+- `DOTA_SCRIPT_DIR`：`scripts/` 的绝对路径（在 `dota_core` 目标上设置）
+- `DOTA_DATA_DIR`：`data/` 的绝对路径（在测试和 duel 目标上设置）
 
-## Editor Setup
+## 编辑器设置
 
-The CMake project exports `build/compile_commands.json` for C++ language servers and IDE code navigation. After running `cmake -B build`, VS Code's Microsoft C/C++ extension will use the workspace settings in [.vscode/settings.json](.vscode/settings.json).
+CMake 项目导出 `build/compile_commands.json` 供 C++ 语言服务器和 IDE 代码导航使用。运行 `cmake -B build` 后，VS Code 的 Microsoft C/C++ 扩展将使用 [.vscode/settings.json](.vscode/settings.json) 中的工作区设置。
 
-If code navigation looks stale, reset the IntelliSense database:
+如果代码导航看起来过时，重置 IntelliSense 数据库：
 
 ```sh
-# VS Code command palette:
+# VS Code 命令面板：
 # C/C++: Reset IntelliSense Database
 # Developer: Reload Window
 ```
 
-## Implementation Status
+## 实现状态
 
-All 6 stages complete (91/91 tests passing):
+全部 6 个阶段完成（91/91 测试通过）：
 
-- ✅ **Stage 1**: Scaffolding + Core Entities + Event Bus
-- ✅ **Stage 2**: Modifier System
-- ✅ **Stage 3**: Ability Framework + DataDriven (YAML) Loader
-- ✅ **Stage 4**: Lua Integration
-- ✅ **Stage 5**: Damage / Heal Pipeline
-- ✅ **Stage 6**: Three Heroes + CLI Duel Demo
+- ✅ **阶段 1**：脚手架 + 核心实体 + 事件总线
+- ✅ **阶段 2**：修饰器系统
+- ✅ **阶段 3**：技能框架 + DataDriven（YAML）加载器
+- ✅ **阶段 4**：Lua 集成
+- ✅ **阶段 5**：伤害/治疗管线
+- ✅ **阶段 6**：三个英雄 + CLI 团战演示
 
-See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed stage breakdown (removed after completion).
+详细阶段分解见 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)（完成后已移除）。
 
-## License
+## 许可证
 
 MIT

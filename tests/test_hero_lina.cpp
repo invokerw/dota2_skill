@@ -52,10 +52,10 @@ TEST_F(HeroLinaTest, DragonSlaveHitsEnemyInLine) {
     t.has_point = true;
     EXPECT_EQ(ds->order_cast(t, world_), CastError::None);
 
-    // Cast point 0.45s
+    // 施法前摇 0.45 秒
     world_.advance(0.5);
 
-    // 85 magical at level 1, after 25% resist → 63.75
+    // 1 级 85 魔法伤害，经过 25% 抗性后 → 63.75
     const double dealt = 1000.0 - enemy_->health();
     EXPECT_NEAR(dealt, 63.75, 1.0);
 }
@@ -84,14 +84,14 @@ TEST_F(HeroLinaTest, LightStrikeArrayStunsDealsDamage) {
     t.has_point = true;
     EXPECT_EQ(lsa->order_cast(t, world_), CastError::None);
 
-    // Cast point 0.45s
+    // 施法前摇 0.45 秒
     world_.advance(0.5);
 
-    // 120 magical at level 1, after 25% resist → 90
+    // 1 级 120 魔法伤害，经过 25% 抗性后 → 90
     const double dealt = 1000.0 - enemy_->health();
     EXPECT_NEAR(dealt, 90.0, 1.0);
 
-    // Enemy should be stunned (1.6s at level 1)
+    // 敌人应该被眩晕（1 级持续 1.6 秒）
     EXPECT_TRUE(enemy_->modifiers().has_state(ModifierState::Stunned));
 }
 
@@ -103,10 +103,10 @@ TEST_F(HeroLinaTest, LagunaBladeDealsMassiveMagical) {
     t.unit = enemy_;
     EXPECT_EQ(laguna->order_cast(t, world_), CastError::None);
 
-    // Cast point 0.45s
+    // 施法前摇 0.45 秒
     world_.advance(0.5);
 
-    // 450 magical at level 1, after 25% resist → 337.5
+    // 1 级 450 魔法伤害，经过 25% 抗性后 → 337.5
     const double dealt = 1000.0 - enemy_->health();
     EXPECT_NEAR(dealt, 337.5, 1.0);
 }

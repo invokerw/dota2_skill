@@ -7,9 +7,9 @@
 #include <cstdlib>
 #include <string>
 
-// Stage 6 demo: Lion vs Juggernaut vs Lina — a three-hero team-fight
-// showcasing the full ability + modifier + damage pipeline. Each hero
-// casts their signature abilities in sequence while auto-attacking.
+// 第六阶段演示：Lion vs Juggernaut vs Lina — 三英雄团战
+// 展示完整的技能 + 修改器 + 伤害管线。每个英雄
+// 在自动攻击的同时依次施放其标志性技能。
 
 namespace {
 
@@ -38,7 +38,7 @@ int main() {
 
     World world;
 
-    // --- Spawn heroes ---
+    // --- 生成英雄 ---
     UnitStats lion_stats;
     lion_stats.max_health       = 800.0;
     lion_stats.max_mana         = 600.0;
@@ -70,7 +70,7 @@ int main() {
     auto* jug  = world.spawn("Juggernaut", Team::Dire,    jug_stats,  {150.0, 0.0});
     auto* lina = world.spawn("Lina",       Team::Radiant, lina_stats, {-50.0, 50.0});
 
-    // --- Attach abilities ---
+    // --- 附加技能 ---
     auto* earth_spike = reg.instantiate("lion_earth_spike", *lion);
     auto* hex         = reg.instantiate("lion_hex", *lion);
     auto* finger      = reg.instantiate("lion_finger_of_death", *lion);
@@ -83,7 +83,7 @@ int main() {
     auto* lsa          = reg.instantiate("lina_light_strike_array", *lina);
     auto* laguna       = reg.instantiate("lina_laguna_blade", *lina);
 
-    // --- Event logging ---
+    // --- 事件日志 ---
     world.events().subscribe<AttackLandedEvent>(
         [&](AttackLandedEvent& e) {
             auto* src = world.find(e.attacker);
@@ -112,7 +112,7 @@ int main() {
                     lina->health(), lina->stats().max_health);
     };
 
-    // --- The Duel ---
+    // --- 决斗开始 ---
     log_header("Round 1: Lina opens with Dragon Slave + Light Strike Array");
     {
         CastTarget t;
@@ -156,7 +156,7 @@ int main() {
         CastTarget t;
         blade_fury->order_cast(t, world);
     }
-    // Auto-attack Lina while spinning
+    // 旋转时自动攻击 Lina
     world.order_attack(*jug, *lina);
     world.advance(2.0);
     status();
@@ -188,7 +188,7 @@ int main() {
     }
     status();
 
-    // Let remaining auto-attacks resolve
+    // 让剩余的自动攻击结算
     log_header("Cleanup: auto-attacks until someone falls");
     world.order_attack(*lion, *jug);
     world.order_attack(*lina, *jug);

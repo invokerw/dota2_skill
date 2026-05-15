@@ -8,8 +8,8 @@
 
 namespace dota {
 
-// Modifier whose declared properties and event hooks live in a Lua table.
-// The Lua module must `return` a table of shape:
+// 声明的属性和事件钩子位于 Lua 表中的修饰器。
+// Lua 模块必须 `return` 一个如下形状的表：
 //
 //   local M = {}
 //   M.properties = { { ModifierProperty.ARMOR_BONUS, 5 }, ... }
@@ -19,9 +19,8 @@ namespace dota {
 //   function M:on_pre_take_damage(owner, amount, type) -> absorb ... end
 //   return M
 //
-// Any section may be omitted. If `properties` references a value by function
-// (rather than number), it is re-invoked on every aggregate query so scripts
-// can produce stack-count-aware values.
+// 任何部分都可以省略。如果 `properties` 通过函数（而非数字）引用值，
+// 则在每次聚合查询时重新调用，以便脚本可以生成堆叠计数感知的值。
 class ScriptedModifier : public Modifier {
 public:
     ScriptedModifier(Unit& owner,

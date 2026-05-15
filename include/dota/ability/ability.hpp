@@ -14,17 +14,17 @@ namespace dota {
 class Unit;
 class World;
 
-// Lifecycle phases for an ability cast. Mirrors Dota's Pre-cast → Cast Point →
-// Cast → Backswing → Cooldown chain. Passive abilities remain in Ready.
+// 技能施放的生命周期阶段。对应 Dota 的 预施放 → cast point（施法前摇）→
+// 施放 → backswing（施法后摇）→ 冷却 链条。被动技能保持在 Ready 状态。
 enum class CastPhase : std::uint8_t {
     Ready = 0,
-    Casting,     // cast-point animation; can be interrupted
-    Backswing,   // post-cast animation; does not block new casts
-    Channelling, // channelled only
+    Casting,     // cast point（施法前摇）动画；可被打断
+    Backswing,   // backswing（施法后摇）动画；不阻止新的施法
+    Channelling, // 仅用于引导型技能
     OnCooldown,
 };
 
-// Reasons a cast can fail legality. Useful for UI/debug; tests assert on these.
+// 施法失败的合法性原因。用于 UI/调试；测试会断言这些值。
 enum class CastError : std::uint8_t {
     None = 0,
     NotReady,
@@ -40,10 +40,10 @@ enum class CastError : std::uint8_t {
     NotLearned,
 };
 
-// Per-level scalar. We model `ability_special` as a dictionary of name → per-
-// level vector (int or float). Lookup picks `values[min(level-1, size-1)]`.
+// 每级标量值。我们将 `ability_special` 建模为 名称 → 每级
+// 向量（int 或 float）的字典。查找时选择 `values[min(level-1, size-1)]`。
 struct AbilitySpecialValue {
-    // One of:
+    // 以下二选一：
     std::vector<double> floats;
     std::vector<long>   ints;
     bool is_int = false;
@@ -54,16 +54,16 @@ struct AbilitySpecialValue {
 
 using AbilitySpecial = std::unordered_map<std::string, AbilitySpecialValue>;
 
-// Target passed when ordering a cast. Unused fields are ignored based on
-// BehaviorFlag.
+// 下达施法命令时传递的目标。未使用的字段会根据
+// BehaviorFlag 被忽略。
 struct CastTarget {
     Unit* unit       = nullptr;
     Vec2  point      = {};
     bool  has_point  = false;
 };
 
-// Context handed to subclasses when the cast actually resolves. Kept
-// deliberately tiny — more fields can be added as the pipeline grows.
+// 施法实际生效时传递给子类的上下文。刻意保持精简 —
+// 随着流程扩展可以添加更多字段。
 struct CastContext {
     Unit*      caster   = nullptr;
     World*     world    = nullptr;
@@ -71,8 +71,8 @@ struct CastContext {
     int        level    = 1;
 };
 
-// Abstract base for all abilities — shared by DataDriven (YAML) and Scripted
-// (Lua in Stage 4). Lifetime: owned by AbilityManager on the caster.
+// 所有技能的抽象基类 — DataDriven（YAML）和 Scripted
+//（Lua，阶段 4）共享。生命周期：由施法者的 AbilityManager 拥有。
 class Ability {
 public:
     Ability(std::string name,
@@ -84,7 +84,7 @@ public:
     Ability(const Ability&) = delete;
     Ability& operator=(const Ability&) = delete;
 
-    // --- Static metadata ---
+    // --- 静态元数据 ---
     const std::string& name() const { return name_; }
     std::uint32_t      behavior() const { return behavior_; }
     TargetTeam         target_team() const { return target_team_; }
@@ -92,7 +92,7 @@ public:
     Unit&              caster()       { return caster_; }
     const Unit&        caster() const { return caster_; }
 
-    // --- Per-level fields ---
+    // --- 每级字段 ---
     int  level() const { return level_; }
     void set_level(int l) { level_ = std::max(1, l); }
 
@@ -103,8 +103,8 @@ public:
     double cooldown_for_level() const;
     double mana_cost_for_level() const;
 
-    // Used by DataDriven loader to populate from YAML. Scripted abilities can
-    // call the same setters directly from Lua.
+    // 由 DataDriven 加载器用于从 YAML 填充。Scripted 技能可以
+    // 直接从 Lua 调用相同的 setter。
     void set_cast_point(double t)   { cast_point_ = t; }
     void set_backswing(double t)    { backswing_ = t; }
     void set_channel_time(double t) { channel_time_ = t; }
@@ -115,38 +115,38 @@ public:
 
     const AbilitySpecial& ability_special() const { return special_; }
 
-    // --- Runtime state ---
+    // --- 运行时状态 ---
     CastPhase   phase()        const { return phase_; }
     double      phase_timer()  const { return phase_timer_; }
     double      cooldown_remaining() const { return cooldown_; }
     bool        is_passive()   const { return has_flag(behavior_, BehaviorFlag::Passive); }
     bool        is_channelled()const { return has_flag(behavior_, BehaviorFlag::Channelled); }
 
-    // Legality check without state mutation. Populates `err` with the first
-    // failure reason found.
+    // 合法性检查，不改变状态。将第一个找到的
+    // 失败原因填充到 `err`。
     CastError can_cast(const CastTarget& target) const;
 
-    // Issue a cast order. Returns CastError::None on success. The actual
-    // `on_spell_start` fires after cast_point inside World::advance().
+    // 下达施法命令。成功时返回 CastError::None。实际的
+    // `on_spell_start` 在 World::advance() 内的 cast point（施法前摇）之后触发。
     CastError order_cast(const CastTarget& target, World& world);
 
-    // Advance cast/channel/backswing/cooldown timers by dt. World drives this
-    // every tick. Handles interruption when stunned/silenced mid-cast.
+    // 按 dt 推进施法/引导/backswing（施法后摇）/冷却计时器。World 每个 tick 驱动此方法。
+    // 处理施法中途被眩晕/沉默时的打断。
     void advance(double dt);
 
-    // --- Subclass hooks ---
-    // Called when the cast point completes successfully (i.e. not interrupted).
+    // --- 子类钩子 ---
+    // 当 cast point（施法前摇）成功完成时调用（即未被打断）。
     virtual void on_spell_start(CastContext&) = 0;
-    // For channelled abilities: fires each tick while channelling.
+    // 用于引导型技能：引导期间每个 tick 触发。
     virtual void on_channel_think(CastContext&, double /*dt*/) {}
-    // For channelled abilities: fires once when channel ends.
+    // 用于引导型技能：引导结束时触发一次。
     virtual void on_channel_finish(CastContext&, bool /*interrupted*/) {}
-    // Optional: upgrade hook.
+    // 可选：升级钩子。
     virtual void on_upgrade(int /*new_level*/) {}
 
 protected:
-    // Subclasses may override to allow bespoke target validation (e.g.
-    // creatable-only targeting in Stage 6).
+    // 子类可以重写以允许定制目标验证（例如
+    // 阶段 6 中的仅可创建单位目标）。
     virtual CastError validate_target(const CastTarget&) const;
 
 private:
@@ -160,21 +160,21 @@ private:
 
     int level_ = 1;
 
-    // Timing fields (all seconds).
+    // 时间字段（全部为秒）。
     double cast_point_   = 0.0;
     double backswing_    = 0.0;
     double channel_time_ = 0.0;
     double cast_range_   = 0.0;
 
-    std::vector<double> cooldowns_;   // per level
-    std::vector<double> mana_costs_;  // per level
+    std::vector<double> cooldowns_;   // 每级
+    std::vector<double> mana_costs_;  // 每级
     AbilitySpecial      special_;
 
-    // Runtime.
+    // 运行时。
     CastPhase phase_       = CastPhase::Ready;
     double    phase_timer_ = 0.0;
     double    cooldown_    = 0.0;
-    World*    world_       = nullptr; // valid while casting/backswing
+    World*    world_       = nullptr; // 在施法/后摇期间有效
     CastTarget pending_target_{};
 };
 

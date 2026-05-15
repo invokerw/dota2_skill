@@ -38,8 +38,8 @@ TEST(EventBus, MutableEventLetsHandlersChainModifications) {
     Ping ev{5};
     bus.publish(ev);
 
-    // (5 + 1) * 2 == 12. This is how damage/heal events will be rewritten by
-    // modifiers in later stages.
+    // (5 + 1) * 2 == 12. 这就是伤害/治疗事件在后续阶段
+    // 被修改器重写的方式。
     EXPECT_EQ(ev.value, 12);
 }
 
@@ -64,12 +64,12 @@ TEST(EventBus, HandlerCanSubscribeDuringDispatchWithoutInvalidating) {
     });
 
     Ping ev{0};
-    bus.publish(ev); // subscriber added here should only fire next publish
+    bus.publish(ev); // 此处添加的订阅者应仅在下次发布时触发
     EXPECT_EQ(late_calls, 0);
 
     bus.publish(ev);
-    // The outer handler ran again and added another listener, but the one
-    // registered during the first dispatch fires exactly once here.
+    // 外部处理器再次运行并添加了另一个监听器，但在第一次分发期间
+    // 注册的那个在这里只触发一次。
     EXPECT_GE(late_calls, 1);
 }
 

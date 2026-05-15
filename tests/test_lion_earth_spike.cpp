@@ -27,7 +27,7 @@ UnitStats stats() {
 
 } // namespace
 
-// End-to-end: YAML parse → instantiate → cast → damage + stun applied.
+// 端到端：YAML 解析 → 实例化 → 施法 → 伤害 + 眩晕生效
 TEST(LionEarthSpike, EndToEndDamageAndStun) {
     AbilityRegistry reg;
     reg.load_file(std::string(kDataDir) + "/heroes/lion.yaml");
@@ -43,18 +43,18 @@ TEST(LionEarthSpike, EndToEndDamageAndStun) {
     CastTarget t; t.unit = enemy;
     EXPECT_EQ(spike->order_cast(t, w), CastError::None);
 
-    // Advance past cast point.
+    // 施法前摇后
     w.advance(0.35);
 
-    // Level 1: 80 magical → 60 after 25% resist.
+    // 1 级：80 魔法伤害 → 经过 25% 抗性后 60
     EXPECT_NEAR(hp_before - enemy->health(), 60.0, 0.5);
 
-    // Stun applied for 1.7s.
+    // 眩晕持续 1.7 秒
     EXPECT_TRUE(enemy->modifiers().has_state(ModifierState::Stunned));
     EXPECT_FALSE(enemy->can_cast());
 
-    // After 2s total (0.35 cast + 1.7s stun should expire ~2.05s), the stun
-    // should be gone.
+    // 总共 2 秒后（0.35 施法 + 1.7 秒眩晕应该在约 2.05 秒过期），
+    // 眩晕应该消失
     w.advance(1.8);
     EXPECT_FALSE(enemy->modifiers().has_state(ModifierState::Stunned));
     EXPECT_TRUE(enemy->can_cast());
@@ -72,13 +72,13 @@ TEST(LionEarthSpike, DeadTargetMidCastInterrupts) {
     CastTarget t; t.unit = enemy;
     spike->order_cast(t, w);
 
-    // Kill the target before cast-point elapses.
+    // 在施法前摇结束前击杀目标
     enemy->apply_raw_damage(99999.0);
 
     const double mana_before_advance = lion->mana();
     w.advance(0.4);
 
-    // No crash; the spike should be in cooldown and no damage/stun applied.
+    // 不会崩溃；技能应该进入冷却且不造成伤害/眩晕
     EXPECT_EQ(spike->phase(), CastPhase::OnCooldown);
-    (void)mana_before_advance; // mana was already spent upfront
+    (void)mana_before_advance; // 法力已经预先消耗
 }

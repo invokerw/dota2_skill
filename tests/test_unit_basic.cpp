@@ -15,7 +15,7 @@ UnitStats basic_stats(double hp = 500.0, double dmg = 50.0) {
     s.max_health       = hp;
     s.attack_damage    = dmg;
     s.attack_speed     = 100.0;
-    s.base_attack_time = 1.0; // cleaner math for tests
+    s.base_attack_time = 1.0; // 测试中使用更简洁的数学计算
     s.base_armor       = 0.0;
     return s;
 }
@@ -58,12 +58,12 @@ TEST(World, AttackOrderDealsDamageAtExpectedCadence) {
             ++lands;
         });
 
-    // base_attack_time=1, AS=100 → one swing per second. First swing lands on
-    // the first tick because attack_cd starts at 0; further swings fire each
-    // time the cooldown drains.
+    // base_attack_time=1, AS=100 → 每秒一次攻击。第一次攻击在
+    // 第一个 tick 时命中，因为 attack_cd 从 0 开始；后续攻击在
+    // 冷却时间耗尽时触发。
     w.advance(3.5);
 
-    EXPECT_EQ(lands, 4); // swings at ~0.03, 1.03, 2.03, 3.03
+    EXPECT_EQ(lands, 4); // 在 ~0.03, 1.03, 2.03, 3.03 时攻击
     EXPECT_LT(b->health(), 1000.0);
 }
 
@@ -101,10 +101,10 @@ TEST(World, FindEnemiesInRadiusExcludesAlliesAndCorpses) {
     ASSERT_EQ(in_range.size(), 1u);
     EXPECT_EQ(in_range[0]->id(), enemy1->id());
 
-    enemy1->apply_raw_damage(999999.0); // corpse
+    enemy1->apply_raw_damage(999999.0); // 尸体
     auto after_death = w.find_enemies_in_radius(hero->position(), 600.0, hero->team());
     ASSERT_EQ(after_death.size(), 1u);
     EXPECT_EQ(after_death[0]->id(), enemy2->id());
 
-    EXPECT_TRUE(ally->alive()); // untouched
+    EXPECT_TRUE(ally->alive()); // 未受影响
 }

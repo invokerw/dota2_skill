@@ -35,7 +35,7 @@ TEST(ModifierProperty, ConstantArmorBonusesStack) {
         std::initializer_list<ModifierProvidedProperty>{
             {ModifierProperty::ArmorBonus, 7.0}});
 
-    EXPECT_DOUBLE_EQ(u->armor(), 15.0); // base 5 + 3 + 7
+    EXPECT_DOUBLE_EQ(u->armor(), 15.0); // 基础 5 + 3 + 7
 }
 
 TEST(ModifierProperty, PercentageBonusMultipliesAfterConstant) {
@@ -114,5 +114,5 @@ TEST(ModifierProperty, HealthBonusRaisesMaxHealthCap) {
 
     EXPECT_DOUBLE_EQ(u->max_health(), 750.0);
     u->heal(9999.0);
-    EXPECT_DOUBLE_EQ(u->health(), 750.0); // heal caps at aggregated max
+    EXPECT_DOUBLE_EQ(u->health(), 750.0); // 治疗上限为聚合后的最大值
 }

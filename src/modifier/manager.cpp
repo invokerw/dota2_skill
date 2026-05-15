@@ -41,14 +41,13 @@ const Modifier* ModifierManager::find(const std::string& name) const {
 
 void ModifierManager::advance(double dt) {
     if (modifiers_.empty()) return;
-    // Tick a snapshot so a think callback can safely add/remove modifiers.
+    // 对快照进行 tick，使 think 回调可以安全地添加/移除修饰器
     std::vector<Modifier*> snapshot;
     snapshot.reserve(modifiers_.size());
     for (auto& m : modifiers_) snapshot.push_back(m.get());
     for (Modifier* m : snapshot) m->advance(dt);
 
-    // Purge expired. Call on_destroyed() before removing so each pointer is
-    // still live; then erase in-place.
+    // 清除过期的修饰器。在移除前调用 on_destroyed()，确保指针仍然有效；然后就地擦除
     for (auto& m : modifiers_) {
         if (m && m->expired()) m->on_destroyed();
     }

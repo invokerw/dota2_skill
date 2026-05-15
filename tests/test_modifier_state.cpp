@@ -67,7 +67,7 @@ TEST(ModifierState, DurationExpiresAndUnblocksActions) {
 
     w.advance(0.9);
     EXPECT_FALSE(u->can_cast());
-    w.advance(0.2); // total 1.1s -> expired and purged
+    w.advance(0.2); // 总计 1.1 秒 -> 过期并清除
     EXPECT_TRUE(u->can_cast());
     EXPECT_EQ(u->modifiers().find("modifier_stunned"), nullptr);
 }
@@ -80,7 +80,7 @@ TEST(ModifierState, StunOverlapsDoNotEndEarly) {
     (void)first; (void)second;
 
     w.advance(1.0);
-    EXPECT_FALSE(u->can_cast()); // second still going
+    EXPECT_FALSE(u->can_cast()); // 第二个眩晕仍在持续
     w.advance(0.7);
     EXPECT_TRUE(u->can_cast());
 }
@@ -95,14 +95,14 @@ TEST(ModifierState, StunnedAttackerStopsSwingingInWorld) {
     w.events().subscribe<dota::AttackLandedEvent>(
         [&](dota::AttackLandedEvent&) { ++hits; });
 
-    w.advance(0.5);             // one early hit
+    w.advance(0.5);             // 一次早期命中
     const int hits_before_stun = hits;
     EXPECT_GE(hits_before_stun, 1);
 
     a->modifiers().attach(modifiers::make_stunned(*a, 1.5));
-    w.advance(1.0);             // fully stunned interval -> no new hits
+    w.advance(1.0);             // 完全眩晕期间 -> 没有新的命中
     EXPECT_EQ(hits, hits_before_stun);
 
-    w.advance(2.0);             // stun expires -> hits resume
+    w.advance(2.0);             // 眩晕过期 -> 攻击恢复
     EXPECT_GT(hits, hits_before_stun);
 }

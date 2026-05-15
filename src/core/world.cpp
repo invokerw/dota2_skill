@@ -75,8 +75,7 @@ void World::stop_attack(Unit& attacker) {
 
 void World::advance(double dt) {
     if (dt <= 0.0) return;
-    // Subdivide into whole ticks so behavior is deterministic regardless of
-    // how coarse the caller's `dt` is.
+    // 细分为完整的 tick，使行为具有确定性，无论调用者的 `dt` 有多粗糙
     const int ticks = static_cast<int>(std::round(dt / kTickDt));
     for (int i = 0; i < ticks; ++i) tick_once();
 }
@@ -84,26 +83,22 @@ void World::advance(double dt) {
 void World::tick_once() {
     time_ += kTickDt;
 
-    // Advance modifier durations/thinks before resolving orders so an expiring
-    // stun lets a unit swing on the same tick it expires.
+    // 在处理指令前推进 modifier 持续时间/思考，使即将过期的眩晕能让单位在同一 tick 内攻击
     for (auto& u : units_) {
         if (u->alive()) u->tick_modifiers(kTickDt);
     }
-    // Advance abilities (cast-point timers, channel thinks, cooldowns) after
-    // modifiers so a just-expired stun doesn't interrupt the cast that would
-    // otherwise resolve this tick.
+    // 在 modifier 之后推进技能（施法前摇计时器、引导思考、冷却），
+    // 使刚过期的眩晕不会打断本 tick 应该完成的施法
     for (auto& u : units_) {
         if (u->alive()) u->tick_abilities(kTickDt);
     }
 
-    // Decrement all attack cooldowns first so scheduling a new attack in the
-    // same tick is consistent.
+    // 首先递减所有攻击冷却，使在同一 tick 内安排新攻击保持一致
     for (auto& u : units_) {
         if (u->alive()) u->tick_attack_cd(kTickDt);
     }
 
-    // Resolve outstanding attack orders. Snapshot orders_ because a swing may
-    // publish events that remove orders (e.g., on death).
+    // 处理未完成的攻击指令。快照 orders_，因为攻击可能发布移除指令的事件（例如死亡时）
     auto snapshot = orders_;
     for (const auto& order : snapshot) {
         Unit* attacker = find(order.attacker);
@@ -111,11 +106,11 @@ void World::tick_once() {
         if (!attacker || !target) continue;
         if (!attacker->alive() || !target->alive()) continue;
         if (attacker->attack_cd() > 0.0) continue;
-        if (!attacker->can_attack()) continue;   // stunned/disarmed/etc.
+        if (!attacker->can_attack()) continue;   // 眩晕/缴械等
         resolve_attack(*attacker, *target);
     }
 
-    // Purge orders whose participants are gone or dead.
+    // 清除参与者消失或死亡的指令
     orders_.erase(
         std::remove_if(orders_.begin(), orders_.end(), [&](const AttackOrder& o) {
             Unit* a = find(o.attacker);
@@ -126,8 +121,8 @@ void World::tick_once() {
 }
 
 void World::resolve_attack(Unit& attacker, Unit& target) {
-    // Basic attacks use the physical damage pipeline so modifiers can hook in
-    // (shield absorb in Stage 2, damage block / reflect in Stage 5).
+    // 普通攻击使用物理伤害管线，使 modifier 可以介入
+    // （阶段 2 的护盾吸收，阶段 5 的伤害格挡/反弹）
     const double raw     = attacker.attack_damage();
     const double applied = deal_damage({&attacker, &target,
                                          DamageType::Physical, raw, 0});
@@ -138,7 +133,7 @@ void World::resolve_attack(Unit& attacker, Unit& target) {
     if (!target.alive()) {
         UnitDiedEvent died{target.id(), attacker.id()};
         events_.publish(died);
-        stop_attack(target); // dead targets lose their orders
+        stop_attack(target); // 死亡目标失去其指令
     }
 
     attacker.set_attack_cd(attacker.seconds_per_attack());

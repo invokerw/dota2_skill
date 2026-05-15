@@ -44,8 +44,8 @@ double Unit::attack_damage() const {
 }
 
 double Unit::magic_resist() const {
-    // Magic resist combines via (1 - (1 - a)(1 - b)…) in Dota. For Stage 2 we
-    // store a single additive-to-base bonus; Stage 5 revisits this.
+    // Dota 中魔抗通过 (1 - (1 - a)(1 - b)…) 组合。阶段 2 中我们
+    // 存储单个基础加成；阶段 5 会重新审视此实现。
     const double bonus = modifiers_->aggregated(ModifierProperty::MagicResistBonus);
     return std::clamp(stats_.magic_resist + bonus, 0.0, 1.0);
 }
@@ -59,7 +59,7 @@ double Unit::move_speed() const {
 double Unit::seconds_per_attack() const {
     const double bonus_as = modifiers_->aggregated(ModifierProperty::AttackSpeedBonusConstant);
     const double total_as = stats_.attack_speed + bonus_as;
-    const double as = std::max(20.0, total_as);  // Dota floor
+    const double as = std::max(20.0, total_as);  // Dota 下限
     return stats_.base_attack_time / (as / 100.0);
 }
 
@@ -86,7 +86,7 @@ bool Unit::can_cast() const {
 bool Unit::can_move() const {
     if (!alive()) return false;
     const auto m = modifiers_->aggregated_states();
-    // Hex intentionally does NOT block movement in Dota.
+    // Dota 中变羊故意不阻止移动
     constexpr std::uint32_t block = state_bit(ModifierState::Stunned)   |
                                     state_bit(ModifierState::Rooted)    |
                                     state_bit(ModifierState::OutOfGame);
@@ -95,8 +95,7 @@ bool Unit::can_move() const {
 
 void Unit::heal(double amount) {
     if (amount <= 0.0 || !alive()) return;
-    // Route through the heal pipeline so heal-amp modifiers (including the
-    // break-the-healing Stage 5 debuff) fire consistently.
+    // 通过治疗管线路由，使治疗增强 modifier（包括阶段 5 的破坏治疗 debuff）一致触发
     deal_heal({nullptr, this, amount});
 }
 
