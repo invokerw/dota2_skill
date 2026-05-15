@@ -280,6 +280,10 @@ CMake 项目导出 `build/compile_commands.json` 供 C++ 语言服务器和 IDE 
 
 详细阶段分解见 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)（完成后已移除）。
 
+## 技能实现参考
+- [update · Issue #2 · vulkantsk/SpellLibraryLua](https://github.com/vulkantsk/SpellLibraryLua)
+- [Pizzalol/SpellLibrary: Repo for recreating the original dota skills](https://github.com/Pizzalol/SpellLibrary?utm_source=chatgpt.com)
+
 ## 许可证
 
 MIT
