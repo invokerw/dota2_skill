@@ -135,6 +135,23 @@ public:
     virtual void on_pre_take_heal(PreTakeHealEvent&)      {}
     virtual void on_post_take_heal(PostTakeHealEvent&)    {}
 
+    // Motion controller 钩子：仅对 is_motion_controller_=true 的修饰器调用。
+    // 在 ModifierManager::advance_motion 中、ability tick 之前由 World 驱动。
+    virtual void on_motion_tick(double /*dt*/)            {}
+
+    // 用于 dispel/purge 分类。
+    virtual bool is_debuff() const { return false; }
+
+    // --- Phase 0 增加的标志位 ---
+    bool is_purgable() const         { return is_purgable_; }
+    void set_purgable(bool b)        { is_purgable_ = b; }
+    bool is_dispellable() const      { return is_dispellable_; }
+    void set_dispellable(bool b)     { is_dispellable_ = b; }
+    bool is_motion_controller() const{ return is_motion_controller_; }
+    void set_motion_controller(bool b){ is_motion_controller_ = b; }
+    int  motion_priority() const     { return motion_priority_; }
+    void set_motion_priority(int p)  { motion_priority_ = p; }
+
 protected:
     void set_think_interval(double s) { think_interval_ = s; think_accum_ = 0.0; }
 
@@ -146,6 +163,11 @@ private:
     double      think_interval_{0.0};
     double      think_accum_{0.0};
     int         stack_count_{1};
+
+    bool is_purgable_{true};
+    bool is_dispellable_{true};
+    bool is_motion_controller_{false};
+    int  motion_priority_{0};
 };
 
 } // namespace dota

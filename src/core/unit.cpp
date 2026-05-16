@@ -63,6 +63,55 @@ double Unit::seconds_per_attack() const {
     return stats_.base_attack_time / (as / 100.0);
 }
 
+double Unit::evasion() const {
+    return std::clamp(modifiers_->aggregated(ModifierProperty::Evasion), 0.0, 0.95);
+}
+
+double Unit::lifesteal_pct() const {
+    return std::max(0.0, modifiers_->aggregated(ModifierProperty::LifestealPct));
+}
+
+double Unit::health_regen() const {
+    return modifiers_->aggregated(ModifierProperty::HealthRegen);
+}
+
+double Unit::mana_regen() const {
+    return modifiers_->aggregated(ModifierProperty::ManaRegen);
+}
+
+double Unit::spell_amp_pct() const {
+    return modifiers_->aggregated(ModifierProperty::SpellAmplifyPct);
+}
+
+double Unit::status_resist() const {
+    return std::clamp(modifiers_->aggregated(ModifierProperty::StatusResistancePct), 0.0, 1.0);
+}
+
+double Unit::cooldown_reduction_pct() const {
+    return std::clamp(modifiers_->aggregated(ModifierProperty::CooldownReductionPct), 0.0, 1.0);
+}
+
+double Unit::cast_range_bonus() const {
+    return modifiers_->aggregated(ModifierProperty::CastRangeBonus);
+}
+
+void Unit::purge(PurgeOptions opts) {
+    // 收集要移除的 modifier 名称（不能在迭代过程中删除）。
+    std::vector<std::string> to_remove;
+    for (const auto& m : modifiers_->all()) {
+        if (!m) continue;
+        if (!m->is_purgable()) continue;
+        if (!opts.strong && !m->is_dispellable()) continue;
+        const bool debuff = m->is_debuff();
+        if (debuff && !opts.debuffs) continue;
+        if (!debuff && !opts.buffs) continue;
+        to_remove.push_back(m->name());
+    }
+    for (const auto& n : to_remove) {
+        modifiers_->remove(n);
+    }
+}
+
 bool Unit::can_attack() const {
     if (!alive()) return false;
     const auto m = modifiers_->aggregated_states();
@@ -128,6 +177,21 @@ void Unit::tick_attack_cd(double dt) {
 
 void Unit::tick_modifiers(double dt) {
     modifiers_->advance(dt);
+
+    if (!alive() || dt <= 0.0) return;
+
+    // 生命/魔法回复（通过治疗管线，使破坏治疗等修饰器一致生效）。
+    const double hr = health_regen();
+    if (hr > 0.0 && health_ < max_health()) {
+        deal_heal({nullptr, this, hr * dt});
+    } else if (hr < 0.0) {
+        // 负回复直接扣血，不走治疗管线
+        apply_raw_damage(-hr * dt);
+    }
+    const double mr = mana_regen();
+    if (mr != 0.0) {
+        mana_ = std::clamp(mana_ + mr * dt, 0.0, max_mana());
+    }
 }
 
 void Unit::tick_abilities(double dt) {

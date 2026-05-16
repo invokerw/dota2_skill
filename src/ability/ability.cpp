@@ -70,6 +70,12 @@ CastError Ability::validate_target(const CastTarget& target) const {
             return CastError::TargetMagicImmune;
         }
 
+        // Untargetable：不可被技能选中（默认）。不影响 AoE。
+        if (!has_flag(behavior_, BehaviorFlag::IgnoreUntargetable) &&
+            target.unit->modifiers().has_state(ModifierState::Untargetable)) {
+            return CastError::InvalidTarget;
+        }
+
         if (cast_range_ > 0.0) {
             const double r2 = cast_range_ * cast_range_;
             if (distance_sq(caster_.position(), target.unit->position()) > r2) {
@@ -99,6 +105,50 @@ CastError Ability::can_cast(const CastTarget& target) const {
     }
 
     return validate_target(target);
+}
+
+CastError Ability::trigger_cast(const CastTarget& target, World& world,
+                                bool ignore_cooldown, bool ignore_mana,
+                                bool ignore_state) {
+    if (is_passive()) return CastError::NotReady;
+    if (!caster_.alive()) return CastError::CasterDead;
+    if (phase_ == CastPhase::Casting || phase_ == CastPhase::Channelling)
+        return CastError::NotReady;
+    if (!ignore_cooldown && cooldown_ > 0.0) return CastError::OnCooldown;
+    if (!ignore_mana && caster_.mana() < mana_cost_for_level())
+        return CastError::NotEnoughMana;
+    if (!ignore_state) {
+        const auto m = caster_.modifiers().aggregated_states();
+        if ((m & state_bit(ModifierState::Stunned)) != 0) return CastError::Stunned;
+        if ((m & state_bit(ModifierState::Hexed))   != 0) return CastError::Hexed;
+        if ((m & state_bit(ModifierState::Silenced)) != 0 &&
+            !has_flag(behavior_, BehaviorFlag::IgnoreSilence)) {
+            return CastError::Silenced;
+        }
+    }
+    if (CastError verr = validate_target(target); verr != CastError::None) return verr;
+
+    if (!ignore_mana) caster_.spend_mana(mana_cost_for_level());
+    pending_target_ = target;
+    world_          = &world;
+
+    if (cast_point_ <= 0.0) {
+        CastContext ctx{&caster_, world_, pending_target_, level_};
+        on_spell_start(ctx);
+
+        if (is_channelled() && channel_time_ > 0.0) {
+            enter_phase(CastPhase::Channelling, channel_time_);
+        } else if (backswing_ > 0.0) {
+            enter_phase(CastPhase::Backswing, backswing_);
+        } else {
+            cooldown_ = ignore_cooldown ? cooldown_ : cooldown_for_level();
+            phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
+            phase_timer_ = 0.0;
+        }
+    } else {
+        enter_phase(CastPhase::Casting, cast_point_);
+    }
+    return CastError::None;
 }
 
 CastError Ability::order_cast(const CastTarget& target, World& world) {

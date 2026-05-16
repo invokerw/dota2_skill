@@ -59,8 +59,26 @@ public:
     double magic_resist()   const;
     double move_speed()     const;
 
+    // --- 扩展属性（Phase 0）---
+    double evasion()        const;     // 0..0.95 闪避率
+    double lifesteal_pct()  const;     // 物理吸血百分比
+    double health_regen()   const;     // 每秒生命恢复
+    double mana_regen()     const;     // 每秒魔法恢复
+    double spell_amp_pct()  const;     // 法术增伤
+    double status_resist()  const;     // 控制 resistance
+    double cooldown_reduction_pct() const;
+    double cast_range_bonus() const;
+
     // 根据当前攻速计算的攻击间隔（秒）
     double seconds_per_attack() const;
+
+    // Dispel/Purge 选项
+    struct PurgeOptions {
+        bool buffs   = true;
+        bool debuffs = false;
+        bool strong  = false;   // 强驱散：连同 is_dispellable=false 也清除（不可净化的除外）
+    };
+    void purge(PurgeOptions opts);
 
     // --- 行动限制（查询修饰器状态）---
     bool can_attack() const;

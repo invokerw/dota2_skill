@@ -130,6 +130,14 @@ public:
     // `on_spell_start` 在 World::advance() 内的 cast point（施法前摇）之后触发。
     CastError order_cast(const CastTarget& target, World& world);
 
+    // 子技能触发：跳过冷却 / 蓝量 / 状态检查（按可选标志）。
+    // 用于"被动触发型"技能（例如修饰器 OnPreTakeDamage 中触发）。
+    // 当 cast_point 仍 > 0 时同样会经过正常 cast/backswing 流程。
+    CastError trigger_cast(const CastTarget& target, World& world,
+                           bool ignore_cooldown = true,
+                           bool ignore_mana     = true,
+                           bool ignore_state    = true);
+
     // 按 dt 推进施法/引导/backswing（施法后摇）/冷却计时器。World 每个 tick 驱动此方法。
     // 处理施法中途被眩晕/沉默时的打断。
     void advance(double dt);

@@ -19,27 +19,55 @@ public:
         : Modifier(std::move(name), owner, duration), mask_(state_mask) {}
 
     std::uint32_t declared_states() const override { return mask_; }
+    bool is_debuff() const override { return debuff_; }
+    void set_debuff(bool b) { debuff_ = b; }
 
 private:
     std::uint32_t mask_;
+    bool          debuff_{true};
+};
+
+// 应用 status resistance：将 base_duration 乘以 (1 - status_resist())。
+inline double resisted_duration(const Unit& owner, double base) {
+    const double r = owner.status_resist();
+    return base * (1.0 - r);
+}
+
+// Thinker 基础修饰器：到期时自毁拥有者（apply_raw_damage 致死）。
+class ThinkerBase : public GenericState {
+public:
+    ThinkerBase(Unit& owner, double duration, std::uint32_t mask)
+        : GenericState(owner, "modifier_thinker_base", duration, mask) {
+        set_purgable(false);
+        set_dispellable(false);
+        set_debuff(false);
+    }
+
+    void on_destroyed() override {
+        if (owner().alive()) owner().apply_raw_damage(owner().max_health() + 1.0);
+    }
 };
 
 inline std::unique_ptr<GenericState>
 make_stunned(Unit& owner, double duration) {
+    // 应用 status resistance 缩短控制时间。
     return std::make_unique<GenericState>(
-        owner, "modifier_stunned", duration, state_bit(ModifierState::Stunned));
+        owner, "modifier_stunned", resisted_duration(owner, duration),
+        state_bit(ModifierState::Stunned));
 }
 
 inline std::unique_ptr<GenericState>
 make_silenced(Unit& owner, double duration) {
     return std::make_unique<GenericState>(
-        owner, "modifier_silenced", duration, state_bit(ModifierState::Silenced));
+        owner, "modifier_silenced", resisted_duration(owner, duration),
+        state_bit(ModifierState::Silenced));
 }
 
 inline std::unique_ptr<GenericState>
 make_rooted(Unit& owner, double duration) {
     return std::make_unique<GenericState>(
-        owner, "modifier_rooted", duration, state_bit(ModifierState::Rooted));
+        owner, "modifier_rooted", resisted_duration(owner, duration),
+        state_bit(ModifierState::Rooted));
 }
 
 inline std::unique_ptr<GenericState>
@@ -48,7 +76,7 @@ make_hexed(Unit& owner, double duration) {
     // 状态位就足够了 — can_attack/can_cast 会阻止它，但
     // can_move 不会。
     return std::make_unique<GenericState>(
-        owner, "modifier_hexed", duration,
+        owner, "modifier_hexed", resisted_duration(owner, duration),
         state_bit(ModifierState::Hexed));
 }
 
@@ -179,6 +207,48 @@ private:
 inline std::unique_ptr<ReflectDamage>
 make_blade_mail(Unit& owner, double fraction, double duration) {
     return std::make_unique<ReflectDamage>(owner, fraction, duration);
+}
+
+// --- Motion controller：击退 ---------------------------------------
+//
+// 在 `duration` 秒内沿 `direction` 总位移 `distance` 单位，每个 motion tick
+// 把 owner 推进 distance/duration*dt。同时作为 debuff 施加 stunned 状态位
+// （和大多数 Dota 击退一致）。priority 为同时多个 MC 竞争时的抢占次序。
+class MotionKnockback : public Modifier {
+public:
+    MotionKnockback(Unit& owner, Vec2 direction, double distance,
+                    double duration, int priority = 0)
+        : Modifier("modifier_motion_knockback", owner, duration)
+        , dir_(normalized(direction))
+        , velocity_(distance > 0.0 && duration > 0.0 ? distance / duration : 0.0) {
+        set_motion_controller(true);
+        set_motion_priority(priority);
+        set_dispellable(false);   // 击退无法被普通净化
+    }
+
+    std::uint32_t declared_states() const override {
+        return state_bit(ModifierState::Stunned) |
+               state_bit(ModifierState::NoUnitCollision);
+    }
+    bool is_debuff() const override { return true; }
+
+    void on_motion_tick(double dt) override {
+        if (velocity_ <= 0.0 || dt <= 0.0) return;
+        Vec2 pos = owner().position();
+        pos.x += dir_.x * velocity_ * dt;
+        pos.y += dir_.y * velocity_ * dt;
+        owner().set_position(pos);
+    }
+
+private:
+    Vec2   dir_;
+    double velocity_;     // 单位/秒
+};
+
+inline std::unique_ptr<MotionKnockback>
+make_knockback(Unit& owner, Vec2 direction, double distance,
+               double duration, int priority = 0) {
+    return std::make_unique<MotionKnockback>(owner, direction, distance, duration, priority);
 }
 
 // --- 破坏治疗 -----------------------------------------------------

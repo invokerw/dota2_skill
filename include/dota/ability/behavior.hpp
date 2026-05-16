@@ -19,6 +19,7 @@ enum class BehaviorFlag : std::uint32_t {
     NotLearnable    = 1u << 6,
     IgnoreSilence   = 1u << 7,   // 物品等
     IgnoreMagicImmune = 1u << 8,
+    IgnoreUntargetable = 1u << 9,
 };
 
 constexpr std::uint32_t to_mask(BehaviorFlag f) {

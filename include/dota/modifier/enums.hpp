@@ -38,6 +38,16 @@ enum class ModifierProperty : std::uint16_t {
     // 值为 -0.4 表示破坏治疗（-40%）。
     HealAmpPct,                        // 承受治疗 amplification（增幅）百分比
 
+    // --- 扩展属性（Phase 0 补齐）---
+    Evasion,                           // 闪避概率（0..1），对 Pct 层求和后 clamp ≤ 0.95
+    LifestealPct,                      // 物理吸血百分比（0..1）
+    HealthRegen,                       // 每秒生命回复（常量）
+    ManaRegen,                         // 每秒魔法回复（常量）
+    SpellAmplifyPct,                   // 仅对法术伤害的输出 amplification（增幅）
+    StatusResistancePct,               // 控制 resistance（抗性），缩短 disable 持续时间
+    CooldownReductionPct,              // 冷却缩减百分比
+    CastRangeBonus,                    // 施法距离常量加成
+
     Count_                             // 哨兵值
 };
 
@@ -64,6 +74,12 @@ enum class ModifierState : std::uint8_t {
     OutOfGame,             // 例如全能斩施法者处于游戏外
     MagicImmune,
 
+    // --- 扩展状态（Phase 0 补齐）---
+    Untargetable,          // 不可被技能选中（仍可被 AoE 命中除非也 Invulnerable）
+    NoUnitCollision,       // 不与其它单位发生碰撞，用于 Hook 拉拽过程、思考者实体等
+    NoHealthBar,           // 不显示血条（思考者）
+    Frozen,                // 冰封：完全停滞（保留位用于未来扩展）
+
     Count_                 // 哨兵值
 };
 
@@ -81,6 +97,11 @@ constexpr PropertyLayer layer_of(ModifierProperty p) {
         case ModifierProperty::OutgoingDamagePct:
         case ModifierProperty::MoveSpeedBonusPct:
         case ModifierProperty::HealAmpPct:
+        case ModifierProperty::Evasion:
+        case ModifierProperty::LifestealPct:
+        case ModifierProperty::SpellAmplifyPct:
+        case ModifierProperty::StatusResistancePct:
+        case ModifierProperty::CooldownReductionPct:
             return PropertyLayer::Percentage;
         default:
             return PropertyLayer::Constant;

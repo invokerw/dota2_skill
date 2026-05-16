@@ -1,0 +1,25 @@
+hero:
+  name: npc_dota_hero_earthshaker
+  base_health: 580
+  base_mana: 290
+  base_armor: 1
+  base_magic_resist: 0.25
+
+abilities:
+  - name: earthshaker_fissure
+    base_class: ability_lua
+    script: abilities/earthshaker_fissure.lua
+    behavior: [POINT_TARGET]
+    target_team: ENEMY
+    cast_point: 0.43
+    cooldown: [21, 18, 15, 12]
+    mana_cost: [125, 140, 155, 170]
+    cast_range: 1500
+    ability_special:
+      damage:           [110, 160, 210, 260]
+      stun_duration:    [1.1, 1.4, 1.7, 2.0]
+      length:           [1400, 1400, 1400, 1400]
+      width:            [125, 125, 125, 125]
+      knockback:        [120, 120, 120, 120]
+      knockback_time:   [0.4, 0.4, 0.4, 0.4]
+      fissure_duration: [8, 8, 8, 8]

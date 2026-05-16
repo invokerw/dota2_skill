@@ -35,6 +35,13 @@ double deal_damage(DamageInstance dmg) {
         amount *= (1.0 + out_pct);
     }
 
+    // --- (1b) 法术增伤（仅对法术/纯粹伤害生效；与 OutgoingDamagePct 独立累加）---
+    if (dmg.attacker &&
+        (dmg.type == DamageType::Magical || dmg.type == DamageType::Pure) &&
+        !has_flag(dmg.flags, DamageFlag::NoSpellAmplification)) {
+        amount *= (1.0 + dmg.attacker->spell_amp_pct());
+    }
+
     // --- (2) 受害者的承受伤害增幅 ---
     if (!has_flag(dmg.flags, DamageFlag::NoSpellAmplification)) {
         const double in_pct = victim->modifiers().aggregated(
@@ -93,10 +100,22 @@ double deal_damage(DamageInstance dmg) {
     // --- (6) 应用生命值变化 ---
     const double applied = victim->apply_raw_damage(std::max(0.0, after_resist));
 
-    // --- (7) 承受伤害后：反伤、吸血、触发效果 ---
+    // --- (7) 承受伤害后：反伤、触发效果 ---
     PostTakeDamageEvent post{attacker_id, victim->id(),
                               dmg.type, dmg.flags, applied};
     victim->modifiers().dispatch_post_take_damage(post);
+
+    // --- (8) 物理吸血。Pure/Magical 不触发；Reflection/NoLifesteal 跳过 ---
+    if (applied > 0.0 &&
+        dmg.type == DamageType::Physical &&
+        dmg.attacker && dmg.attacker->alive() &&
+        !has_flag(dmg.flags, DamageFlag::NoLifesteal) &&
+        !has_flag(dmg.flags, DamageFlag::Reflection)) {
+        const double ls = dmg.attacker->lifesteal_pct();
+        if (ls > 0.0) {
+            deal_heal({dmg.attacker, dmg.attacker, applied * ls});
+        }
+    }
     return applied;
 }
 

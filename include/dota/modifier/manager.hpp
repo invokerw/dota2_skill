@@ -23,6 +23,13 @@ public:
     // 添加在其他地方构造的修饰器。返回非拥有指针。
     Modifier* attach(std::unique_ptr<Modifier> mod);
 
+    // 附加 motion controller。按 motion_priority_ 抢占既有 MC。
+    // 当新修饰器 priority < 既有的最大 priority 时返回 nullptr 表示拒绝挂载。
+    Modifier* attach_motion(std::unique_ptr<Modifier> mod);
+
+    // 仅对 motion 修饰器调用 on_motion_tick(dt)。
+    void advance_motion(double dt);
+
     // 辅助函数：一次调用完成构造 + 附加。插入后调用 on_created()。
     template <typename M, typename... Args>
     M* attach_new(Args&&... args) {

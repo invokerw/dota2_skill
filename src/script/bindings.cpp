@@ -1,12 +1,21 @@
 #include "dota/script/lua_state.hpp"
 
+#include "dota/ability/ability.hpp"
+#include "dota/ability/manager.hpp"
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
 #include "dota/modifier/library.hpp"
 #include "dota/modifier/manager.hpp"
 #include "dota/modifier/modifier.hpp"
+#include "dota/modifier/registry.hpp"
+#include "dota/modifier/scripted.hpp"
+#include "dota/projectile/manager.hpp"
+#include "dota/projectile/projectile.hpp"
 
 #include <sol/sol.hpp>
+
+#include <cstdio>
+#include <memory>
 
 namespace dota {
 
@@ -24,14 +33,19 @@ sol::table damage_table(sol::state& lua) {
 
 sol::table state_table(sol::state& lua) {
     sol::table t = lua.create_table();
-    t["STUNNED"]      = static_cast<int>(ModifierState::Stunned);
-    t["SILENCED"]     = static_cast<int>(ModifierState::Silenced);
-    t["ROOTED"]       = static_cast<int>(ModifierState::Rooted);
-    t["DISARMED"]     = static_cast<int>(ModifierState::Disarmed);
-    t["HEXED"]        = static_cast<int>(ModifierState::Hexed);
-    t["INVISIBLE"]    = static_cast<int>(ModifierState::Invisible);
-    t["INVULNERABLE"] = static_cast<int>(ModifierState::Invulnerable);
-    t["MAGIC_IMMUNE"] = static_cast<int>(ModifierState::MagicImmune);
+    t["STUNNED"]         = static_cast<int>(ModifierState::Stunned);
+    t["SILENCED"]        = static_cast<int>(ModifierState::Silenced);
+    t["ROOTED"]          = static_cast<int>(ModifierState::Rooted);
+    t["DISARMED"]        = static_cast<int>(ModifierState::Disarmed);
+    t["HEXED"]           = static_cast<int>(ModifierState::Hexed);
+    t["INVISIBLE"]       = static_cast<int>(ModifierState::Invisible);
+    t["INVULNERABLE"]    = static_cast<int>(ModifierState::Invulnerable);
+    t["MAGIC_IMMUNE"]    = static_cast<int>(ModifierState::MagicImmune);
+    t["OUT_OF_GAME"]     = static_cast<int>(ModifierState::OutOfGame);
+    t["UNTARGETABLE"]    = static_cast<int>(ModifierState::Untargetable);
+    t["NO_UNIT_COLLISION"] = static_cast<int>(ModifierState::NoUnitCollision);
+    t["NO_HEALTH_BAR"]   = static_cast<int>(ModifierState::NoHealthBar);
+    t["FROZEN"]          = static_cast<int>(ModifierState::Frozen);
     return t;
 }
 
@@ -49,12 +63,22 @@ sol::table property_table(sol::state& lua) {
     t["OUTGOING_DAMAGE_PCT"]          = static_cast<int>(ModifierProperty::OutgoingDamagePct);
     t["MOVE_SPEED_BONUS_CONSTANT"]    = static_cast<int>(ModifierProperty::MoveSpeedBonusConstant);
     t["MOVE_SPEED_BONUS_PCT"]         = static_cast<int>(ModifierProperty::MoveSpeedBonusPct);
+    t["HEAL_AMP_PCT"]                 = static_cast<int>(ModifierProperty::HealAmpPct);
+    // Phase 0 扩展
+    t["EVASION"]                      = static_cast<int>(ModifierProperty::Evasion);
+    t["LIFESTEAL_PCT"]                = static_cast<int>(ModifierProperty::LifestealPct);
+    t["HEALTH_REGEN"]                 = static_cast<int>(ModifierProperty::HealthRegen);
+    t["MANA_REGEN"]                   = static_cast<int>(ModifierProperty::ManaRegen);
+    t["SPELL_AMPLIFY_PCT"]            = static_cast<int>(ModifierProperty::SpellAmplifyPct);
+    t["STATUS_RESISTANCE_PCT"]        = static_cast<int>(ModifierProperty::StatusResistancePct);
+    t["COOLDOWN_REDUCTION_PCT"]       = static_cast<int>(ModifierProperty::CooldownReductionPct);
+    t["CAST_RANGE_BONUS"]             = static_cast<int>(ModifierProperty::CastRangeBonus);
     return t;
 }
 
 } // namespace
 
-void register_bindings(sol::state& lua) {
+void register_bindings(sol::state& lua, LuaState* owner) {
     // --- Vec2 ---
     // Vec2 是聚合类型（无构造函数重载），因此暴露工厂函数，
     // 并依赖 sol2 的默认构造函数绑定 `Vec2.new()`
@@ -86,6 +110,13 @@ void register_bindings(sol::state& lua) {
         "armor",         &Unit::armor,
         "attack_damage", &Unit::attack_damage,
         "magic_resist",  &Unit::magic_resist,
+        "move_speed",    &Unit::move_speed,
+        "evasion",       &Unit::evasion,
+        "lifesteal_pct", &Unit::lifesteal_pct,
+        "health_regen",  &Unit::health_regen,
+        "mana_regen",    &Unit::mana_regen,
+        "spell_amp_pct", &Unit::spell_amp_pct,
+        "status_resist", &Unit::status_resist,
         "can_attack",    &Unit::can_attack,
         "can_cast",      &Unit::can_cast,
         "can_move",      &Unit::can_move,
@@ -117,6 +148,12 @@ void register_bindings(sol::state& lua) {
             u.modifiers().attach(
                 modifiers::make_periodic_heal(u, heal_per_tick, interval, duration));
         },
+        "apply_knockback",
+        [](Unit& u, Vec2 direction, double distance, double duration,
+           sol::optional<int> priority) {
+            u.modifiers().attach(modifiers::make_knockback(
+                u, direction, distance, duration, priority.value_or(0)));
+        },
         "has_modifier",
         [](const Unit& u, const std::string& name) {
             return u.modifiers().find(name) != nullptr;
@@ -124,6 +161,67 @@ void register_bindings(sol::state& lua) {
         "remove_modifier",
         [](Unit& u, const std::string& name) {
             return u.modifiers().remove(name);
+        },
+        "purge",
+        [](Unit& u, sol::optional<sol::table> opts) {
+            Unit::PurgeOptions o;
+            if (opts) {
+                sol::table t = *opts;
+                if (t["buffs"].valid())   o.buffs   = t.get_or("buffs", true);
+                if (t["debuffs"].valid()) o.debuffs = t.get_or("debuffs", false);
+                if (t["strong"].valid())  o.strong  = t.get_or("strong", false);
+            }
+            u.purge(o);
+        },
+        // 子技能触发：按 ability 名查找施法者的技能，然后 trigger_cast。返回 bool。
+        "cast_ability_no_target",
+        [](Unit& caster, const std::string& ability_name) {
+            Ability* a = caster.abilities().find(ability_name);
+            if (!a || !caster.world()) return false;
+            CastTarget t;
+            return a->trigger_cast(t, *caster.world()) == CastError::None;
+        },
+        "cast_ability_on_unit",
+        [](Unit& caster, const std::string& ability_name, Unit* target) {
+            Ability* a = caster.abilities().find(ability_name);
+            if (!a || !caster.world() || !target) return false;
+            CastTarget t; t.unit = target;
+            return a->trigger_cast(t, *caster.world()) == CastError::None;
+        },
+        "cast_ability_on_point",
+        [](Unit& caster, const std::string& ability_name, Vec2 point) {
+            Ability* a = caster.abilities().find(ability_name);
+            if (!a || !caster.world()) return false;
+            CastTarget t; t.point = point; t.has_point = true;
+            return a->trigger_cast(t, *caster.world()) == CastError::None;
+        },
+        // 通过名字应用注册过的 Lua 修饰器。第 4 个 params 表可选地携带 duration / stacks。
+        "add_modifier",
+        [owner](Unit& u, const std::string& mod_name,
+                sol::optional<Unit*> source, sol::object /*ability*/,
+                sol::optional<sol::table> params) -> Modifier* {
+            if (!owner) return nullptr;
+            const auto* spec = owner->modifier_registry().find(mod_name);
+            if (!spec) {
+                owner->report_error("add_modifier", "未注册的修饰器名: " + mod_name);
+                return nullptr;
+            }
+            double duration = -1.0;       // 默认永久
+            int    stacks   = 1;
+            if (params) {
+                sol::table p = *params;
+                sol::object od = p["duration"];
+                if (od.is<double>())       duration = od.as<double>();
+                else if (od.is<int>())     duration = static_cast<double>(od.as<int>());
+                sol::object os = p["stacks"];
+                if (os.is<int>())          stacks = std::max(1, os.as<int>());
+                else if (os.is<double>())  stacks = std::max(1, static_cast<int>(os.as<double>()));
+            }
+            Unit* src = source ? *source : nullptr;
+            auto mod = std::make_unique<ScriptedModifier>(
+                u, mod_name, duration, *spec, *owner, src, /*ability=*/nullptr);
+            if (stacks > 1) mod->set_stack_count(stacks);
+            return u.modifiers().attach(std::move(mod));
         });
 
     // --- World ---
@@ -136,7 +234,118 @@ void register_bindings(sol::state& lua) {
             // sol2 将 std::vector<Unit*> 干净地转换为 Lua 数组表
             return w.find_enemies_in_radius(origin, radius,
                                              static_cast<Team>(source_team));
+        },
+        "create_thinker",
+        [owner](World& w, Vec2 pos, double duration, const std::string& mod_name,
+                sol::optional<Unit*> source) -> Unit* {
+            Unit* src = source ? *source : nullptr;
+            return w.create_thinker(pos, duration, mod_name, owner, src);
+        },
+        "find_enemies_in_line",
+        [](World& w, Vec2 start, Vec2 end, double width, int source_team) {
+            return w.find_enemies_in_line(start, end, width,
+                                           static_cast<Team>(source_team));
+        },
+        "find_enemies_in_cone",
+        [](World& w, Vec2 origin, Vec2 direction, double length,
+           double half_angle_rad, int source_team) {
+            return w.find_enemies_in_cone(origin, direction, length, half_angle_rad,
+                                           static_cast<Team>(source_team));
+        },
+        // 直线投射物。params 表字段：
+        //   source(Unit)、origin(Vec2)、direction(Vec2)、speed、length、width、
+        //   destroy_on_first_hit(bool)、on_hit(function(victim, point))、on_finish(function())
+        "create_linear_projectile",
+        [](World& w, sol::table p) -> Projectile* {
+            LinearProjectile::Params params;
+            sol::object src = p["source"];
+            if (src.is<Unit*>()) {
+                Unit* s = src.as<Unit*>();
+                params.source_id   = s->id();
+                params.source_team = s->team();
+            }
+            sol::object o_origin = p["origin"];
+            if (o_origin.is<Vec2>()) params.origin = o_origin.as<Vec2>();
+            sol::object o_dir = p["direction"];
+            if (o_dir.is<Vec2>())    params.direction = o_dir.as<Vec2>();
+            sol::object o_team = p["source_team"];
+            if (o_team.is<int>())    params.source_team = static_cast<Team>(o_team.as<int>());
+
+            params.speed  = p.get_or("speed", 1000.0);
+            params.length = p.get_or("length", 1000.0);
+            params.width  = p.get_or("width", 100.0);
+            params.destroy_on_first_hit = p.get_or("destroy_on_first_hit", false);
+
+            auto proj = std::make_unique<LinearProjectile>(params);
+            sol::object on_hit_obj = p["on_hit"];
+            if (on_hit_obj.is<sol::protected_function>()) {
+                sol::protected_function fn = on_hit_obj;
+                proj->set_on_hit([fn](Unit& victim, Vec2 point) {
+                    auto r = fn(&victim, point);
+                    if (!r.valid()) {
+                        sol::error err = r;
+                        std::fprintf(stderr, "[lua error] linear on_hit: %s\n", err.what());
+                    }
+                });
+            }
+            sol::object on_finish_obj = p["on_finish"];
+            if (on_finish_obj.is<sol::protected_function>()) {
+                sol::protected_function fn = on_finish_obj;
+                proj->set_on_finish([fn]() {
+                    auto r = fn();
+                    if (!r.valid()) {
+                        sol::error err = r;
+                        std::fprintf(stderr, "[lua error] linear on_finish: %s\n", err.what());
+                    }
+                });
+            }
+            return w.projectiles().spawn(std::move(proj));
+        },
+        "create_tracking_projectile",
+        [](World& w, sol::table p) -> Projectile* {
+            TrackingProjectile::Params params;
+            sol::object src = p["source"];
+            if (src.is<Unit*>()) {
+                Unit* s = src.as<Unit*>();
+                params.source_id   = s->id();
+                params.source_team = s->team();
+                params.origin      = s->position();
+            }
+            sol::object o_origin = p["origin"];
+            if (o_origin.is<Vec2>()) params.origin = o_origin.as<Vec2>();
+            sol::object tgt = p["target"];
+            if (tgt.is<Unit*>()) params.target_id = tgt.as<Unit*>()->id();
+            params.speed     = p.get_or("speed", 900.0);
+            params.dodgeable = p.get_or("dodgeable", true);
+
+            auto proj = std::make_unique<TrackingProjectile>(params);
+            sol::object on_hit_obj = p["on_hit"];
+            if (on_hit_obj.is<sol::protected_function>()) {
+                sol::protected_function fn = on_hit_obj;
+                proj->set_on_hit([fn](Unit& victim, Vec2 point) {
+                    auto r = fn(&victim, point);
+                    if (!r.valid()) {
+                        sol::error err = r;
+                        std::fprintf(stderr, "[lua error] tracking on_hit: %s\n", err.what());
+                    }
+                });
+            }
+            sol::object on_finish_obj = p["on_finish"];
+            if (on_finish_obj.is<sol::protected_function>()) {
+                sol::protected_function fn = on_finish_obj;
+                proj->set_on_finish([fn]() {
+                    auto r = fn();
+                    if (!r.valid()) {
+                        sol::error err = r;
+                        std::fprintf(stderr, "[lua error] tracking on_finish: %s\n", err.what());
+                    }
+                });
+            }
+            return w.projectiles().spawn(std::move(proj));
         });
+
+    // 投射物作为 opaque 用户类型暴露（便于 Lua 持有引用）。
+    lua.new_usertype<Projectile>("Projectile", sol::no_constructor);
 
     // --- 枚举表（类似 VScripts 暴露 DAMAGE_TYPE_* 的方式）---
     lua["DamageType"]       = damage_table(lua);
@@ -149,6 +358,18 @@ void register_bindings(sol::state& lua) {
     team["DIRE"]    = static_cast<int>(Team::Dire);
     team["NEUTRAL"] = static_cast<int>(Team::Neutral);
     lua["Team"] = team;
+
+    // --- LinkLuaModifier 风格注册 ---
+    // register_modifier(name, spec_table) — 注册到该 LuaState 的修饰器中心。
+    if (owner) {
+        lua["register_modifier"] = [owner](const std::string& name, sol::table spec) {
+            owner->modifier_registry().register_modifier(name, spec);
+        };
+    } else {
+        // 没有 owner 时（test_lua_bindings 这样直接注册到 sol::state 的场景），
+        // 提供一个 no-op 版本，避免脚本里 register_modifier 找不到符号。
+        lua["register_modifier"] = [](const std::string&, sol::table) {};
+    }
 }
 
 } // namespace dota

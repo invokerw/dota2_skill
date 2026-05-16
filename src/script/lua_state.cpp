@@ -1,6 +1,9 @@
 #include "dota/script/lua_state.hpp"
 
+#include "dota/modifier/registry.hpp"
+
 #include <cstdio>
+#include <filesystem>
 
 namespace dota {
 
@@ -9,6 +12,7 @@ LuaState::LuaState()
     : script_root_(DOTA_SCRIPT_DIR)
 #endif
 {
+    modifier_registry_ = std::make_unique<LuaModifierRegistry>();
     lua_.open_libraries(sol::lib::base,
                          sol::lib::table,
                          sol::lib::string,
@@ -16,7 +20,35 @@ LuaState::LuaState()
     error_handler_ = [](const std::string& msg) {
         std::fprintf(stderr, "[lua error] %s\n", msg.c_str());
     };
-    register_bindings(lua_);
+    register_bindings(lua_, this);
+
+    // 自动加载 scripts/modifiers 目录下的所有 .lua —— 它们在文件顶层调用
+    // register_modifier(...)。这样调用方不需要手动 require 每个 modifier。
+    if (!script_root_.empty()) {
+        namespace fs = std::filesystem;
+        const fs::path modifiers_dir = fs::path(script_root_) / "modifiers";
+        if (fs::is_directory(modifiers_dir)) {
+            for (const auto& entry : fs::directory_iterator(modifiers_dir)) {
+                if (!entry.is_regular_file()) continue;
+                if (entry.path().extension() != ".lua") continue;
+                auto r = lua_.safe_script_file(entry.path().string(),
+                                                &sol::script_pass_on_error);
+                if (!r.valid()) {
+                    sol::error err = r;
+                    report_error("auto-load " + entry.path().filename().string(), err.what());
+                }
+            }
+        }
+    }
+}
+
+LuaState::~LuaState() = default;
+
+LuaModifierRegistry& LuaState::modifier_registry() {
+    return *modifier_registry_;
+}
+const LuaModifierRegistry& LuaState::modifier_registry() const {
+    return *modifier_registry_;
 }
 
 sol::table LuaState::load_module(const std::string& path) {

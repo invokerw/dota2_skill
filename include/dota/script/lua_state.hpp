@@ -3,11 +3,13 @@
 #include <sol/sol.hpp>
 
 #include <functional>
+#include <memory>
 #include <string>
 
 namespace dota {
 
 class World;
+class LuaModifierRegistry;
 
 // sol::state 的 RAII 包装器。保持默认开放的库（base/table/string/math）
 // 对编写的脚本可用。`register_bindings()` 在构造时调用一次；
@@ -16,9 +18,15 @@ class World;
 class LuaState {
 public:
     LuaState();
+    ~LuaState();
+    LuaState(const LuaState&) = delete;
+    LuaState& operator=(const LuaState&) = delete;
 
     sol::state&       state()       { return lua_; }
     const sol::state& state() const { return lua_; }
+
+    LuaModifierRegistry&       modifier_registry();
+    const LuaModifierRegistry& modifier_registry() const;
 
     // 传递给 load_module 的相对路径会相对于此根目录解析。
     // 默认值是 DOTA_SCRIPT_DIR（仓库的 scripts/ 目录），
@@ -43,10 +51,13 @@ private:
     sol::state    lua_;
     ErrorHandler  error_handler_;
     std::string   script_root_;
+    std::unique_ptr<LuaModifierRegistry> modifier_registry_;
 };
 
 // 在给定的 sol::state 上注册所有 C++ user_types / 辅助函数。
 // 分离出来以便测试可以在它们自己拥有的 state 上构建绑定。
-void register_bindings(sol::state& lua);
+// 当 owner 不为空时，`register_modifier` 等绑定会写入它的注册中心；
+// 否则降级为 no-op（仅作 enum 暴露）。
+void register_bindings(sol::state& lua, LuaState* owner = nullptr);
 
 } // namespace dota

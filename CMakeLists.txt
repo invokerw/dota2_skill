@@ -84,7 +84,10 @@ add_library(dota_core
     src/core/world.cpp
     src/modifier/modifier.cpp
     src/modifier/manager.cpp
+    src/modifier/registry.cpp
     src/modifier/scripted.cpp
+    src/projectile/projectile.cpp
+    src/projectile/manager.cpp
     src/ability/ability.cpp
     src/ability/behavior_parse.cpp
     src/ability/datadriven.cpp
@@ -127,6 +130,15 @@ add_executable(dota_tests
     tests/test_hero_lion.cpp
     tests/test_hero_juggernaut.cpp
     tests/test_hero_lina.cpp
+    tests/test_spatial_queries.cpp
+    tests/test_lua_modifier_registry.cpp
+    tests/test_purge.cpp
+    tests/test_motion_knockback.cpp
+    tests/test_projectile.cpp
+    tests/test_thinker.cpp
+    tests/test_hero_sven.cpp
+    tests/test_hero_earthshaker.cpp
+    tests/test_hero_pudge.cpp
 )
 target_link_libraries(dota_tests PRIVATE dota_core GTest::gtest_main)
 target_compile_definitions(dota_tests PRIVATE
