@@ -27,9 +27,9 @@
 ```sh
 cmake -B build
 cmake --build build -j
-ctest --test-dir build --output-on-failure    # 运行全部 91 个测试
+ctest --test-dir build --output-on-failure    # 运行全部 125 个测试
 ctest --test-dir build -R "HeroLinaTest"      # 运行单个测试套件
-./build/duel                                   # 2v1 团战演示
+./build/duel                                   # 多英雄团战演示
 ```
 
 需要 C++20（AppleClang 15+、Clang 15+ 或 GCC 12+）。所有依赖项（GoogleTest、yaml-cpp、Lua 5.4、sol2）在首次配置时通过 CPM.cmake 自动获取。
@@ -43,14 +43,15 @@ ctest --test-dir build -R "HeroLinaTest"      # 运行单个测试套件
 ### 分层结构
 
 | 层级 | 位置 | 职责 |
-|-------|----------|------|
-| 核心引擎 | `include/dota/core/`, `src/core/` | Unit、World（30Hz tick）、EventBus |
-| 修饰器系统 | `include/dota/modifier/`, `src/modifier/` | 属性 aggregation（聚合）、状态位掩码、生命周期钩子 |
-| 技能框架 | `include/dota/ability/`, `src/ability/` | 施法状态机、DataDriven（YAML）+ Scripted（Lua）|
+| --- | --- | --- |
+| 核心引擎 | `include/dota/core/`, `src/core/` | Unit、World（30Hz tick）、EventBus、Rng、空间查询、Thinker |
+| 修饰器系统 | `include/dota/modifier/`, `src/modifier/` | 属性 aggregation（聚合）、状态位掩码、生命周期钩子、Lua 修饰器注册表 |
+| 技能框架 | `include/dota/ability/`, `src/ability/` | 施法状态机、DataDriven（YAML）+ Scripted（Lua） |
 | 战斗管线 | `include/dota/combat/`, `src/combat/` | 分阶段伤害/治疗管线，支持修饰器干预 |
-| Lua 绑定 | `src/script/` | Unit/World/Vec2 的 sol2 用户类型、枚举表 |
+| 投射物 | `include/dota/projectile/`, `src/projectile/` | LinearProjectile、TrackingProjectile、ProjectileManager |
+| Lua 绑定 | `src/script/` | Unit/World/Vec2/Projectile 的 sol2 用户类型、枚举表、`register_modifier` |
 | 数据 | `data/heroes/*.yaml` | 英雄定义，包含 ability_special 的每级数值 |
-| 脚本 | `scripts/abilities/*.lua` | Lua 技能实现 |
+| 脚本 | `scripts/abilities/*.lua`, `scripts/modifiers/*.lua` | Lua 技能与 Lua 修饰器实现 |
 
 ### 关键设计模式
 
@@ -60,6 +61,10 @@ ctest --test-dir build -R "HeroLinaTest"      # 运行单个测试套件
 - **治疗管线**（`deal_heal`）：PreTakeHeal → HealAmpPct（治疗 amplification 增幅）→ clamp → PostTakeHeal。
 - **施法生命周期**：Ready → Casting（cast point 施法前摇）→ 触发 `on_spell_start` → Backswing（施法后摇）→ OnCooldown。持续施法技能分支到 Channelling，每 tick 调用 `on_channel_think`。
 - **ScriptedAbility self 表**：Lua 钩子接收一个 `self` 表，包含闭包（`get_special`、`target_point`、`target_unit`、`level`、`get_caster`）。前导的 `sol::object` 参数处理冒号调用语法。
+- **投射物**：`World::projectiles()` 暴露 `ProjectileManager`。`LinearProjectile` 沿 direction 推进、按 (prev,cur) 段扫描线宽内敌人，可选穿透 / 单体；`TrackingProjectile` 追逐目标 Unit，目标死亡或 Untargetable 时 fizzle。两者支持 `on_hit` / `on_finish` Lua 闭包。
+- **Motion Controller**：标记 `is_motion_controller=true` 的修饰器在每 tick 由 World 在 ability tick *之前* 驱动 `on_motion_tick(dt)`。同一 owner 上多个 MC 按 `motion_priority` 抢占 — 高优先级会顶替低优先级。`MotionKnockback` 是内置 C++ MC；Lua 端通过 `register_modifier` 的 `IsMotionController` + `OnMotionTick` 实现自定义 MC（如肉钩拖拽）。
+- **Thinker 实体**：`World::create_thinker(pos, duration, modifier_name, source)` 创建隐身、不可选中、无碰撞的占位单位，挂载注册的 Lua 修饰器；duration 到期后单位自毁（`ThinkerBase::on_destroyed` 通过 apply_raw_damage 致死）。
+- **Lua 修饰器注册**：`register_modifier(name, spec)` 在 Lua 端定义完整修饰器，spec 字段含 `IsHidden` / `IsPurgable` / `IsDispellable` / `IsDebuff` / `IsMotionController` / `MotionPriority` / `States` / `DeclaredProperties` / `OnCreated` / `OnDestroyed` / `OnIntervalThink` / `ThinkInterval` / `OnPreTakeDamage` / `OnMotionTick` 等。Unit 端用 `add_modifier(name, source, ability, params)` 实例化。
 
 ### 编译时定义
 
