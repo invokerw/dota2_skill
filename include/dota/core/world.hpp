@@ -103,6 +103,12 @@ struct HealAppliedEvent {
     double   amount;
 };
 
+// 每个固定 tick 结束时发布. Recorder 依赖此事件作为 flush 边界.
+struct TickEndEvent {
+    double   time;     // World::time()
+    uint64_t tick;     // 累计 tick 序号 (从 1 开始)
+};
+
 class World {
 public:
     // 30Hz 固定时钟模拟
@@ -177,6 +183,7 @@ private:
     EventBus events_;
     EntityId next_id_{1};
     double   time_{0.0};
+    std::uint64_t tick_count_{0};
     Rng      rng_;
     std::unique_ptr<ProjectileManager> projectiles_;
 };

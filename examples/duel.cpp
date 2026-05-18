@@ -1,15 +1,21 @@
 #include "dota/ability/registry.hpp"
 #include "dota/core/world.hpp"
 #include "dota/modifier/library.hpp"
+#include "dota/replay/recorder.hpp"
 #include "dota/script/lua_state.hpp"
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <memory>
 #include <string>
 
 // 第六阶段演示: Lion vs Juggernaut vs Lina -- 三英雄团战
 // 展示完整的技能 + 修改器 + 伤害管线. 每个英雄
 // 在自动攻击的同时依次施放其标志性技能.
+//
+// 选项: --record <path>  把战斗写成 JSONL 录像 (schema: doc/recording_schema.md)
 
 namespace {
 
@@ -24,8 +30,15 @@ void log_header(const char* msg) {
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
     using namespace dota;
+
+    std::string record_path;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--record") == 0 && i + 1 < argc) {
+            record_path = argv[++i];
+        }
+    }
 
     LuaState lua;
     AbilityRegistry reg;
@@ -37,6 +50,19 @@ int main() {
     reg.load_file(base + "/heroes/lina.yaml");
 
     World world;
+
+    std::unique_ptr<std::ofstream> rec_out;
+    std::unique_ptr<Recorder>      recorder;
+    if (!record_path.empty()) {
+        rec_out  = std::make_unique<std::ofstream>(record_path);
+        if (!*rec_out) {
+            std::fprintf(stderr, "无法打开录像文件: %s\n", record_path.c_str());
+            return 1;
+        }
+        recorder = std::make_unique<Recorder>(world, *rec_out);
+        recorder->write_header("duel");
+        std::printf("[recorder] 录像中: %s\n", record_path.c_str());
+    }
 
     // --- 生成英雄 ---
     UnitStats lion_stats;

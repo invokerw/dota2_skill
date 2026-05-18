@@ -219,6 +219,10 @@ void World::tick_once() {
             return !a || !t || !a->alive() || !t->alive();
         }),
         orders_.end());
+
+    ++tick_count_;
+    TickEndEvent ev{time_, tick_count_};
+    events_.publish(ev);
 }
 
 void World::resolve_attack(Unit& attacker, Unit& target) {
