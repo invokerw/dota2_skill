@@ -63,6 +63,21 @@ if(lua_ADDED)
     target_compile_options(lua PRIVATE -w)
 endif()
 
+# --- Visualization dependency: raylib (only needed by duel_visual) ---
+# 仅在 BUILD_VISUAL 开启时拉取, 默认开启; 如想跳过请 -DBUILD_VISUAL=OFF.
+option(BUILD_VISUAL "Build raylib-based visual demos" ON)
+if(BUILD_VISUAL)
+    # 直接拉 tarball 而非 git clone, 在网络较慢时更稳
+    CPMAddPackage(
+        NAME raylib
+        URL https://github.com/raysan5/raylib/archive/refs/tags/5.0.tar.gz
+        URL_HASH SHA256=98f049b9ea2a9c40a14e4e543eeea1a7ec3090ebdcd329c4ca2cf98bc9793482
+        OPTIONS
+            "BUILD_EXAMPLES OFF"
+            "WITH_PIC ON"
+    )
+endif()
+
 # --- Stage 4 dependency: sol2 (header-only C++ bindings) ---
 CPMAddPackage(
     NAME sol2
@@ -108,6 +123,13 @@ add_executable(duel examples/duel.cpp)
 target_link_libraries(duel PRIVATE dota_core)
 target_compile_definitions(duel PRIVATE
     DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
+
+if(BUILD_VISUAL)
+    add_executable(duel_visual examples/duel_visual.cpp)
+    target_link_libraries(duel_visual PRIVATE dota_core raylib)
+    target_compile_definitions(duel_visual PRIVATE
+        DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
+endif()
 
 # --- Tests ---
 enable_testing()
