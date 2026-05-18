@@ -1,24 +1,26 @@
--- 仅吸收魔法伤害的护盾。由 Stage 4 测试使用，用于验证 Lua
--- modifier 可以 (a) 声明状态/属性，(b) 通过 on_pre_take_damage 吸收伤害，
--- 以及 (c) 返回吸收的数量。
+-- 仅吸收魔法伤害的护盾。验证 Lua modifier 可以
+-- (a) 声明 States/Properties，
+-- (b) 通过 OnPreTakeDamage 吸收伤害（返回吸收数值），
+-- (c) 在 self 上保留实例状态（_remaining 计数）。
 
-local M = {}
-
-M.states = {}
-M.properties = {
-    { ModifierProperty.MAGIC_RESIST_BONUS, 0.10 },
-}
-
-function M:on_created(_owner)
-    self._remaining = self._remaining or 200.0
-end
-
-function M:on_pre_take_damage(_owner, amount, dtype)
-    if amount <= 0.0 then return 0.0 end
-    if dtype ~= DamageType.MAGICAL then return 0.0 end
-    local eat = math.min(self._remaining or 0.0, amount)
-    self._remaining = (self._remaining or 0.0) - eat
-    return eat
-end
-
-return M
+register_modifier("modifier_test_shield", {
+    IsHidden      = false,
+    IsPurgable    = true,
+    IsDispellable = true,
+    IsDebuff      = false,
+    States        = {},
+    Properties    = {
+        { ModifierProperty.MAGIC_RESIST_BONUS, 0.10 },
+    },
+    OnCreated = function(self, _owner)
+        self._remaining = self._remaining or 200.0
+    end,
+    OnPreTakeDamage = function(self, _owner, ev)
+        local amount = ev.amount
+        if amount <= 0.0 then return 0.0 end
+        if ev.type ~= DamageType.MAGICAL then return 0.0 end
+        local eat = math.min(self._remaining or 0.0, amount)
+        self._remaining = (self._remaining or 0.0) - eat
+        return eat
+    end,
+})

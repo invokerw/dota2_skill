@@ -13,8 +13,8 @@ local M = {}
 
 -- 炽魂单层效果的 modifier 表。
 M.modifier = {
-    properties = {},
-    states = {},
+    Properties = {},
+    States = {},
 }
 
 function M:on_spell_start(caster, _target, _world)

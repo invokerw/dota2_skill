@@ -14,19 +14,16 @@ class Ability;
 // Lua 端的修饰器实例，与一个 LuaModifierRegistry::CompiledSpec 关联。
 // 每次属性查询/事件钩子触发时，按需调用 spec 表上的 Lua 函数。
 //
-// 兼容旧测试：保留接受裸 sol::table 的构造函数，会临时编译一份 CompiledSpec。
+// 所有 spec 字段统一使用 PascalCase 约定：IsHidden / IsPurgable / IsDispellable /
+// IsDebuff / IsMotionController / MotionPriority / States / Properties /
+// ThinkInterval / OnCreated / OnDestroyed / OnStackChanged / OnIntervalThink /
+// OnPreTakeDamage / OnPostTakeDamage / OnPreTakeHeal / OnPostTakeHeal /
+// OnMotionTick / CheckState 等。
+//
+// 唯一构造路径：先在 Lua 端通过 `register_modifier(name, spec)` 注册，
+// 再用注册中心查到的 CompiledSpec 实例化。
 class ScriptedModifier : public Modifier {
 public:
-    // 旧式（test_lua_modifier 使用）：直接传入 Lua 表。spec 中字段名遵循新约定
-    // （IsHidden、States、Properties、OnPreTakeDamage 等）；为兼容更早的旧脚本，
-    // 同时支持小写的 states / properties / think_interval / on_*。
-    ScriptedModifier(Unit& owner,
-                     std::string name,
-                     double duration,
-                     sol::table table,
-                     LuaState& lua);
-
-    // 新式：直接持有已编译的 spec 引用（注册中心管理生命周期）。
     ScriptedModifier(Unit& owner,
                      std::string name,
                      double duration,

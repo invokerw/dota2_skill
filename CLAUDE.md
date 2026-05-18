@@ -22,6 +22,17 @@
 - **代码标识符**：类名、函数名、变量名等保持英文，注释中引用时可直接使用
   - 例如：`ModifierProperty` 枚举、`deal_damage()` 函数
 
+### Lua 修饰器 spec 字段约定
+
+**所有 Lua modifier spec 字段统一使用 PascalCase，禁止使用 lower_case_with_underscore 旧式字段。**
+
+- 项目处于 demo 阶段，不需要兼容旧模式；引入新字段时应直接采用新约定，不应保留旧别名。
+- 标志位 / 数值字段：`IsHidden` / `IsPurgable` / `IsDispellable` / `IsDebuff` / `IsMotionController` / `MotionPriority` / `RemoveOnDeath` / `ThinkInterval`
+- 列表字段：`States`（`ModifierState` 数组）、`Properties`（`{ ModifierProperty.X, value | "FnName" }` 列表）、`CheckState`（动态状态回调）
+- 生命周期钩子：`OnCreated` / `OnDestroyed` / `OnStackChanged` / `OnIntervalThink` / `OnPreTakeDamage` / `OnPostTakeDamage` / `OnPreTakeHeal` / `OnPostTakeHeal` / `OnMotionTick`
+- 伤害/治疗钩子的新签名是 `(self, owner, ev_table)`：通过修改 `ev.amount` 或返回吸收数值（仅 `OnPreTakeDamage`）来影响伤害；不再支持旧的 `(self, owner, amount, dtype)` 签名。
+- 不论是 `register_modifier(name, spec)` 全局注册还是直接传裸 Lua 表给 `ScriptedModifier`，字段名规则一致。
+
 ## 构建与测试
 
 ```sh
@@ -64,7 +75,7 @@ ctest --test-dir build -R "HeroLinaTest"      # 运行单个测试套件
 - **投射物**：`World::projectiles()` 暴露 `ProjectileManager`。`LinearProjectile` 沿 direction 推进、按 (prev,cur) 段扫描线宽内敌人，可选穿透 / 单体；`TrackingProjectile` 追逐目标 Unit，目标死亡或 Untargetable 时 fizzle。两者支持 `on_hit` / `on_finish` Lua 闭包。
 - **Motion Controller**：标记 `is_motion_controller=true` 的修饰器在每 tick 由 World 在 ability tick *之前* 驱动 `on_motion_tick(dt)`。同一 owner 上多个 MC 按 `motion_priority` 抢占 — 高优先级会顶替低优先级。`MotionKnockback` 是内置 C++ MC；Lua 端通过 `register_modifier` 的 `IsMotionController` + `OnMotionTick` 实现自定义 MC（如肉钩拖拽）。
 - **Thinker 实体**：`World::create_thinker(pos, duration, modifier_name, source)` 创建隐身、不可选中、无碰撞的占位单位，挂载注册的 Lua 修饰器；duration 到期后单位自毁（`ThinkerBase::on_destroyed` 通过 apply_raw_damage 致死）。
-- **Lua 修饰器注册**：`register_modifier(name, spec)` 在 Lua 端定义完整修饰器，spec 字段含 `IsHidden` / `IsPurgable` / `IsDispellable` / `IsDebuff` / `IsMotionController` / `MotionPriority` / `States` / `DeclaredProperties` / `OnCreated` / `OnDestroyed` / `OnIntervalThink` / `ThinkInterval` / `OnPreTakeDamage` / `OnMotionTick` 等。Unit 端用 `add_modifier(name, source, ability, params)` 实例化。
+- **Lua 修饰器注册**：`register_modifier(name, spec)` 在 Lua 端定义完整修饰器，spec 字段统一使用 PascalCase（`IsHidden` / `IsPurgable` / `IsDispellable` / `IsDebuff` / `IsMotionController` / `MotionPriority` / `States` / `Properties` / `ThinkInterval` / `OnCreated` / `OnDestroyed` / `OnIntervalThink` / `OnPreTakeDamage` / `OnPostTakeDamage` / `OnPreTakeHeal` / `OnPostTakeHeal` / `OnMotionTick` 等，详见"Lua 修饰器 spec 字段约定"小节）。Unit 端用 `add_modifier(name, source, ability, params)` 实例化。
 
 ### 编译时定义
 
