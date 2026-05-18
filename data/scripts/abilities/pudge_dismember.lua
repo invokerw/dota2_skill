@@ -1,12 +1,12 @@
--- Pudge 肢解：引导式单体技能，每秒造成多次伤害并按比例回血给 Pudge。
--- 演示 channelled ability + on_channel_think 间隔触发。
+-- Pudge 肢解: 引导式单体技能, 每秒造成多次伤害并按比例回血给 Pudge.
+-- 演示 channelled ability + on_channel_think 间隔触发.
 
 local M = {}
 
 function M:on_spell_start(caster, _target, _world)
     local target = self:target_unit()
     if not target then return end
-    -- 把目标设为眩晕直到引导结束（Dota 中肢解使受害者无法行动）。
+    -- 把目标设为眩晕直到引导结束(Dota 中肢解使受害者无法行动).
     local dur = self:get_special("total_duration")
     target:add_stunned(dur)
     self._tick_acc = 0.0

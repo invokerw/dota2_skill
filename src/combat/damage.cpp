@@ -11,7 +11,7 @@ namespace dota {
 namespace {
 
 double physical_multiplier(double armor) {
-    // Dota 护甲 → 伤害倍率。负护甲对称公式：2 - 0.94^|a|
+    // Dota 护甲 → 伤害倍率. 负护甲对称公式: 2 - 0.94^|a|
     const double reduction = (0.06 * armor) / (1.0 + 0.06 * std::abs(armor));
     return armor >= 0.0 ? 1.0 - reduction : 2.0 - std::pow(0.94, -armor);
 }
@@ -35,7 +35,7 @@ double deal_damage(DamageInstance dmg) {
         amount *= (1.0 + out_pct);
     }
 
-    // --- (1b) 法术增伤（仅对法术/纯粹伤害生效；与 OutgoingDamagePct 独立累加）---
+    // --- (1b) 法术增伤(仅对法术/纯粹伤害生效; 与 OutgoingDamagePct 独立累加)---
     if (dmg.attacker &&
         (dmg.type == DamageType::Magical || dmg.type == DamageType::Pure) &&
         !has_flag(dmg.flags, DamageFlag::NoSpellAmplification)) {
@@ -56,7 +56,7 @@ double deal_damage(DamageInstance dmg) {
         return 0.0;
     }
 
-    // --- (3) 承受伤害前：护盾和吸收。HPLoss 跳过此层，
+    // --- (3) 承受伤害前: 护盾和吸收. HPLoss 跳过此层,
     // 使回血 tick 不会被 Pipe 风格的屏障削减
     PreTakeDamageEvent pre{attacker_id, victim->id(),
                             dmg.type, dmg.flags, amount, 0.0};
@@ -82,7 +82,7 @@ double deal_damage(DamageInstance dmg) {
         return 0.0;
     }
 
-    // --- (5) 类型抗性。HPLoss 也跳过抗性 ---
+    // --- (5) 类型抗性. HPLoss 也跳过抗性 ---
     double after_resist = effective;
     if (!has_flag(dmg.flags, DamageFlag::HPLoss)) {
         switch (dmg.type) {
@@ -100,12 +100,12 @@ double deal_damage(DamageInstance dmg) {
     // --- (6) 应用生命值变化 ---
     const double applied = victim->apply_raw_damage(std::max(0.0, after_resist));
 
-    // --- (7) 承受伤害后：反伤、触发效果 ---
+    // --- (7) 承受伤害后: 反伤, 触发效果 ---
     PostTakeDamageEvent post{attacker_id, victim->id(),
                               dmg.type, dmg.flags, applied};
     victim->modifiers().dispatch_post_take_damage(post);
 
-    // --- (8) 物理吸血。Pure/Magical 不触发；Reflection/NoLifesteal 跳过 ---
+    // --- (8) 物理吸血. Pure/Magical 不触发; Reflection/NoLifesteal 跳过 ---
     if (applied > 0.0 &&
         dmg.type == DamageType::Physical &&
         dmg.attacker && dmg.attacker->alive() &&
@@ -129,7 +129,7 @@ double deal_heal(HealInstance heal) {
     target->modifiers().dispatch_pre_take_heal(pre);
     if (pre.amount <= 0.0) return 0.0;
 
-    // 应用治疗增幅（例如 -0.4 的破坏治疗，+0.2 的幻象护符等）
+    // 应用治疗增幅(例如 -0.4 的破坏治疗, +0.2 的幻象护符等)
     const double amp = target->modifiers().aggregated(ModifierProperty::HealAmpPct);
     double amount = pre.amount * (1.0 + amp);
     if (amount <= 0.0) return 0.0;

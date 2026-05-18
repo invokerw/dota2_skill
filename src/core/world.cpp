@@ -73,7 +73,7 @@ Unit* World::create_thinker(Vec2 position, double duration,
     s.attack_damage = 0.0;
     s.move_speed = 0.0;
     Unit* th = spawn("npc_dota_thinker", Team::Neutral, s, position);
-    // 始终给 thinker 一个 untargetable + invulnerable + no-collision + no-health-bar 状态。
+    // 始终给 thinker 一个 untargetable + invulnerable + no-collision + no-health-bar 状态.
     const std::uint32_t mask = state_bit(ModifierState::Untargetable) |
                                 state_bit(ModifierState::Invulnerable) |
                                 state_bit(ModifierState::NoUnitCollision) |
@@ -81,7 +81,7 @@ Unit* World::create_thinker(Vec2 position, double duration,
     th->modifiers().attach(std::make_unique<modifiers::ThinkerBase>(
         *th, duration, mask));
 
-    // 挂载用户提供的 Lua 修饰器（携带 OnIntervalThink 等）。
+    // 挂载用户提供的 Lua 修饰器(携带 OnIntervalThink 等).
     if (lua && !modifier_name.empty()) {
         const auto* spec = lua->modifier_registry().find(modifier_name);
         if (spec) {
@@ -162,7 +162,7 @@ void World::stop_attack(Unit& attacker) {
 
 void World::advance(double dt) {
     if (dt <= 0.0) return;
-    // 细分为完整的 tick，使行为具有确定性，无论调用者的 `dt` 有多粗糙
+    // 细分为完整的 tick, 使行为具有确定性, 无论调用者的 `dt` 有多粗糙
     const int ticks = static_cast<int>(std::round(dt / kTickDt));
     for (int i = 0; i < ticks; ++i) tick_once();
 }
@@ -170,32 +170,32 @@ void World::advance(double dt) {
 void World::tick_once() {
     time_ += kTickDt;
 
-    // 在处理指令前推进 modifier 持续时间/思考，使即将过期的眩晕能让单位在同一 tick 内攻击
+    // 在处理指令前推进 modifier 持续时间/思考, 使即将过期的眩晕能让单位在同一 tick 内攻击
     for (auto& u : units_) {
         if (u->alive()) u->tick_modifiers(kTickDt);
     }
-    // motion controller 在普通 modifier tick 之后、ability tick 之前生效，
-    // 使被击退的单位在同 tick 内可被技能命中其新位置（与 Dota2 行为一致）。
+    // motion controller 在普通 modifier tick 之后, ability tick 之前生效,
+    // 使被击退的单位在同 tick 内可被技能命中其新位置(与 Dota2 行为一致).
     for (auto& u : units_) {
         if (u->alive()) u->modifiers().advance_motion(kTickDt);
     }
-    // 在 modifier 之后推进技能（施法前摇计时器、引导思考、冷却），
+    // 在 modifier 之后推进技能(施法前摇计时器, 引导思考, 冷却),
     // 使刚过期的眩晕不会打断本 tick 应该完成的施法
     for (auto& u : units_) {
         if (u->alive()) u->tick_abilities(kTickDt);
     }
 
-    // 投射物在 ability tick 之后；这样 ability 在本 tick 中 spawn 的投射物
-    // 会有一帧的延迟（与 Dota 一致），给 hit 回调留出在下个 tick 引发
-    // 链式反应的余地。
+    // 投射物在 ability tick 之后; 这样 ability 在本 tick 中 spawn 的投射物
+    // 会有一帧的延迟(与 Dota 一致), 给 hit 回调留出在下个 tick 引发
+    // 链式反应的余地.
     projectiles_->advance(kTickDt, *this);
 
-    // 首先递减所有攻击冷却，使在同一 tick 内安排新攻击保持一致
+    // 首先递减所有攻击冷却, 使在同一 tick 内安排新攻击保持一致
     for (auto& u : units_) {
         if (u->alive()) u->tick_attack_cd(kTickDt);
     }
 
-    // 处理未完成的攻击指令。快照 orders_，因为攻击可能发布移除指令的事件（例如死亡时）
+    // 处理未完成的攻击指令. 快照 orders_, 因为攻击可能发布移除指令的事件(例如死亡时)
     auto snapshot = orders_;
     for (const auto& order : snapshot) {
         Unit* attacker = find(order.attacker);
@@ -218,7 +218,7 @@ void World::tick_once() {
 }
 
 void World::resolve_attack(Unit& attacker, Unit& target) {
-    // 闪避检定：在伤害结算之前掷骰。命中则走伤害管线。
+    // 闪避检定: 在伤害结算之前掷骰. 命中则走伤害管线.
     const double evasion = target.evasion();
     if (evasion > 0.0 && rng_.chance(evasion)) {
         AttackLandedEvent miss{attacker.id(), target.id(), 0.0, /*missed=*/true};
@@ -227,8 +227,8 @@ void World::resolve_attack(Unit& attacker, Unit& target) {
         return;
     }
 
-    // 普通攻击使用物理伤害管线，使 modifier 可以介入
-    // （阶段 2 的护盾吸收，阶段 5 的伤害格挡/反弹）
+    // 普通攻击使用物理伤害管线, 使 modifier 可以介入
+    // (阶段 2 的护盾吸收, 阶段 5 的伤害格挡/反弹)
     const double raw     = attacker.attack_damage();
     const double applied = deal_damage({&attacker, &target,
                                          DamageType::Physical, raw, 0});

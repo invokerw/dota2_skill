@@ -1,4 +1,4 @@
-// Phase 4：Dispel / Purge 单测
+// Phase 4: Dispel / Purge 单测
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
 #include "dota/modifier/library.hpp"

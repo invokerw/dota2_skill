@@ -1,4 +1,4 @@
-// Phase 1：空间查询 line / cone 单测
+// Phase 1: 空间查询 line / cone 单测
 #include "dota/core/world.hpp"
 
 #include <gtest/gtest.h>
@@ -57,7 +57,7 @@ TEST(SpatialQuery, LineWidthBoundary) {
 TEST(SpatialQuery, LineEndpointClampsT) {
     World w;
     w.spawn("hero", Team::Radiant, stats(), {0.0, 0.0});
-    // 在线段终点之外，但与终点本身距离 < width/2 — 投影 t 被 clamp 到 1.0，依然命中。
+    // 在线段终点之外, 但与终点本身距离 < width/2 -- 投影 t 被 clamp 到 1.0, 依然命中.
     auto* past_end_close = w.spawn("close", Team::Dire, stats(), {1010.0, 0.0});
     auto* past_end_far   = w.spawn("far", Team::Dire, stats(), {1100.0, 0.0});
     (void)past_end_far;
@@ -74,7 +74,7 @@ TEST(SpatialQuery, ConeIncludesFront) {
     auto* side  = w.spawn("side", Team::Dire, stats(), {0.0, 300.0});
     (void)side;
 
-    // 90 度圆锥（half=45°），向 +x 朝向
+    // 90 度圆锥(half=45°), 向 +x 朝向
     const double half = M_PI / 4.0;
     auto hit = w.find_enemies_in_cone({0.0, 0.0}, {1.0, 0.0}, 500.0, half, Team::Radiant);
     ASSERT_EQ(hit.size(), 1u);

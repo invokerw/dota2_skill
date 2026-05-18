@@ -1,4 +1,4 @@
-// Phase 5：Motion controller / 击退单测
+// Phase 5: Motion controller / 击退单测
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
 #include "dota/modifier/library.hpp"
@@ -45,7 +45,7 @@ TEST(Motion, HigherPriorityPreemptsExisting) {
     (void)low; (void)high;
 
     w.advance(0.5);
-    // 高优先级 MC 替代了低优先级 — 移动方向为 +y 而非 +x
+    // 高优先级 MC 替代了低优先级 -- 移动方向为 +y 而非 +x
     EXPECT_LT(hero->position().x, 5.0);     // 没怎么往 x 推
     EXPECT_GT(hero->position().y, 30.0);
 }

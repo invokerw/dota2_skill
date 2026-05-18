@@ -46,7 +46,7 @@ TEST(HealPipeline, BreakHealingReducesIncomingHeals) {
 TEST(HealPipeline, HealAmpStacks) {
     World w;
     auto* u = wounded(w);
-    // +20% 治疗增强（例如幻术师斗篷）和 -40% 破坏。总和：-20%
+    // +20% 治疗增强(例如幻术师斗篷)和 -40% 破坏. 总和: -20%
     u->modifiers().attach(std::make_unique<modifiers::GenericStats>(
         *u, "heal_amp", 30.0,
         std::initializer_list<ModifierProvidedProperty>{

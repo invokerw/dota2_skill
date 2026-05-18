@@ -1,4 +1,4 @@
-// Phase 2：LinkLuaModifier 风格注册中心单测
+// Phase 2: LinkLuaModifier 风格注册中心单测
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
 #include "dota/modifier/manager.hpp"
@@ -25,7 +25,7 @@ TEST(LuaRegistry, RegisterAndAddModifierProvidesEvasion) {
     World w;
     auto* hero = w.spawn("hero", Team::Radiant, stats(), {0, 0});
 
-    // 加载 modifier_test_evasion.lua（执行 register_modifier）
+    // 加载 modifier_test_evasion.lua(执行 register_modifier)
     sol::protected_function_result r = lua.state().safe_script_file(
         std::string(DOTA_SCRIPT_DIR) + "/modifiers/modifier_test_evasion.lua",
         &sol::script_pass_on_error);
@@ -33,7 +33,7 @@ TEST(LuaRegistry, RegisterAndAddModifierProvidesEvasion) {
 
     EXPECT_TRUE(lua.modifier_registry().contains("modifier_test_evasion"));
 
-    // 通过编译后的 spec 直接构造（绕过 binding，便于 C++ 端验证）
+    // 通过编译后的 spec 直接构造(绕过 binding, 便于 C++ 端验证)
     const auto* spec = lua.modifier_registry().find("modifier_test_evasion");
     ASSERT_NE(spec, nullptr);
     hero->modifiers().attach(std::make_unique<ScriptedModifier>(
@@ -60,7 +60,7 @@ TEST(LuaRegistry, OnIntervalThinkFiresPeriodically) {
     const double hp_before = hero->health();
     w.advance(3.05);   // ~3 个 tick interval
     const double dealt = hp_before - hero->health();
-    // 每秒 50 magical（魔抗 0），3 次 tick → 150
+    // 每秒 50 magical(魔抗 0), 3 次 tick → 150
     EXPECT_NEAR(dealt, 150.0, 1.0);
 }
 

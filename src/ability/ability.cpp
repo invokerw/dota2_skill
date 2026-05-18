@@ -9,7 +9,7 @@
 
 namespace dota {
 
-// --- AbilitySpecialValue ---------------------------------------------------
+// --- AbilitySpecialValue
 // 技能特殊值
 
 double AbilitySpecialValue::get_float(int level) const {
@@ -28,7 +28,7 @@ long AbilitySpecialValue::get_int(int level) const {
     return static_cast<long>(floats[idx]);
 }
 
-// --- Ability ---------------------------------------------------------------
+// --- Ability
 // 技能
 
 Ability::Ability(std::string name, std::uint32_t behavior, TargetTeam team, Unit& caster)
@@ -70,7 +70,7 @@ CastError Ability::validate_target(const CastTarget& target) const {
             return CastError::TargetMagicImmune;
         }
 
-        // Untargetable：不可被技能选中（默认）。不影响 AoE。
+        // Untargetable: 不可被技能选中(默认). 不影响 AoE.
         if (!has_flag(behavior_, BehaviorFlag::IgnoreUntargetable) &&
             target.unit->modifiers().has_state(ModifierState::Untargetable)) {
             return CastError::InvalidTarget;
@@ -159,7 +159,7 @@ CastError Ability::order_cast(const CastTarget& target, World& world) {
     pending_target_ = target;
     world_          = &world;
 
-    // 零施法前摇 → 立即执行，这样瞬发技能不需要第一次 `advance()` 调用（测试依赖此行为）
+    // 零施法前摇 → 立即执行, 这样瞬发技能不需要第一次 `advance()` 调用(测试依赖此行为)
     if (cast_point_ <= 0.0) {
         CastContext ctx{&caster_, world_, pending_target_, level_};
         on_spell_start(ctx);
@@ -214,7 +214,7 @@ void Ability::advance(double dt) {
             CastContext ctx{&caster_, world_, pending_target_, level_};
             on_channel_finish(ctx, /*interrupted*/ true);
         }
-        // 中断时冷却时间仍然生效（Dota 惯例）
+        // 中断时冷却时间仍然生效(Dota 惯例)
         cooldown_ = cooldown_for_level();
         phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
         phase_timer_ = 0.0;

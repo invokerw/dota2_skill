@@ -4,8 +4,8 @@ namespace dota {
 
 namespace {
 
-// ModifierProperty -> 默认 GetModifier 函数名，便于 Lua 端只填属性枚举即可。
-// 对应 Dota2 LinkLuaModifier 的命名习惯。
+// ModifierProperty -> 默认 GetModifier 函数名, 便于 Lua 端只填属性枚举即可.
+// 对应 Dota2 LinkLuaModifier 的命名习惯.
 const char* default_property_fn(ModifierProperty p) {
     switch (p) {
         case ModifierProperty::ArmorBonus:               return "GetModifierPhysicalArmor";
@@ -84,7 +84,7 @@ void LuaModifierRegistry::compile(CompiledSpec& out, const std::string& name, so
     out.remove_on_death = bool_or("RemoveOnDeath", true);
     out.think_interval  = double_or("ThinkInterval", 0.0);
 
-    // States：可以是 ModifierState 数组（静态），也可以同时定义 CheckState 回调（动态）。
+    // States: 可以是 ModifierState 数组(静态), 也可以同时定义 CheckState 回调(动态).
     sol::object states = out.table["States"];
     if (states.is<sol::table>()) {
         sol::table st = states;
@@ -98,7 +98,7 @@ void LuaModifierRegistry::compile(CompiledSpec& out, const std::string& name, so
     sol::object cs = out.table["CheckState"];
     if (cs.is<sol::protected_function>()) out.has_check_state = true;
 
-    // Properties：列表，每项为 { ModifierProperty.X, value | "FnName" }
+    // Properties: 列表, 每项为 { ModifierProperty.X, value | "FnName" }
     sol::object props = out.table["Properties"];
     if (props.is<sol::table>()) {
         sol::table list = props;
@@ -119,7 +119,7 @@ void LuaModifierRegistry::compile(CompiledSpec& out, const std::string& name, so
                 pe.dynamic = true;
                 pe.fn_name = val.as<std::string>();
             } else if (!val.valid()) {
-                // 未提供 value，默认走 dynamic 并使用约定函数名
+                // 未提供 value, 默认走 dynamic 并使用约定函数名
                 if (const char* fn = default_property_fn(pe.prop)) {
                     pe.dynamic = true;
                     pe.fn_name = fn;

@@ -15,8 +15,8 @@ TEST(DataDrivenLoader, LoadsLionYaml) {
     AbilityRegistry reg;
     const std::string path = std::string(kDataDir) + "/heroes/lion.yaml";
     const auto n = reg.load_file(path);
-    // lion.yaml 在第 6 阶段增长；加载器返回它实际加载的
-    // 数据驱动条目的计数（Lua 条目被跳过）
+    // lion.yaml 在第 6 阶段增长; 加载器返回它实际加载的
+    // 数据驱动条目的计数(Lua 条目被跳过)
     EXPECT_GE(n, 1u);
 
     const AbilityDef* def = reg.find("lion_earth_spike");

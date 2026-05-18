@@ -21,7 +21,7 @@ namespace dota {
 
 namespace {
 
-// Lua 可访问的辅助函数 ----------------------------------------------------
+// Lua 可访问的辅助函数
 
 sol::table damage_table(sol::state& lua) {
     sol::table t = lua.create_table();
@@ -80,7 +80,7 @@ sol::table property_table(sol::state& lua) {
 
 void register_bindings(sol::state& lua, LuaState* owner) {
     // --- Vec2 ---
-    // Vec2 是聚合类型（无构造函数重载），因此暴露工厂函数，
+    // Vec2 是聚合类型(无构造函数重载), 因此暴露工厂函数,
     // 并依赖 sol2 的默认构造函数绑定 `Vec2.new()`
     lua.new_usertype<Vec2>(
         "Vec2",
@@ -91,10 +91,10 @@ void register_bindings(sol::state& lua, LuaState* owner) {
         "x", &Vec2::x,
         "y", &Vec2::y);
 
-    // --- Unit -----------------------------------------------------------
+    // --- Unit
     //
-    // Lua 持有原始指针（非所有权）。单位由 World 拥有，在整个 World 生命周期内有效，
-    // 因此只要脚本存活，原始指针就是稳定的。脚本不能跨 world.reset() 缓存指针。
+    // Lua 持有原始指针(非所有权). 单位由 World 拥有, 在整个 World 生命周期内有效,
+    // 因此只要脚本存活, 原始指针就是稳定的. 脚本不能跨 world.reset() 缓存指针.
     lua.new_usertype<Unit>(
         "Unit",
         sol::no_constructor,
@@ -173,7 +173,7 @@ void register_bindings(sol::state& lua, LuaState* owner) {
             }
             u.purge(o);
         },
-        // 子技能触发：按 ability 名查找施法者的技能，然后 trigger_cast。返回 bool。
+        // 子技能触发: 按 ability 名查找施法者的技能, 然后 trigger_cast. 返回 bool.
         "cast_ability_no_target",
         [](Unit& caster, const std::string& ability_name) {
             Ability* a = caster.abilities().find(ability_name);
@@ -195,7 +195,7 @@ void register_bindings(sol::state& lua, LuaState* owner) {
             CastTarget t; t.point = point; t.has_point = true;
             return a->trigger_cast(t, *caster.world()) == CastError::None;
         },
-        // 通过名字应用注册过的 Lua 修饰器。第 4 个 params 表可选地携带 duration / stacks。
+        // 通过名字应用注册过的 Lua 修饰器. 第 4 个 params 表可选地携带 duration / stacks.
         "add_modifier",
         [owner](Unit& u, const std::string& mod_name,
                 sol::optional<Unit*> source, sol::object /*ability*/,
@@ -252,9 +252,9 @@ void register_bindings(sol::state& lua, LuaState* owner) {
             return w.find_enemies_in_cone(origin, direction, length, half_angle_rad,
                                            static_cast<Team>(source_team));
         },
-        // 直线投射物。params 表字段：
-        //   source(Unit)、origin(Vec2)、direction(Vec2)、speed、length、width、
-        //   destroy_on_first_hit(bool)、on_hit(function(victim, point))、on_finish(function())
+        // 直线投射物. params 表字段:
+        //   source(Unit), origin(Vec2), direction(Vec2), speed, length, width,
+        //   destroy_on_first_hit(bool), on_hit(function(victim, point)), on_finish(function())
         "create_linear_projectile",
         [](World& w, sol::table p) -> Projectile* {
             LinearProjectile::Params params;
@@ -344,15 +344,15 @@ void register_bindings(sol::state& lua, LuaState* owner) {
             return w.projectiles().spawn(std::move(proj));
         });
 
-    // 投射物作为 opaque 用户类型暴露（便于 Lua 持有引用）。
+    // 投射物作为 opaque 用户类型暴露(便于 Lua 持有引用).
     lua.new_usertype<Projectile>("Projectile", sol::no_constructor);
 
-    // --- 枚举表（类似 VScripts 暴露 DAMAGE_TYPE_* 的方式）---
+    // --- 枚举表(类似 VScripts 暴露 DAMAGE_TYPE_* 的方式)---
     lua["DamageType"]       = damage_table(lua);
     lua["ModifierState"]    = state_table(lua);
     lua["ModifierProperty"] = property_table(lua);
 
-    // 队伍常量（对应 core/types.hpp）
+    // 队伍常量(对应 core/types.hpp)
     sol::table team = lua.create_table();
     team["RADIANT"] = static_cast<int>(Team::Radiant);
     team["DIRE"]    = static_cast<int>(Team::Dire);
@@ -360,14 +360,14 @@ void register_bindings(sol::state& lua, LuaState* owner) {
     lua["Team"] = team;
 
     // --- LinkLuaModifier 风格注册 ---
-    // register_modifier(name, spec_table) — 注册到该 LuaState 的修饰器中心。
+    // register_modifier(name, spec_table) -- 注册到该 LuaState 的修饰器中心.
     if (owner) {
         lua["register_modifier"] = [owner](const std::string& name, sol::table spec) {
             owner->modifier_registry().register_modifier(name, spec);
         };
     } else {
-        // 没有 owner 时（test_lua_bindings 这样直接注册到 sol::state 的场景），
-        // 提供一个 no-op 版本，避免脚本里 register_modifier 找不到符号。
+        // 没有 owner 时(test_lua_bindings 这样直接注册到 sol::state 的场景),
+        // 提供一个 no-op 版本, 避免脚本里 register_modifier 找不到符号.
         lua["register_modifier"] = [](const std::string&, sol::table) {};
     }
 }

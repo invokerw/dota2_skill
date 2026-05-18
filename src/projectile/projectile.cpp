@@ -9,7 +9,7 @@
 
 namespace dota {
 
-// --- LinearProjectile ----------------------------------------------------
+// --- LinearProjectile
 
 LinearProjectile::LinearProjectile(const Params& p)
     : pos_(p.origin)
@@ -31,7 +31,7 @@ bool LinearProjectile::advance(double dt, World& world) {
     const Vec2 prev = pos_;
     Vec2 next{pos_.x + dir_.x * step, pos_.y + dir_.y * step};
 
-    // 沿 (prev, next) 线段扫描敌人；过滤已命中。
+    // 沿 (prev, next) 线段扫描敌人; 过滤已命中.
     auto candidates = world.find_enemies_in_line(prev, next, width_, source_team_);
     for (Unit* u : candidates) {
         if (already_hit_.count(u->id())) continue;
@@ -57,7 +57,7 @@ bool LinearProjectile::advance(double dt, World& world) {
     return true;
 }
 
-// --- TrackingProjectile --------------------------------------------------
+// --- TrackingProjectile
 
 TrackingProjectile::TrackingProjectile(const Params& p)
     : pos_(p.origin)

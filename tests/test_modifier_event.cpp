@@ -27,11 +27,11 @@ TEST(ModifierEvent, ShieldAbsorbsDamageBeforeResistance) {
     auto* shield = u->modifiers().attach_new<modifiers::ShieldAbsorb>(200.0, -1.0);
 
     const double applied = u->apply_damage(DamageType::Magical, 300.0);
-    // 护盾吸收 200；剩余 100 受魔抗影响（25% => 实际造成 75）
+    // 护盾吸收 200; 剩余 100 受魔抗影响(25% => 实际造成 75)
     EXPECT_DOUBLE_EQ(applied, 75.0);
     EXPECT_DOUBLE_EQ(shield->remaining(), 0.0);
 
-    // 护盾现已耗尽；在 advance() 清除后，单位应不再拥有该修改器。
+    // 护盾现已耗尽; 在 advance() 清除后, 单位应不再拥有该修改器.
     w.advance(0.1);
     EXPECT_EQ(u->modifiers().find("modifier_shield_absorb"), nullptr);
 }
@@ -45,7 +45,7 @@ TEST(ModifierEvent, MagicImmuneBlocksMagicalFully) {
     EXPECT_DOUBLE_EQ(applied, 0.0);
     EXPECT_DOUBLE_EQ(u->health(), 1000.0);
 
-    // 物理伤害仍然有效。
+    // 物理伤害仍然有效.
     const double phys = u->apply_damage(DamageType::Physical, 100.0);
     EXPECT_GT(phys, 0.0);
 }
@@ -71,7 +71,7 @@ TEST(ModifierEvent, ArmorReducesBasicAttackThroughPipeline) {
     World w;
     auto* u = w.spawn("u", Team::Radiant, basic_stats(1000.0));
 
-    // 通过修改器 +20 护甲 -> 约 54.5% 物理伤害减免。
+    // 通过修改器 +20 护甲 -> 约 54.5% 物理伤害减免.
     u->modifiers().attach_new<modifiers::GenericStats>(
         "plated", -1.0,
         std::initializer_list<ModifierProvidedProperty>{

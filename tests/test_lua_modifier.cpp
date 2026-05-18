@@ -22,8 +22,8 @@ UnitStats stats() {
     return s;
 }
 
-// 加载并注册 modifier_test_shield.lua（脚本顶层调用 register_modifier），
-// 然后取出已编译的 CompiledSpec 并实例化挂到 hero 上。
+// 加载并注册 modifier_test_shield.lua(脚本顶层调用 register_modifier),
+// 然后取出已编译的 CompiledSpec 并实例化挂到 hero 上.
 const LuaModifierRegistry::CompiledSpec*
 load_shield_spec(LuaState& lua) {
     sol::protected_function_result r = lua.state().safe_script_file(
@@ -35,7 +35,7 @@ load_shield_spec(LuaState& lua) {
 
 } // namespace
 
-// 验证 Lua modifier 声明的属性流入单位的聚合魔法抗性。
+// 验证 Lua modifier 声明的属性流入单位的聚合魔法抗性.
 TEST(LuaModifier, DeclaredPropertyAggregates) {
     LuaState lua;
     World w;
@@ -65,7 +65,7 @@ TEST(LuaModifier, OnPreTakeDamageAbsorbsMagical) {
             *hero, "modifier_test_shield", 10.0, *spec, lua));
 
     const double hp_before = hero->health();
-    // 300 魔法伤害；护盾吸收 200（抗性前）。剩余 100，然后
+    // 300 魔法伤害; 护盾吸收 200(抗性前). 剩余 100, 然后
     // 0.35 魔法抗性 → 实际造成 65
     hero->apply_damage(DamageType::Magical, 300.0, 0);
     const double dealt = hp_before - hero->health();
@@ -85,7 +85,7 @@ TEST(LuaModifier, OnPreTakeDamageIgnoresPhysical) {
             *hero, "modifier_test_shield", 10.0, *spec, lua));
 
     const double hp_before = hero->health();
-    // 100 物理伤害 → 护甲为 0，所以完整 100 穿透
+    // 100 物理伤害 → 护甲为 0, 所以完整 100 穿透
     hero->apply_damage(DamageType::Physical, 100.0, 0);
     const double dealt = hp_before - hero->health();
     EXPECT_NEAR(dealt, 100.0, 0.5);

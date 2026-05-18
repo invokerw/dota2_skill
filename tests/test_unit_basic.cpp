@@ -58,9 +58,9 @@ TEST(World, AttackOrderDealsDamageAtExpectedCadence) {
             ++lands;
         });
 
-    // base_attack_time=1, AS=100 → 每秒一次攻击。第一次攻击在
-    // 第一个 tick 时命中，因为 attack_cd 从 0 开始；后续攻击在
-    // 冷却时间耗尽时触发。
+    // base_attack_time=1, AS=100 → 每秒一次攻击. 第一次攻击在
+    // 第一个 tick 时命中, 因为 attack_cd 从 0 开始; 后续攻击在
+    // 冷却时间耗尽时触发.
     w.advance(3.5);
 
     EXPECT_EQ(lands, 4); // 在 ~0.03, 1.03, 2.03, 3.03 时攻击

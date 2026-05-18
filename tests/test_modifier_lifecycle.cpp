@@ -14,7 +14,7 @@ UnitStats basic_stats() {
     return s;
 }
 
-// 测试修改器，记录生命周期钩子调用并支持 think_interval。
+// 测试修改器, 记录生命周期钩子调用并支持 think_interval.
 struct Tracker : public Modifier {
     int creates = 0;
     int destroys = 0;
@@ -42,9 +42,9 @@ TEST(ModifierLifecycle, CreatedAndDestroyedHooksFire) {
     EXPECT_EQ(t->creates, 1);
     EXPECT_EQ(t->destroys, 0);
 
-    // 过期并清除后，on_destroyed 触发一次。
+    // 过期并清除后, on_destroyed 触发一次.
     w.advance(1.0);
-    // t 现在是悬空指针；改为尝试查找它来验证。
+    // t 现在是悬空指针; 改为尝试查找它来验证.
     EXPECT_EQ(u->modifiers().find("tracker"), nullptr);
 }
 
@@ -63,7 +63,7 @@ TEST(ModifierLifecycle, ThinkIntervalFiresAtCadence) {
     auto* t = u->modifiers().attach_new<Tracker>(-1.0, 0.5);
 
     w.advance(2.0);
-    // 2.0 秒内以 0.5 秒节奏 → 4 次 tick。
+    // 2.0 秒内以 0.5 秒节奏 → 4 次 tick.
     EXPECT_EQ(t->ticks, 4);
 }
 

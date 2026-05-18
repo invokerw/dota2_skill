@@ -12,14 +12,14 @@ Projectile* ProjectileManager::spawn(std::unique_ptr<Projectile> p) {
 
 void ProjectileManager::advance(double dt, World& world) {
     if (live_.empty()) return;
-    // 快照指针：advance 回调可能 spawn 新投射物（追加到 live_ 末尾）。
+    // 快照指针: advance 回调可能 spawn 新投射物(追加到 live_ 末尾).
     const std::size_t n = live_.size();
     std::vector<bool> keep(n, true);
     for (std::size_t i = 0; i < n; ++i) {
         if (!live_[i]) { keep[i] = false; continue; }
         keep[i] = live_[i]->advance(dt, world);
     }
-    // 销毁旧批次中标记为 false 的（保留同 tick 中新 spawn 的 i >= n）。
+    // 销毁旧批次中标记为 false 的(保留同 tick 中新 spawn 的 i >= n).
     std::vector<std::unique_ptr<Projectile>> remaining;
     remaining.reserve(live_.size());
     for (std::size_t i = 0; i < live_.size(); ++i) {

@@ -1,7 +1,7 @@
--- 仅吸收魔法伤害的护盾。验证 Lua modifier 可以
--- (a) 声明 States/Properties，
--- (b) 通过 OnPreTakeDamage 吸收伤害（返回吸收数值），
--- (c) 在 self 上保留实例状态（_remaining 计数）。
+-- 仅吸收魔法伤害的护盾. 验证 Lua modifier 可以
+-- (a) 声明 States/Properties,
+-- (b) 通过 OnPreTakeDamage 吸收伤害(返回吸收数值),
+-- (c) 在 self 上保留实例状态(_remaining 计数).
 
 register_modifier("modifier_test_shield", {
     IsHidden      = false,

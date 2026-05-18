@@ -54,10 +54,10 @@ TEST_F(HeroLionTest, EarthSpikeStunsDealsDamage) {
     world_.advance(0.35);
 
     const double hp_after = enemy_->health();
-    // 1 级 80 魔法伤害，经过 25% 抗性后 → 60 伤害
+    // 1 级 80 魔法伤害, 经过 25% 抗性后 → 60 伤害
     EXPECT_NEAR(1000.0 - hp_after, 60.0, 1.0);
 
-    // 敌人应该被眩晕（1 级持续 1.7 秒）
+    // 敌人应该被眩晕(1 级持续 1.7 秒)
     EXPECT_TRUE(enemy_->modifiers().has_state(ModifierState::Stunned));
     EXPECT_FALSE(enemy_->can_attack());
     EXPECT_FALSE(enemy_->can_cast());
@@ -92,7 +92,7 @@ TEST_F(HeroLionTest, FingerOfDeathDealsMassiveMagical) {
     // 施法前摇 0.5 秒
     world_.advance(0.55);
 
-    // 1 级 600 魔法伤害，经过 25% 抗性后 → 450
+    // 1 级 600 魔法伤害, 经过 25% 抗性后 → 450
     const double dealt = 1000.0 - enemy_->health();
     EXPECT_NEAR(dealt, 450.0, 1.0);
 }

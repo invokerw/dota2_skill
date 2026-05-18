@@ -54,7 +54,7 @@ TEST_F(HeroJuggernautTest, BladeFuryChannelsDamage) {
     const double hp_before = enemy_->health();
     world_.advance(1.0);
 
-    // 80 DPS，0.2 秒间隔 = 5 次脉冲 × 16 = 80 魔法伤害 → 经过抗性后 60
+    // 80 DPS, 0.2 秒间隔 = 5 次脉冲 × 16 = 80 魔法伤害 → 经过抗性后 60
     const double dealt = hp_before - enemy_->health();
     EXPECT_GT(dealt, 40.0);
     EXPECT_LT(dealt, 100.0);
@@ -73,11 +73,11 @@ TEST_F(HeroJuggernautTest, HealingWardHealsOverTime) {
     // 施法前摇 0.3 秒
     world_.advance(0.35);
 
-    // 施法后，施法者应该有周期性治疗修饰器
+    // 施法后, 施法者应该有周期性治疗修饰器
     EXPECT_TRUE(caster_->modifiers().find("modifier_periodic_heal") != nullptr);
 
     const double hp_after_cast = caster_->health();
-    // 让 3 次跳动触发（跳动间隔 = 1 秒，治疗 = 1000 的 2% = 每次 20）
+    // 让 3 次跳动触发(跳动间隔 = 1 秒, 治疗 = 1000 的 2% = 每次 20)
     world_.advance(3.0);
 
     const double healed = caster_->health() - hp_after_cast;
@@ -96,7 +96,7 @@ TEST_F(HeroJuggernautTest, OmnislashDealsPureDamage) {
     // 施法前摇 0.3 秒
     world_.advance(0.35);
 
-    // 1 级：3 次斩击 × 200 纯粹伤害 = 600 纯粹伤害（无抗性）
+    // 1 级: 3 次斩击 × 200 纯粹伤害 = 600 纯粹伤害(无抗性)
     const double dealt = 1000.0 - enemy_->health();
     EXPECT_NEAR(dealt, 600.0, 1.0);
 }
@@ -111,6 +111,6 @@ TEST_F(HeroJuggernautTest, OmnislashStopsOnTargetDeath) {
     omni->order_cast(t, world_);
     world_.advance(0.35);
 
-    // 300 生命值，每次攻击 = 200 纯粹伤害 → 2 次攻击击杀，第三次斩击不应发生
+    // 300 生命值, 每次攻击 = 200 纯粹伤害 → 2 次攻击击杀, 第三次斩击不应发生
     EXPECT_FALSE(enemy_->alive());
 }

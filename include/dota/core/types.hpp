@@ -24,7 +24,7 @@ struct Vec2 {
     friend auto operator<=>(const Vec2&, const Vec2&) = default;
 };
 
-// --- Vec2 数学（投射物、line/cone 查询、motion controller 都依赖这些）---
+// --- Vec2 数学(投射物, line/cone 查询, motion controller 都依赖这些)---
 
 inline Vec2 operator+(Vec2 a, Vec2 b) { return {a.x + b.x, a.y + b.y}; }
 inline Vec2 operator-(Vec2 a, Vec2 b) { return {a.x - b.x, a.y - b.y}; }
@@ -43,7 +43,7 @@ inline Vec2 normalized(Vec2 v) {
 
 inline double dot(Vec2 a, Vec2 b) { return a.x * b.x + a.y * b.y; }
 
-// 二维 z 分量"叉积"，用于侧距/方向判定
+// 二维 z 分量"叉积", 用于侧距/方向判定
 inline double cross_z(Vec2 a, Vec2 b) { return a.x * b.y - a.y * b.x; }
 
 // 计算两点间距离的平方

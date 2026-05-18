@@ -69,7 +69,7 @@ TEST(LuaAbility, ChannelPulsesDamageOverTime) {
 
     CastTarget t; // NO_TARGET
     EXPECT_EQ(blade->order_cast(t, w), CastError::None);
-    // 施法前摇为 0，所以立即进入引导状态
+    // 施法前摇为 0, 所以立即进入引导状态
     EXPECT_EQ(blade->phase(), CastPhase::Channelling);
 
     const double hp_before = enemy->health();
@@ -113,8 +113,8 @@ TEST(LuaAbility, ChannelEndsAfterDuration) {
     blade->order_cast(t, w);
     w.advance(5.5);
 
-    // 5 秒，0.2 秒间隔 → 25 次脉冲 × 80 × 0.2 = 400 魔法伤害
-    // → 经过 25% 抗性后 300（某些脉冲可能重叠跳动边界）
+    // 5 秒, 0.2 秒间隔 → 25 次脉冲 × 80 × 0.2 = 400 魔法伤害
+    // → 经过 25% 抗性后 300(某些脉冲可能重叠跳动边界)
     const double dealt = hero_stats().max_health - enemy->health();
     EXPECT_GT(dealt, 250.0);
     EXPECT_LT(dealt, 360.0);
@@ -140,7 +140,7 @@ TEST(LuaAbility, StunDuringChannelInterrupts) {
     jugg->modifiers().attach(modifiers::make_stunned(*jugg, 2.0));
     w.advance(3.0);
 
-    // 眩晕生效后，不应再造成伤害
+    // 眩晕生效后, 不应再造成伤害
     EXPECT_NEAR(enemy->health(), after_half, 1e-3);
     EXPECT_EQ(blade->phase(), CastPhase::OnCooldown);
 }

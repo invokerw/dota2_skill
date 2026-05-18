@@ -21,7 +21,7 @@ UnitStats stats() {
 
 } // namespace
 
-// 健全性检查：LuaState 打开并暴露我们的枚举表
+// 健全性检查: LuaState 打开并暴露我们的枚举表
 TEST(LuaBindings, EnumTablesArePresent) {
     LuaState lua;
     sol::state& s = lua.state();

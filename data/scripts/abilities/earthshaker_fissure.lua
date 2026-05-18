@@ -1,5 +1,5 @@
--- 撼地者 沟壑：从 caster 沿 target_point 方向喷射一条直线，命中线上敌人 → 伤害 + 眩晕 + 击退。
--- 落地形成不可通行的"沟壑" thinker 持续若干秒（仅作占位，本系统未实现真正的寻路阻挡）。
+-- 撼地者 沟壑: 从 caster 沿 target_point 方向喷射一条直线, 命中线上敌人 → 伤害 + 眩晕 + 击退.
+-- 落地形成不可通行的"沟壑" thinker 持续若干秒(仅作占位, 本系统未实现真正的寻路阻挡).
 
 local M = {}
 
@@ -15,7 +15,7 @@ function M:on_spell_start(caster, _target, world)
     local kb_time  = self:get_special("knockback_time")
     local fdur     = self:get_special("fissure_duration")
 
-    -- 计算沿 caster→target_point 方向的固定长度终点。
+    -- 计算沿 caster→target_point 方向的固定长度终点.
     local dx = dest.x - origin.x
     local dy = dest.y - origin.y
     local d  = math.sqrt(dx*dx + dy*dy)
@@ -29,12 +29,12 @@ function M:on_spell_start(caster, _target, world)
         if e:alive() then
             e:apply_damage(DamageType.MAGICAL, damage, caster)
             e:add_stunned(stun)
-            -- 击退方向：沿沟壑方向（与 caster 朝向一致）。
+            -- 击退方向: 沿沟壑方向(与 caster 朝向一致).
             e:apply_knockback(Vec2(dirx, diry), kb_dist, kb_time)
         end
     end
 
-    -- 在沟壑中点放一个 thinker 占位（演示 thinker API；真正的阻挡逻辑超出本 demo 范围）。
+    -- 在沟壑中点放一个 thinker 占位(演示 thinker API; 真正的阻挡逻辑超出本 demo 范围).
     local mid = Vec2(origin.x + dirx * length * 0.5, origin.y + diry * length * 0.5)
     world:create_thinker(mid, fdur, "modifier_earthshaker_fissure_blocker", caster)
 end

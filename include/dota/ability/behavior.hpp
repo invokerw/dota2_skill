@@ -5,9 +5,9 @@
 
 namespace dota {
 
-// 对应 Valve 的 DOTA_ABILITY_BEHAVIOR_* 枚举的位掩码。并非 Dota 中的所有标志
-// 在这里都有意义；我们添加了阶段 3-6 中施法流程实际
-// 查询的标志。
+// 对应 Valve 的 DOTA_ABILITY_BEHAVIOR_* 枚举的位掩码. 并非 Dota 中的所有标志
+// 在这里都有意义; 我们添加了阶段 3-6 中施法流程实际
+// 查询的标志.
 enum class BehaviorFlag : std::uint32_t {
     None            = 0,
     NoTarget        = 1u << 0,
@@ -34,8 +34,8 @@ constexpr bool has_flag(std::uint32_t mask, BehaviorFlag f) {
     return (mask & to_mask(f)) != 0;
 }
 
-// 目标元数据。Dota 将其拆分到多个 KV 字段；我们在这里将其
-// 合并为阶段 3 所需的内容。
+// 目标元数据. Dota 将其拆分到多个 KV 字段; 我们在这里将其
+// 合并为阶段 3 所需的内容.
 enum class TargetTeam : std::uint8_t {
     None    = 0,
     Enemy,
@@ -43,7 +43,7 @@ enum class TargetTeam : std::uint8_t {
     Both,
 };
 
-// YAML 加载器使用的解析辅助函数。
+// YAML 加载器使用的解析辅助函数.
 std::uint32_t parse_behavior_flags(const std::string& csv);
 TargetTeam    parse_target_team(const std::string& s);
 

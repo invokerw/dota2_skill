@@ -25,7 +25,7 @@ UnitStats stats() {
 
 } // namespace
 
-// --- 类型抗性 --------------------------------------------------------
+// --- 类型抗性
 
 TEST(DamagePipeline, PhysicalRespectsArmorCurve) {
     World w;
@@ -63,7 +63,7 @@ TEST(DamagePipeline, PureIgnoresResistance) {
     EXPECT_NEAR(stats().max_health - v->health(), 250.0, 0.5);
 }
 
-// --- 魔法免疫 + 穿透 ------------------------------------------------
+// --- 魔法免疫 + 穿透
 
 TEST(DamagePipeline, MagicImmuneZerosOutMagical) {
     World w;
@@ -83,7 +83,7 @@ TEST(DamagePipeline, BypassMagicImmuneFlagStillApplies) {
     EXPECT_NEAR(stats().max_health - v->health(), 150.0, 0.5);
 }
 
-// --- 输出/承受伤害增幅 ------------------------------------------------
+// --- 输出/承受伤害增幅
 
 TEST(DamagePipeline, OutgoingAndIncomingAmpStack) {
     World w;
@@ -119,26 +119,26 @@ TEST(DamagePipeline, NoSpellAmpFlagSkipsBothPcts) {
     EXPECT_NEAR(stats().max_health - v->health(), 100.0, 0.5);
 }
 
-// --- 生命移除 -----------------------------------------------------------------
+// --- 生命移除
 
 TEST(DamagePipeline, HPLossSkipsResistAndShield) {
     World w;
     auto* v = w.spawn("V", Team::Dire, stats(), {});
     // 一个吸收 300 点抗性前伤害的护盾
     v->modifiers().attach(std::make_unique<modifiers::ShieldAbsorb>(*v, 300.0, 30.0));
-    // 魔法抗性 0.25 通常会将 200 减少到 150；HPLoss 绕过两者
+    // 魔法抗性 0.25 通常会将 200 减少到 150; HPLoss 绕过两者
     deal_damage({nullptr, v, DamageType::Magical, 200.0,
                   to_mask(DamageFlag::HPLoss)});
     EXPECT_NEAR(stats().max_health - v->health(), 200.0, 0.5);
 }
 
-// --- 反弹标记 --------------------------------------------------------
+// --- 反弹标记
 
 TEST(DamagePipeline, ReflectFlagSkipsReflectLoop) {
     World w;
     auto* a = w.spawn("A", Team::Radiant, stats(), {});
     auto* v = w.spawn("V", Team::Dire,    stats(), {});
-    // 两个单位都携带 50% 反弹的刃甲。如果没有反弹标记保护，
+    // 两个单位都携带 50% 反弹的刃甲. 如果没有反弹标记保护,
     // 它们会无限反弹
     a->modifiers().attach(modifiers::make_blade_mail(*a, 0.5, 30.0));
     v->modifiers().attach(modifiers::make_blade_mail(*v, 0.5, 30.0));
@@ -147,8 +147,8 @@ TEST(DamagePipeline, ReflectFlagSkipsReflectLoop) {
     const double v_before = v->health();
     deal_damage({a, v, DamageType::Pure, 100.0, 0});
 
-    // v 受到 100 纯粹伤害。a 应该受到 50 反弹纯粹伤害，但反弹伤害
-    // 携带反弹标记，所以 v 的刃甲不会再次反弹
+    // v 受到 100 纯粹伤害. a 应该受到 50 反弹纯粹伤害, 但反弹伤害
+    // 携带反弹标记, 所以 v 的刃甲不会再次反弹
     EXPECT_NEAR(v_before - v->health(), 100.0, 0.5);
     EXPECT_NEAR(a_before - a->health(), 50.0,  0.5);
 }

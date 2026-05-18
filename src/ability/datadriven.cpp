@@ -67,8 +67,8 @@ void apply_action(const ActionApplyModifier& a, const CastContext& ctx,
                                 ? -1.0
                                 : resolve_expression(a.duration, special, level);
 
-    // 通过名称识别的通用库修饰器。未知名称会抛出异常 — 加载器应该尽早捕获。
-    // 第 4 阶段将通过 Lua 扩展此功能。
+    // 通过名称识别的通用库修饰器. 未知名称会抛出异常 -- 加载器应该尽早捕获.
+    // 第 4 阶段将通过 Lua 扩展此功能.
     const std::string& n = a.modifier_name;
     if (n == "modifier_stunned") {
         target->modifiers().attach(modifiers::make_stunned(*target, duration));

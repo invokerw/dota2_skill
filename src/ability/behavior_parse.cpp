@@ -1,5 +1,5 @@
 // YAML 加载器使用的行为标志 / 目标队伍字符串解析
-// 将其与 behavior.hpp 分离，以保持头文件的纯头文件特性，
+// 将其与 behavior.hpp 分离, 以保持头文件的纯头文件特性,
 // 避免引入 <string> 操作符
 
 #include "dota/ability/behavior.hpp"
@@ -18,7 +18,7 @@ std::string_view trim(std::string_view s) {
 }
 
 std::uint32_t parse_one(std::string_view tok) {
-    // 规范化：转为大写，去除 "BEHAVIOR_" / "DOTA_ABILITY_BEHAVIOR_" 前缀
+    // 规范化: 转为大写, 去除 "BEHAVIOR_" / "DOTA_ABILITY_BEHAVIOR_" 前缀
     std::string norm(tok);
     std::transform(norm.begin(), norm.end(), norm.begin(),
                    [](char c) { return static_cast<char>(std::toupper(c)); });

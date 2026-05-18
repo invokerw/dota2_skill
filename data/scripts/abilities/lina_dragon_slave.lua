@@ -1,8 +1,8 @@
 -- Lina's Dragon Slave. A line-shaped nuke fired towards target_point. We
 -- approximate the line shape by checking enemies within `radius` of the
 -- midpoint between caster and target_point (clamped to `range`). This is a
--- simplification — true line-shape would sample multiple circles along the
--- vector — but is sufficient for the Stage 6 scripting demo.
+-- simplification -- true line-shape would sample multiple circles along the
+-- vector -- but is sufficient for the Stage 6 scripting demo.
 
 local M = {}
 

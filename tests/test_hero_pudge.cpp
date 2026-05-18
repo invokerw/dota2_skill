@@ -1,4 +1,4 @@
-// Phase 9：Pudge 肉钩 + 肢解集成测试
+// Phase 9: Pudge 肉钩 + 肢解集成测试
 #include "dota/ability/ability.hpp"
 #include "dota/ability/registry.hpp"
 #include "dota/core/unit.hpp"
@@ -49,7 +49,7 @@ TEST_F(HeroPudgeTest, MeatHookDamagesAndPullsTarget) {
     const double dealt = 1500.0 - enemy_->health();
     EXPECT_GT(dealt, 80.0);    // 1 级 125 magical, 25% resist → ~93.75
 
-    // 拉拽：等到拖回时间过完，target 应该靠近 pudge（< 100 单位）
+    // 拉拽: 等到拖回时间过完, target 应该靠近 pudge(< 100 单位)
     world_.advance(1.0);
     EXPECT_LT(enemy_->position().x, 100.0);
 }
@@ -78,7 +78,7 @@ TEST_F(HeroPudgeTest, DismemberChannelsDamageOverTime) {
     const double pudge_hp_before = pudge_->health();
     world_.advance(1.6);   // cast point 0.30 + ~1.3 秒引导 → 约 2-3 次 tick
 
-    // 1 级每 0.5s 造成 30 magical damage（魔抗 25%） → 22.5/tick
+    // 1 级每 0.5s 造成 30 magical damage(魔抗 25%) → 22.5/tick
     // 引导期内造成的总伤害应明显超过 30
     const double dealt = 1500.0 - enemy_->health();
     EXPECT_GT(dealt, 30.0);

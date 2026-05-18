@@ -1,5 +1,5 @@
--- 测试用：每秒造成 50 点 magical 伤害的 DoT。
--- 演示 OnIntervalThink 与 ThinkInterval 字段。
+-- 测试用: 每秒造成 50 点 magical 伤害的 DoT.
+-- 演示 OnIntervalThink 与 ThinkInterval 字段.
 
 register_modifier("modifier_test_dot", {
     IsHidden        = false,

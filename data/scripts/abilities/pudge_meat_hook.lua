@@ -1,5 +1,5 @@
--- Pudge 肉钩：射出直线投射物，命中第一个敌人后将其拖回 Pudge。
--- 演示 linear projectile + 自定义 Lua motion controller。
+-- Pudge 肉钩: 射出直线投射物, 命中第一个敌人后将其拖回 Pudge.
+-- 演示 linear projectile + 自定义 Lua motion controller.
 
 local M = {}
 
@@ -28,7 +28,7 @@ function M:on_spell_start(caster, _target, world)
             if not victim:alive() then return end
             victim:apply_damage(DamageType.MAGICAL, damage, caster)
 
-            -- 计算拖拽参数：方向 = victim → caster，单位向量
+            -- 计算拖拽参数: 方向 = victim → caster, 单位向量
             local cp = caster:position()
             local vp = victim:position()
             local rx = cp.x - vp.x
@@ -38,11 +38,11 @@ function M:on_spell_start(caster, _target, world)
             local rdx, rdy = rx / rd, ry / rd
             local pull_time = rd / speed
 
-            -- 把目标转成 motion controller：手工设置 self 字段后 add_modifier 实例化。
-            -- params 表只支持 duration/stacks，所以这里改为 add_modifier 后再 patch
-            -- self 字段：先 add_modifier，然后 find 出来通过 has_modifier 验证。
-            -- 简化：直接给一个 stunned + 走 Generic motion 的近似 → 用 apply_knockback 拖向 caster。
-            -- (apply_knockback 是 C++ 提供的、向方向直推固定距离的 MC)
+            -- 把目标转成 motion controller: 手工设置 self 字段后 add_modifier 实例化.
+            -- params 表只支持 duration/stacks, 所以这里改为 add_modifier 后再 patch
+            -- self 字段: 先 add_modifier, 然后 find 出来通过 has_modifier 验证.
+            -- 简化: 直接给一个 stunned + 走 Generic motion 的近似 → 用 apply_knockback 拖向 caster.
+            -- (apply_knockback 是 C++ 提供的, 向方向直推固定距离的 MC)
             victim:apply_knockback(Vec2(rdx, rdy), rd, pull_time)
         end,
     }

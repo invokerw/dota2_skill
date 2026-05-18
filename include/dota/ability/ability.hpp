@@ -14,17 +14,17 @@ namespace dota {
 class Unit;
 class World;
 
-// 技能施放的生命周期阶段。对应 Dota 的 预施放 → cast point（施法前摇）→
-// 施放 → backswing（施法后摇）→ 冷却 链条。被动技能保持在 Ready 状态。
+// 技能施放的生命周期阶段. 对应 Dota 的 预施放 → cast point(施法前摇)→
+// 施放 → backswing(施法后摇)→ 冷却 链条. 被动技能保持在 Ready 状态.
 enum class CastPhase : std::uint8_t {
     Ready = 0,
-    Casting,     // cast point（施法前摇）动画；可被打断
-    Backswing,   // backswing（施法后摇）动画；不阻止新的施法
+    Casting,     // cast point(施法前摇)动画; 可被打断
+    Backswing,   // backswing(施法后摇)动画; 不阻止新的施法
     Channelling, // 仅用于引导型技能
     OnCooldown,
 };
 
-// 施法失败的合法性原因。用于 UI/调试；测试会断言这些值。
+// 施法失败的合法性原因. 用于 UI/调试; 测试会断言这些值.
 enum class CastError : std::uint8_t {
     None = 0,
     NotReady,
@@ -40,10 +40,10 @@ enum class CastError : std::uint8_t {
     NotLearned,
 };
 
-// 每级标量值。我们将 `ability_special` 建模为 名称 → 每级
-// 向量（int 或 float）的字典。查找时选择 `values[min(level-1, size-1)]`。
+// 每级标量值. 我们将 `ability_special` 建模为 名称 → 每级
+// 向量(int 或 float)的字典. 查找时选择 `values[min(level-1, size-1)]`.
 struct AbilitySpecialValue {
-    // 以下二选一：
+    // 以下二选一:
     std::vector<double> floats;
     std::vector<long>   ints;
     bool is_int = false;
@@ -54,16 +54,16 @@ struct AbilitySpecialValue {
 
 using AbilitySpecial = std::unordered_map<std::string, AbilitySpecialValue>;
 
-// 下达施法命令时传递的目标。未使用的字段会根据
-// BehaviorFlag 被忽略。
+// 下达施法命令时传递的目标. 未使用的字段会根据
+// BehaviorFlag 被忽略.
 struct CastTarget {
     Unit* unit       = nullptr;
     Vec2  point      = {};
     bool  has_point  = false;
 };
 
-// 施法实际生效时传递给子类的上下文。刻意保持精简 —
-// 随着流程扩展可以添加更多字段。
+// 施法实际生效时传递给子类的上下文. 刻意保持精简 --
+// 随着流程扩展可以添加更多字段.
 struct CastContext {
     Unit*      caster   = nullptr;
     World*     world    = nullptr;
@@ -71,8 +71,8 @@ struct CastContext {
     int        level    = 1;
 };
 
-// 所有技能的抽象基类 — DataDriven（YAML）和 Scripted
-//（Lua，阶段 4）共享。生命周期：由施法者的 AbilityManager 拥有。
+// 所有技能的抽象基类 -- DataDriven(YAML)和 Scripted
+//(Lua, 阶段 4)共享. 生命周期: 由施法者的 AbilityManager 拥有.
 class Ability {
 public:
     Ability(std::string name,
@@ -103,8 +103,8 @@ public:
     double cooldown_for_level() const;
     double mana_cost_for_level() const;
 
-    // 由 DataDriven 加载器用于从 YAML 填充。Scripted 技能可以
-    // 直接从 Lua 调用相同的 setter。
+    // 由 DataDriven 加载器用于从 YAML 填充. Scripted 技能可以
+    // 直接从 Lua 调用相同的 setter.
     void set_cast_point(double t)   { cast_point_ = t; }
     void set_backswing(double t)    { backswing_ = t; }
     void set_channel_time(double t) { channel_time_ = t; }
@@ -122,39 +122,39 @@ public:
     bool        is_passive()   const { return has_flag(behavior_, BehaviorFlag::Passive); }
     bool        is_channelled()const { return has_flag(behavior_, BehaviorFlag::Channelled); }
 
-    // 合法性检查，不改变状态。将第一个找到的
-    // 失败原因填充到 `err`。
+    // 合法性检查, 不改变状态. 将第一个找到的
+    // 失败原因填充到 `err`.
     CastError can_cast(const CastTarget& target) const;
 
-    // 下达施法命令。成功时返回 CastError::None。实际的
-    // `on_spell_start` 在 World::advance() 内的 cast point（施法前摇）之后触发。
+    // 下达施法命令. 成功时返回 CastError::None. 实际的
+    // `on_spell_start` 在 World::advance() 内的 cast point(施法前摇)之后触发.
     CastError order_cast(const CastTarget& target, World& world);
 
-    // 子技能触发：跳过冷却 / 蓝量 / 状态检查（按可选标志）。
-    // 用于"被动触发型"技能（例如修饰器 OnPreTakeDamage 中触发）。
-    // 当 cast_point 仍 > 0 时同样会经过正常 cast/backswing 流程。
+    // 子技能触发: 跳过冷却 / 蓝量 / 状态检查(按可选标志).
+    // 用于"被动触发型"技能(例如修饰器 OnPreTakeDamage 中触发).
+    // 当 cast_point 仍 > 0 时同样会经过正常 cast/backswing 流程.
     CastError trigger_cast(const CastTarget& target, World& world,
                            bool ignore_cooldown = true,
                            bool ignore_mana     = true,
                            bool ignore_state    = true);
 
-    // 按 dt 推进施法/引导/backswing（施法后摇）/冷却计时器。World 每个 tick 驱动此方法。
-    // 处理施法中途被眩晕/沉默时的打断。
+    // 按 dt 推进施法/引导/backswing(施法后摇)/冷却计时器. World 每个 tick 驱动此方法.
+    // 处理施法中途被眩晕/沉默时的打断.
     void advance(double dt);
 
     // --- 子类钩子 ---
-    // 当 cast point（施法前摇）成功完成时调用（即未被打断）。
+    // 当 cast point(施法前摇)成功完成时调用(即未被打断).
     virtual void on_spell_start(CastContext&) = 0;
-    // 用于引导型技能：引导期间每个 tick 触发。
+    // 用于引导型技能: 引导期间每个 tick 触发.
     virtual void on_channel_think(CastContext&, double /*dt*/) {}
-    // 用于引导型技能：引导结束时触发一次。
+    // 用于引导型技能: 引导结束时触发一次.
     virtual void on_channel_finish(CastContext&, bool /*interrupted*/) {}
-    // 可选：升级钩子。
+    // 可选: 升级钩子.
     virtual void on_upgrade(int /*new_level*/) {}
 
 protected:
-    // 子类可以重写以允许定制目标验证（例如
-    // 阶段 6 中的仅可创建单位目标）。
+    // 子类可以重写以允许定制目标验证(例如
+    // 阶段 6 中的仅可创建单位目标).
     virtual CastError validate_target(const CastTarget&) const;
 
 private:
@@ -168,7 +168,7 @@ private:
 
     int level_ = 1;
 
-    // 时间字段（全部为秒）。
+    // 时间字段(全部为秒).
     double cast_point_   = 0.0;
     double backswing_    = 0.0;
     double channel_time_ = 0.0;
@@ -178,7 +178,7 @@ private:
     std::vector<double> mana_costs_;  // 每级
     AbilitySpecial      special_;
 
-    // 运行时。
+    // 运行时.
     CastPhase phase_       = CastPhase::Ready;
     double    phase_timer_ = 0.0;
     double    cooldown_    = 0.0;

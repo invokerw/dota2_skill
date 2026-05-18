@@ -1,4 +1,4 @@
-// Phase 9：Sven 风暴之锤集成测试
+// Phase 9: Sven 风暴之锤集成测试
 #include "dota/ability/ability.hpp"
 #include "dota/ability/registry.hpp"
 #include "dota/core/unit.hpp"
@@ -48,7 +48,7 @@ TEST_F(HeroSvenTest, StormHammerHitsTargetAndStuns) {
     // 0.55 cast point + 投射物飞 500 / 1100 ≈ 0.45s → 总 1.0s 后命中
     world_.advance(1.5);
 
-    // 1 级伤害 80，魔抗 25% → 60
+    // 1 级伤害 80, 魔抗 25% → 60
     const double dealt = 1500.0 - enemy_->health();
     EXPECT_GT(dealt, 50.0);
     EXPECT_LT(dealt, 70.0);

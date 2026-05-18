@@ -10,11 +10,11 @@
 
 namespace dota::modifiers {
 
-// --- 仅状态修饰器（名称驱动的眩晕/沉默/定身等） -------------
+// --- 仅状态修饰器(名称驱动的眩晕/沉默/定身等)
 
 class GenericState : public Modifier {
 public:
-    // 参数顺序与 ModifierManager::attach_new 匹配，后者在前面添加 owner。
+    // 参数顺序与 ModifierManager::attach_new 匹配, 后者在前面添加 owner.
     GenericState(Unit& owner, std::string name, double duration, std::uint32_t state_mask)
         : Modifier(std::move(name), owner, duration), mask_(state_mask) {}
 
@@ -27,13 +27,13 @@ private:
     bool          debuff_{true};
 };
 
-// 应用 status resistance：将 base_duration 乘以 (1 - status_resist())。
+// 应用 status resistance: 将 base_duration 乘以 (1 - status_resist()).
 inline double resisted_duration(const Unit& owner, double base) {
     const double r = owner.status_resist();
     return base * (1.0 - r);
 }
 
-// Thinker 基础修饰器：到期时自毁拥有者（apply_raw_damage 致死）。
+// Thinker 基础修饰器: 到期时自毁拥有者(apply_raw_damage 致死).
 class ThinkerBase : public GenericState {
 public:
     ThinkerBase(Unit& owner, double duration, std::uint32_t mask)
@@ -50,7 +50,7 @@ public:
 
 inline std::unique_ptr<GenericState>
 make_stunned(Unit& owner, double duration) {
-    // 应用 status resistance 缩短控制时间。
+    // 应用 status resistance 缩短控制时间.
     return std::make_unique<GenericState>(
         owner, "modifier_stunned", resisted_duration(owner, duration),
         state_bit(ModifierState::Stunned));
@@ -72,9 +72,9 @@ make_rooted(Unit& owner, double duration) {
 
 inline std::unique_ptr<GenericState>
 make_hexed(Unit& owner, double duration) {
-    // 妖术（狮子）在 Dota 中禁用施法/攻击但不禁用移动。仅 Hexed
-    // 状态位就足够了 — can_attack/can_cast 会阻止它，但
-    // can_move 不会。
+    // 妖术(狮子)在 Dota 中禁用施法/攻击但不禁用移动. 仅 Hexed
+    // 状态位就足够了 -- can_attack/can_cast 会阻止它, 但
+    // can_move 不会.
     return std::make_unique<GenericState>(
         owner, "modifier_hexed", resisted_duration(owner, duration),
         state_bit(ModifierState::Hexed));
@@ -92,7 +92,7 @@ make_magic_immune(Unit& owner, double duration) {
         owner, "modifier_magic_immune", duration, state_bit(ModifierState::MagicImmune));
 }
 
-// --- 数值属性修饰器 -------------------------------------------------
+// --- 数值属性修饰器
 
 class GenericStats : public Modifier {
 public:
@@ -108,11 +108,11 @@ private:
     std::vector<ModifierProvidedProperty> props_;
 };
 
-// --- 护盾/吸收修饰器 ------------------------------------------------
+// --- 护盾/吸收修饰器
 //
-// Dota 示例：洞察烟斗的屏障、美杜莎的魔法护盾等。这个修饰器
-// 简单地吸收最多 `capacity` 点伤害（跨任意次数的攻击），
-// 并在耗尽时自毁。抗性前吸收反映了 Dota 解决大多数"护盾"机制的方式。
+// Dota 示例: 洞察烟斗的屏障, 美杜莎的魔法护盾等. 这个修饰器
+// 简单地吸收最多 `capacity` 点伤害(跨任意次数的攻击),
+// 并在耗尽时自毁. 抗性前吸收反映了 Dota 解决大多数"护盾"机制的方式.
 class ShieldAbsorb : public Modifier {
 public:
     ShieldAbsorb(Unit& owner, double capacity, double duration)
@@ -128,8 +128,8 @@ public:
         ev.absorbed += eat;
         remaining_  -= eat;
         if (remaining_ <= 0.0) {
-            // 通过将剩余持续时间归零来消耗护盾。
-            // 管理器将在下一次 advance() 时清除。
+            // 通过将剩余持续时间归零来消耗护盾.
+            // 管理器将在下一次 advance() 时清除.
             refresh(0.0);
         }
     }
@@ -138,10 +138,10 @@ private:
     double remaining_;
 };
 
-// --- 周期性治疗（治疗守卫风格） ------------------------------------
+// --- 周期性治疗(治疗守卫风格)
 //
-// 每 `interval` 秒对拥有者治疗 `heal_per_tick`，总持续 `duration` 秒。
-// 通过治疗管线运行，因此破坏治疗有效。
+// 每 `interval` 秒对拥有者治疗 `heal_per_tick`, 总持续 `duration` 秒.
+// 通过治疗管线运行, 因此破坏治疗有效.
 class PeriodicHeal : public Modifier {
 public:
     PeriodicHeal(Unit& owner, double heal_per_tick, double interval, double duration)
@@ -163,10 +163,10 @@ make_periodic_heal(Unit& owner, double heal_per_tick, double interval, double du
     return std::make_unique<PeriodicHeal>(owner, heal_per_tick, interval, duration);
 }
 
-// --- 反射（刃甲风格） --------------------------------------------
+// --- 反射(刃甲风格)
 //
-// 将抗性前伤害的一部分作为纯粹伤害反射回攻击者，并设置 DamageFlag::Reflection，
-// 管线通过跳过攻击者上的任何反射修饰器来遵守此标志（防止无限循环）。
+// 将抗性前伤害的一部分作为纯粹伤害反射回攻击者, 并设置 DamageFlag::Reflection,
+// 管线通过跳过攻击者上的任何反射修饰器来遵守此标志(防止无限循环).
 class ReflectDamage : public Modifier {
 public:
     ReflectDamage(Unit& owner, double fraction, double duration)
@@ -174,9 +174,9 @@ public:
         , fraction_(fraction) {}
 
     void on_pre_take_damage(PreTakeDamageEvent& ev) override {
-        // 记录抗性前的数量以便反射 — Dota 中的刃甲
-        // 反射目标将承受的数量，而不是抗性前的标题数字。
-        // 这是 Stage 5 测试可接受的近似值。
+        // 记录抗性前的数量以便反射 -- Dota 中的刃甲
+        // 反射目标将承受的数量, 而不是抗性前的标题数字.
+        // 这是 Stage 5 测试可接受的近似值.
         pending_reflect_ = fraction_ * ev.amount;
         pending_attacker_ = ev.attacker;
     }
@@ -209,11 +209,11 @@ make_blade_mail(Unit& owner, double fraction, double duration) {
     return std::make_unique<ReflectDamage>(owner, fraction, duration);
 }
 
-// --- Motion controller：击退 ---------------------------------------
+// --- Motion controller: 击退
 //
-// 在 `duration` 秒内沿 `direction` 总位移 `distance` 单位，每个 motion tick
-// 把 owner 推进 distance/duration*dt。同时作为 debuff 施加 stunned 状态位
-// （和大多数 Dota 击退一致）。priority 为同时多个 MC 竞争时的抢占次序。
+// 在 `duration` 秒内沿 `direction` 总位移 `distance` 单位, 每个 motion tick
+// 把 owner 推进 distance/duration*dt. 同时作为 debuff 施加 stunned 状态位
+// (和大多数 Dota 击退一致). priority 为同时多个 MC 竞争时的抢占次序.
 class MotionKnockback : public Modifier {
 public:
     MotionKnockback(Unit& owner, Vec2 direction, double distance,
@@ -251,9 +251,9 @@ make_knockback(Unit& owner, Vec2 direction, double distance,
     return std::make_unique<MotionKnockback>(owner, direction, distance, duration, priority);
 }
 
-// --- 破坏治疗 -----------------------------------------------------
+// --- 破坏治疗
 //
-// 一个减少承受治疗量的减益效果（例如 0.4 表示 -40%）。
+// 一个减少承受治疗量的减益效果(例如 0.4 表示 -40%).
 inline std::unique_ptr<GenericStats>
 make_break_healing(Unit& owner, double fraction, double duration) {
     return std::make_unique<GenericStats>(

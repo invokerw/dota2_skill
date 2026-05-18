@@ -7,9 +7,9 @@
 #include <cstdlib>
 #include <string>
 
-// 第六阶段演示：Lion vs Juggernaut vs Lina — 三英雄团战
-// 展示完整的技能 + 修改器 + 伤害管线。每个英雄
-// 在自动攻击的同时依次施放其标志性技能。
+// 第六阶段演示: Lion vs Juggernaut vs Lina -- 三英雄团战
+// 展示完整的技能 + 修改器 + 伤害管线. 每个英雄
+// 在自动攻击的同时依次施放其标志性技能.
 
 namespace {
 
@@ -106,7 +106,7 @@ int main() {
         });
 
     auto status = [&]() {
-        std::printf("  Status — Lion: %.0f/%.0f HP | Juggernaut: %.0f/%.0f HP | Lina: %.0f/%.0f HP\n",
+        std::printf("  Status -- Lion: %.0f/%.0f HP | Juggernaut: %.0f/%.0f HP | Lina: %.0f/%.0f HP\n",
                     lion->health(), lion->stats().max_health,
                     jug->health(), jug->stats().max_health,
                     lina->health(), lina->stats().max_health);
@@ -179,7 +179,7 @@ int main() {
     }
     status();
 
-    log_header("Round 6: Juggernaut's last stand — Omnislash on Lion");
+    log_header("Round 6: Juggernaut's last stand -- Omnislash on Lion");
     if (jug->alive()) {
         CastTarget t;
         t.unit = lion;

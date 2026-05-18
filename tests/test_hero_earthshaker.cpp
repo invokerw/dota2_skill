@@ -1,4 +1,4 @@
-// Phase 9：Earthshaker 沟壑集成测试
+// Phase 9: Earthshaker 沟壑集成测试
 #include "dota/ability/ability.hpp"
 #include "dota/ability/registry.hpp"
 #include "dota/core/unit.hpp"

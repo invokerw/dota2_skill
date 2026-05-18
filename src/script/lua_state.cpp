@@ -22,8 +22,8 @@ LuaState::LuaState()
     };
     register_bindings(lua_, this);
 
-    // 自动加载 <script_root>/modifiers 目录下的所有 .lua —— 它们在文件顶层调用
-    // register_modifier(...)。这样调用方不需要手动 require 每个 modifier。
+    // 自动加载 <script_root>/modifiers 目录下的所有 .lua -- 它们在文件顶层调用
+    // register_modifier(...). 这样调用方不需要手动 require 每个 modifier.
     if (!script_root_.empty()) {
         namespace fs = std::filesystem;
         const fs::path modifiers_dir = fs::path(script_root_) / "modifiers";

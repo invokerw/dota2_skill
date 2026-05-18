@@ -39,7 +39,7 @@ TEST(EventBus, MutableEventLetsHandlersChainModifications) {
     bus.publish(ev);
 
     // (5 + 1) * 2 == 12. 这就是伤害/治疗事件在后续阶段
-    // 被修改器重写的方式。
+    // 被修改器重写的方式.
     EXPECT_EQ(ev.value, 12);
 }
 
@@ -68,8 +68,8 @@ TEST(EventBus, HandlerCanSubscribeDuringDispatchWithoutInvalidating) {
     EXPECT_EQ(late_calls, 0);
 
     bus.publish(ev);
-    // 外部处理器再次运行并添加了另一个监听器，但在第一次分发期间
-    // 注册的那个在这里只触发一次。
+    // 外部处理器再次运行并添加了另一个监听器, 但在第一次分发期间
+    // 注册的那个在这里只触发一次.
     EXPECT_GE(late_calls, 1);
 }
 

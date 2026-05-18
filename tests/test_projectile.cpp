@@ -1,4 +1,4 @@
-// Phase 3：投射物系统单测
+// Phase 3: 投射物系统单测
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
 #include "dota/projectile/manager.hpp"
@@ -119,7 +119,7 @@ TEST(Projectile, TrackingFizzlesOnTargetDeath) {
     p.source_id = hero->id(); p.source_team = Team::Radiant;
     p.origin = hero->position();
     p.target_id = enemy->id();
-    p.speed = 200.0;          // 慢，给我们时间杀掉目标
+    p.speed = 200.0;          // 慢, 给我们时间杀掉目标
     auto proj = std::make_unique<TrackingProjectile>(p);
     proj->set_on_hit([&](Unit&, Vec2){ hit = true; });
     proj->set_on_finish([&](){ finished = true; });

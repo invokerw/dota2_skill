@@ -11,17 +11,17 @@ namespace dota {
 
 class Ability;
 
-// Lua 端的修饰器实例，与一个 LuaModifierRegistry::CompiledSpec 关联。
-// 每次属性查询/事件钩子触发时，按需调用 spec 表上的 Lua 函数。
+// Lua 端的修饰器实例, 与一个 LuaModifierRegistry::CompiledSpec 关联.
+// 每次属性查询/事件钩子触发时, 按需调用 spec 表上的 Lua 函数.
 //
-// 所有 spec 字段统一使用 PascalCase 约定：IsHidden / IsPurgable / IsDispellable /
+// 所有 spec 字段统一使用 PascalCase 约定: IsHidden / IsPurgable / IsDispellable /
 // IsDebuff / IsMotionController / MotionPriority / States / Properties /
 // ThinkInterval / OnCreated / OnDestroyed / OnStackChanged / OnIntervalThink /
 // OnPreTakeDamage / OnPostTakeDamage / OnPreTakeHeal / OnPostTakeHeal /
-// OnMotionTick / CheckState 等。
+// OnMotionTick / CheckState 等.
 //
-// 唯一构造路径：先在 Lua 端通过 `register_modifier(name, spec)` 注册，
-// 再用注册中心查到的 CompiledSpec 实例化。
+// 唯一构造路径: 先在 Lua 端通过 `register_modifier(name, spec)` 注册,
+// 再用注册中心查到的 CompiledSpec 实例化.
 class ScriptedModifier : public Modifier {
 public:
     ScriptedModifier(Unit& owner,
@@ -47,7 +47,7 @@ public:
 
     bool is_debuff() const override { return is_debuff_; }
 
-    // 暴露给 Lua self.GetCaster / GetAbility 类方法用。
+    // 暴露给 Lua self.GetCaster / GetAbility 类方法用.
     Unit*    source()  const { return source_; }
     Ability* ability() const { return ability_; }
 
@@ -56,7 +56,7 @@ private:
 
     LuaState*  lua_;
     sol::table table_;                               // 实例独有的可写 self 表
-    sol::table spec_table_;                          // 共享的 spec 表（方法源）
+    sol::table spec_table_;                          // 共享的 spec 表(方法源)
     const LuaModifierRegistry::CompiledSpec* compiled_{nullptr};
     std::uint32_t state_mask_cache_ = 0;             // 静态状态位
     bool       is_debuff_ = false;

@@ -140,7 +140,7 @@ void ScriptedModifier::on_pre_take_damage(PreTakeDamageEvent& ev) {
             ev.absorbed += absorb;
         }
     } else {
-        // 钩子也可以直接修改 evt.amount 来下调伤害（无返回值即视为按修改后的 amount 处理）。
+        // 钩子也可以直接修改 evt.amount 来下调伤害(无返回值即视为按修改后的 amount 处理).
         sol::object new_amount = evt["amount"];
         if (new_amount.is<double>()) {
             const double a = new_amount.as<double>();

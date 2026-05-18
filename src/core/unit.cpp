@@ -44,8 +44,8 @@ double Unit::attack_damage() const {
 }
 
 double Unit::magic_resist() const {
-    // Dota 中魔抗通过 (1 - (1 - a)(1 - b)…) 组合。阶段 2 中我们
-    // 存储单个基础加成；阶段 5 会重新审视此实现。
+    // Dota 中魔抗通过 (1 - (1 - a)(1 - b)...) 组合. 阶段 2 中我们
+    // 存储单个基础加成; 阶段 5 会重新审视此实现.
     const double bonus = modifiers_->aggregated(ModifierProperty::MagicResistBonus);
     return std::clamp(stats_.magic_resist + bonus, 0.0, 1.0);
 }
@@ -96,7 +96,7 @@ double Unit::cast_range_bonus() const {
 }
 
 void Unit::purge(PurgeOptions opts) {
-    // 收集要移除的 modifier 名称（不能在迭代过程中删除）。
+    // 收集要移除的 modifier 名称(不能在迭代过程中删除).
     std::vector<std::string> to_remove;
     for (const auto& m : modifiers_->all()) {
         if (!m) continue;
@@ -144,7 +144,7 @@ bool Unit::can_move() const {
 
 void Unit::heal(double amount) {
     if (amount <= 0.0 || !alive()) return;
-    // 通过治疗管线路由，使治疗增强 modifier（包括阶段 5 的破坏治疗 debuff）一致触发
+    // 通过治疗管线路由, 使治疗增强 modifier(包括阶段 5 的破坏治疗 debuff)一致触发
     deal_heal({nullptr, this, amount});
 }
 
@@ -180,12 +180,12 @@ void Unit::tick_modifiers(double dt) {
 
     if (!alive() || dt <= 0.0) return;
 
-    // 生命/魔法回复（通过治疗管线，使破坏治疗等修饰器一致生效）。
+    // 生命/魔法回复(通过治疗管线, 使破坏治疗等修饰器一致生效).
     const double hr = health_regen();
     if (hr > 0.0 && health_ < max_health()) {
         deal_heal({nullptr, this, hr * dt});
     } else if (hr < 0.0) {
-        // 负回复直接扣血，不走治疗管线
+        // 负回复直接扣血, 不走治疗管线
         apply_raw_damage(-hr * dt);
     }
     const double mr = mana_regen();

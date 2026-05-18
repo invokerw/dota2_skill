@@ -10,7 +10,7 @@ namespace dota {
 class Unit;
 class World;
 
-// 抽象投射物基类。每 tick 调用 advance(dt, world)；返回 false 表示请求销毁。
+// 抽象投射物基类. 每 tick 调用 advance(dt, world); 返回 false 表示请求销毁.
 class Projectile {
 public:
     using HitCallback    = std::function<void(Unit& victim, Vec2 hit_point)>;
@@ -33,8 +33,8 @@ protected:
     FinishCallback on_finish_;
 };
 
-// 直线投射物：从 origin 沿 direction 推进，扫描 (prev, cur) 段对敌人。
-// destroy_on_first_hit=true → 命中第一目标后销毁；否则穿透（已命中集合避免重复）。
+// 直线投射物: 从 origin 沿 direction 推进, 扫描 (prev, cur) 段对敌人.
+// destroy_on_first_hit=true → 命中第一目标后销毁; 否则穿透(已命中集合避免重复).
 class LinearProjectile : public Projectile {
 public:
     struct Params {
@@ -62,7 +62,7 @@ private:
     std::unordered_set<EntityId> already_hit_;
 };
 
-// 跟踪投射物：追逐目标 unit。目标死亡 / 不存在 / Untargetable 时 fizzle。
+// 跟踪投射物: 追逐目标 unit. 目标死亡 / 不存在 / Untargetable 时 fizzle.
 class TrackingProjectile : public Projectile {
 public:
     struct Params {
@@ -71,7 +71,7 @@ public:
         Vec2     origin{};
         EntityId target_id   = kInvalidEntityId;
         double   speed       = 900.0;
-        bool     dodgeable   = true;          // 仅作元数据；本 framework 暂不模拟"闪避"
+        bool     dodgeable   = true;          // 仅作元数据; 本 framework 暂不模拟"闪避"
     };
 
     explicit TrackingProjectile(const Params& p);
