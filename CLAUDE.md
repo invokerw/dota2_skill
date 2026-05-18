@@ -62,7 +62,7 @@ ctest --test-dir build -R "HeroLinaTest"      # 运行单个测试套件
 | 投射物 | `include/dota/projectile/`, `src/projectile/` | LinearProjectile、TrackingProjectile、ProjectileManager |
 | Lua 绑定 | `src/script/` | Unit/World/Vec2/Projectile 的 sol2 用户类型、枚举表、`register_modifier` |
 | 数据 | `data/heroes/*.yaml` | 英雄定义，包含 ability_special 的每级数值 |
-| 脚本 | `scripts/abilities/*.lua`, `scripts/modifiers/*.lua` | Lua 技能与 Lua 修饰器实现 |
+| 脚本 | `data/scripts/abilities/*.lua`, `data/scripts/modifiers/*.lua` | Lua 技能与 Lua 修饰器实现 |
 
 ### 关键设计模式
 
@@ -79,13 +79,13 @@ ctest --test-dir build -R "HeroLinaTest"      # 运行单个测试套件
 
 ### 编译时定义
 
-- `DOTA_SCRIPT_DIR` —— `scripts/` 的绝对路径（在 `dota_core` 上设置）
+- `DOTA_SCRIPT_DIR` —— `data/scripts/` 的绝对路径（在 `dota_core` 上设置）
 - `DOTA_DATA_DIR` —— `data/` 的绝对路径（在测试和 duel 目标上设置）
 
 ### 添加新英雄
 
 1. 创建 `data/heroes/<name>.yaml`，包含英雄属性和技能列表
-2. 对于 `ability_lua` 条目，创建 `scripts/abilities/<ability_name>.lua`，返回包含生命周期钩子的表
+2. 对于 `ability_lua` 条目，创建 `data/scripts/abilities/<ability_name>.lua`，返回包含生命周期钩子的表
 3. 在 `tests/test_hero_<name>.cpp` 中添加集成测试，并在 `CMakeLists.txt` 中注册该文件
 
 ### 添加新修饰器属性

@@ -38,7 +38,7 @@ ctest --test-dir build --output-on-failure    # 运行全部 125 个测试
 | 层级 | 位置 | 职责 |
 |-------|----------|----------------|
 | **数据** | `data/heroes/*.yaml` | 英雄属性、技能定义及每级数值 |
-| **脚本** | `scripts/abilities/*.lua`, `scripts/modifiers/*.lua` | Lua 技能与 Lua 修饰器实现 |
+| **脚本** | `data/scripts/abilities/*.lua`, `data/scripts/modifiers/*.lua` | Lua 技能与 Lua 修饰器实现 |
 | **技能框架** | `include/dota/ability/`, `src/ability/` | 施法状态机、DataDriven（YAML）+ Scripted（Lua）|
 | **修饰器系统** | `include/dota/modifier/`, `src/modifier/` | 属性 aggregation（聚合，4 层）、状态位掩码、事件钩子、Lua 修饰器注册表 |
 | **战斗管线** | `include/dota/combat/`, `src/combat/` | 分阶段伤害/治疗，支持修饰器干预 |
@@ -57,7 +57,7 @@ ctest --test-dir build --output-on-failure    # 运行全部 125 个测试
 
 #### 修饰器系统
 
-- **属性**：数值加成按 4 层 aggregation（聚合）（BONUS_CONSTANT → BONUS_PCT → TOTAL_PCT → OVERRIDE）
+- **属性**：数值加成按 4 层 aggregation（聚合)（BONUS_CONSTANT → BONUS_PCT → TOTAL_PCT → OVERRIDE）
 - **状态**：位掩码（眩晕、沉默、缠绕、无敌、隐身）
 - **事件**：钩子如 `on_pre_take_damage`、`on_interval_think`、`on_attack_landed`
 - 属性值会乘以 `stack_count` 以支持可叠加修饰器
@@ -107,16 +107,17 @@ dota2_skill/
 │   ├── combat/            # 战斗管线实现
 │   ├── projectile/        # 投射物推进与碰撞
 │   └── script/            # Lua 绑定（sol2）
-├── data/heroes/           # YAML 英雄定义
-│   ├── lion.yaml          # Lion（全部 DataDriven）
-│   ├── lina.yaml          # Lina（YAML + Lua 被动）
-│   ├── juggernaut.yaml    # Juggernaut（Lua 为主）
-│   ├── sven.yaml          # Sven（追踪投射物 + AoE 落点）
-│   ├── earthshaker.yaml   # Earthshaker（直线击退 + thinker）
-│   └── pudge.yaml         # Pudge（勾拉 + 引导吸血）
-├── scripts/
-│   ├── abilities/         # Lua 技能实现
-│   └── modifiers/         # Lua 修饰器（hook 拖拽、thinker 占位、测试用例等）
+├── data/
+│   ├── heroes/            # YAML 英雄定义
+│   │   ├── lion.yaml          # Lion（全部 DataDriven）
+│   │   ├── lina.yaml          # Lina（YAML + Lua 被动）
+│   │   ├── juggernaut.yaml    # Juggernaut（Lua 为主）
+│   │   ├── sven.yaml          # Sven（追踪投射物 + AoE 落点）
+│   │   ├── earthshaker.yaml   # Earthshaker（直线击退 + thinker）
+│   │   └── pudge.yaml         # Pudge（勾拉 + 引导吸血）
+│   └── scripts/
+│       ├── abilities/     # Lua 技能实现
+│       └── modifiers/     # Lua 修饰器（hook 拖拽、thinker 占位、测试用例等）
 ├── tests/                 # GoogleTest 测试套件（125 个测试）
 │   ├── test_event_bus.cpp
 │   ├── test_unit_basic.cpp
@@ -160,7 +161,7 @@ dota2_skill/
          damage: "%damage"
    ```
 
-3. **对于 Scripted 技能**：创建 `scripts/abilities/<ability_name>.lua`
+3. **对于 Scripted 技能**：创建 `data/scripts/abilities/<ability_name>.lua`
 
    ```lua
    return {
@@ -342,7 +343,7 @@ register_modifier("modifier_pudge_hook_drag", {
 
 ## 编译时定义
 
-- `DOTA_SCRIPT_DIR`：`scripts/` 的绝对路径（在 `dota_core` 目标上设置）
+- `DOTA_SCRIPT_DIR`：`data/scripts/` 的绝对路径（在 `dota_core` 目标上设置）
 - `DOTA_DATA_DIR`：`data/` 的绝对路径（在测试和 duel 目标上设置）
 
 ## 编辑器设置

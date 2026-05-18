@@ -101,7 +101,7 @@ target_include_directories(dota_core PUBLIC include)
 target_compile_features(dota_core PUBLIC cxx_std_20)
 target_link_libraries(dota_core PUBLIC yaml-cpp::yaml-cpp sol2)
 target_compile_definitions(dota_core PUBLIC
-    DOTA_SCRIPT_DIR=\"${CMAKE_SOURCE_DIR}/scripts\")
+    DOTA_SCRIPT_DIR=\"${CMAKE_SOURCE_DIR}/data/scripts\")
 
 # --- Example ---
 add_executable(duel examples/duel.cpp)

@@ -29,7 +29,7 @@ public:
     const LuaModifierRegistry& modifier_registry() const;
 
     // 传递给 load_module 的相对路径会相对于此根目录解析。
-    // 默认值是 DOTA_SCRIPT_DIR（仓库的 scripts/ 目录），
+    // 默认值是 DOTA_SCRIPT_DIR（仓库的 data/scripts/ 目录），
     // 测试和 duel 示例都依赖于此。
     void               set_script_root(std::string root) { script_root_ = std::move(root); }
     const std::string& script_root() const               { return script_root_; }
