@@ -14,7 +14,9 @@
 
 namespace dota {
 
-World::World() : projectiles_(std::make_unique<ProjectileManager>()) {}
+World::World() : projectiles_(std::make_unique<ProjectileManager>()) {
+    projectiles_->set_world(this);
+}
 World::~World() = default;
 
 ProjectileManager& World::projectiles() {
@@ -30,6 +32,8 @@ Unit* World::spawn(std::string name, Team team, UnitStats stats, Vec2 position) 
     unit->set_world(this);
     Unit* raw = unit.get();
     units_.push_back(std::move(unit));
+    UnitSpawnedEvent ev{raw->id()};
+    events_.publish(ev);
     return raw;
 }
 

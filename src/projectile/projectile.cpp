@@ -12,12 +12,13 @@ namespace dota {
 // --- LinearProjectile
 
 LinearProjectile::LinearProjectile(const Params& p)
-    : pos_(p.origin)
-    , dir_(normalized(p.direction))
+    : dir_(normalized(p.direction))
     , speed_(p.speed)
+    , total_length_(p.length)
     , remaining_distance_(p.length)
     , width_(p.width)
     , destroy_on_first_hit_(p.destroy_on_first_hit) {
+    pos_         = p.origin;
     source_id_   = p.source_id;
     source_team_ = p.source_team;
 }
@@ -25,6 +26,8 @@ LinearProjectile::LinearProjectile(const Params& p)
 bool LinearProjectile::advance(double dt, World& world) {
     if (remaining_distance_ <= 0.0 || speed_ <= 0.0) {
         if (on_finish_) on_finish_();
+        ProjectileFinishedEvent fin{pid_};
+        world.events().publish(fin);
         return false;
     }
     const double step = std::min(speed_ * dt, remaining_distance_);
@@ -39,11 +42,15 @@ bool LinearProjectile::advance(double dt, World& world) {
             already_hit_.insert(u->id());
             continue;
         }
+        ProjectileHitEvent hit{pid_, u->id(), u->position()};
+        world.events().publish(hit);
         if (on_hit_) on_hit_(*u, u->position());
         already_hit_.insert(u->id());
         if (destroy_on_first_hit_) {
             pos_ = next;
             if (on_finish_) on_finish_();
+            ProjectileFinishedEvent fin{pid_};
+            world.events().publish(fin);
             return false;
         }
     }
@@ -52,6 +59,8 @@ bool LinearProjectile::advance(double dt, World& world) {
     remaining_distance_ -= step;
     if (remaining_distance_ <= 0.0) {
         if (on_finish_) on_finish_();
+        ProjectileFinishedEvent fin{pid_};
+        world.events().publish(fin);
         return false;
     }
     return true;
@@ -60,10 +69,10 @@ bool LinearProjectile::advance(double dt, World& world) {
 // --- TrackingProjectile
 
 TrackingProjectile::TrackingProjectile(const Params& p)
-    : pos_(p.origin)
-    , target_id_(p.target_id)
+    : target_id_(p.target_id)
     , speed_(p.speed)
     , dodgeable_(p.dodgeable) {
+    pos_         = p.origin;
     source_id_   = p.source_id;
     source_team_ = p.source_team;
     (void)dodgeable_;
@@ -73,12 +82,16 @@ bool TrackingProjectile::advance(double dt, World& world) {
     Unit* target = world.find(target_id_);
     if (!target || !target->alive()) {
         if (on_finish_) on_finish_();
+        ProjectileFinishedEvent fin{pid_};
+        world.events().publish(fin);
         return false;
     }
     // Untargetable / OutOfGame 中途逃逸 → fizzle
     if (target->modifiers().has_state(ModifierState::Untargetable) ||
         target->modifiers().has_state(ModifierState::OutOfGame)) {
         if (on_finish_) on_finish_();
+        ProjectileFinishedEvent fin{pid_};
+        world.events().publish(fin);
         return false;
     }
 
@@ -87,7 +100,11 @@ bool TrackingProjectile::advance(double dt, World& world) {
     const double step = speed_ * dt;
     if (dist <= step + 1e-6) {
         pos_ = target->position();
+        ProjectileHitEvent hit{pid_, target->id(), pos_};
+        world.events().publish(hit);
         if (on_hit_) on_hit_(*target, pos_);
+        ProjectileFinishedEvent fin{pid_};
+        world.events().publish(fin);
         return false;
     }
     const Vec2 dir = normalized(to_target);

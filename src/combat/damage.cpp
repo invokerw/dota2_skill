@@ -1,12 +1,25 @@
 #include "dota/combat/damage.hpp"
 
 #include "dota/core/unit.hpp"
+#include "dota/core/world.hpp"
 #include "dota/modifier/manager.hpp"
 
 #include <algorithm>
 #include <cmath>
 
 namespace dota {
+
+namespace {
+
+void publish_damage_applied(Unit& victim, EntityId attacker_id, DamageType type,
+                            std::uint32_t flags, double pre, double applied) {
+    World* w = victim.world();
+    if (!w) return;
+    DamageAppliedEvent ev{attacker_id, victim.id(), type, pre, applied, flags};
+    w->events().publish(ev);
+}
+
+} // namespace
 
 namespace {
 
@@ -24,6 +37,7 @@ double deal_damage(DamageInstance dmg) {
 
     const EntityId attacker_id = dmg.attacker ? dmg.attacker->id()
                                               : kInvalidEntityId;
+    const double amount_pre_input = dmg.amount;
 
     double amount = dmg.amount;
 
@@ -53,6 +67,8 @@ double deal_damage(DamageInstance dmg) {
         PostTakeDamageEvent post{attacker_id, victim->id(),
                                   dmg.type, dmg.flags, 0.0};
         victim->modifiers().dispatch_post_take_damage(post);
+        publish_damage_applied(*victim, attacker_id, dmg.type, dmg.flags,
+                               amount_pre_input, 0.0);
         return 0.0;
     }
 
@@ -69,6 +85,8 @@ double deal_damage(DamageInstance dmg) {
         PostTakeDamageEvent post{attacker_id, victim->id(),
                                   dmg.type, dmg.flags, 0.0};
         victim->modifiers().dispatch_post_take_damage(post);
+        publish_damage_applied(*victim, attacker_id, dmg.type, dmg.flags,
+                               amount_pre_input, 0.0);
         return 0.0;
     }
 
@@ -79,6 +97,8 @@ double deal_damage(DamageInstance dmg) {
         PostTakeDamageEvent post{attacker_id, victim->id(),
                                   dmg.type, dmg.flags, 0.0};
         victim->modifiers().dispatch_post_take_damage(post);
+        publish_damage_applied(*victim, attacker_id, dmg.type, dmg.flags,
+                               amount_pre_input, 0.0);
         return 0.0;
     }
 
@@ -99,6 +119,9 @@ double deal_damage(DamageInstance dmg) {
 
     // --- (6) 应用生命值变化 ---
     const double applied = victim->apply_raw_damage(std::max(0.0, after_resist));
+
+    publish_damage_applied(*victim, attacker_id, dmg.type, dmg.flags,
+                           amount_pre_input, applied);
 
     // --- (7) 承受伤害后: 反伤, 触发效果 ---
     PostTakeDamageEvent post{attacker_id, victim->id(),
@@ -137,6 +160,12 @@ double deal_heal(HealInstance heal) {
     const double before = target->health();
     target->set_health(before + amount);
     const double applied = target->health() - before;
+
+    if (World* w = target->world()) {
+        HealAppliedEvent ev{heal.healer ? heal.healer->id() : kInvalidEntityId,
+                            target->id(), applied};
+        w->events().publish(ev);
+    }
 
     PostTakeHealEvent post{heal.healer ? heal.healer->id() : kInvalidEntityId,
                             target->id(), applied};

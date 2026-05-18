@@ -18,9 +18,15 @@ public:
     void advance(double dt, World& world);
 
     std::size_t live_count() const { return live_.size(); }
+    const std::vector<std::unique_ptr<Projectile>>& live() const { return live_; }
+
+    void   set_world(World* w) { world_ = w; }
+    World* world() const       { return world_; }
 
 private:
     std::vector<std::unique_ptr<Projectile>> live_;
+    World*   world_{nullptr};
+    EntityId next_pid_{1};
 };
 
 } // namespace dota

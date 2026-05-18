@@ -9,6 +9,28 @@
 
 namespace dota {
 
+namespace {
+
+void publish_cast_started(World* w, EntityId caster, const std::string& ability,
+                          const CastTarget& tgt) {
+    if (!w) return;
+    AbilityCastStartedEvent ev{
+        caster, ability,
+        tgt.unit ? tgt.unit->id() : kInvalidEntityId,
+        tgt.point, tgt.has_point,
+    };
+    w->events().publish(ev);
+}
+
+void publish_cast_finished(World* w, EntityId caster, const std::string& ability,
+                           bool interrupted) {
+    if (!w) return;
+    AbilityCastFinishedEvent ev{caster, ability, interrupted};
+    w->events().publish(ev);
+}
+
+} // namespace
+
 // --- AbilitySpecialValue
 // 技能特殊值
 
@@ -132,6 +154,8 @@ CastError Ability::trigger_cast(const CastTarget& target, World& world,
     pending_target_ = target;
     world_          = &world;
 
+    publish_cast_started(world_, caster_.id(), name_, pending_target_);
+
     if (cast_point_ <= 0.0) {
         CastContext ctx{&caster_, world_, pending_target_, level_};
         on_spell_start(ctx);
@@ -144,6 +168,7 @@ CastError Ability::trigger_cast(const CastTarget& target, World& world,
             cooldown_ = ignore_cooldown ? cooldown_ : cooldown_for_level();
             phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
             phase_timer_ = 0.0;
+            publish_cast_finished(world_, caster_.id(), name_, false);
         }
     } else {
         enter_phase(CastPhase::Casting, cast_point_);
@@ -159,6 +184,8 @@ CastError Ability::order_cast(const CastTarget& target, World& world) {
     pending_target_ = target;
     world_          = &world;
 
+    publish_cast_started(world_, caster_.id(), name_, pending_target_);
+
     // 零施法前摇 → 立即执行, 这样瞬发技能不需要第一次 `advance()` 调用(测试依赖此行为)
     if (cast_point_ <= 0.0) {
         CastContext ctx{&caster_, world_, pending_target_, level_};
@@ -172,6 +199,7 @@ CastError Ability::order_cast(const CastTarget& target, World& world) {
             cooldown_ = cooldown_for_level();
             phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
             phase_timer_ = 0.0;
+            publish_cast_finished(world_, caster_.id(), name_, false);
         }
     } else {
         enter_phase(CastPhase::Casting, cast_point_);
@@ -214,6 +242,7 @@ void Ability::advance(double dt) {
             CastContext ctx{&caster_, world_, pending_target_, level_};
             on_channel_finish(ctx, /*interrupted*/ true);
         }
+        publish_cast_finished(world_, caster_.id(), name_, /*interrupted*/ true);
         // 中断时冷却时间仍然生效(Dota 惯例)
         cooldown_ = cooldown_for_level();
         phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
@@ -235,6 +264,7 @@ void Ability::advance(double dt) {
         on_channel_think(ctx, dt);
         if (phase_timer_ == 0.0) {
             on_channel_finish(ctx, /*interrupted*/ false);
+            publish_cast_finished(world_, caster_.id(), name_, /*interrupted*/ false);
             cooldown_ = cooldown_for_level();
             phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
             world_    = nullptr;
@@ -252,6 +282,7 @@ void Ability::advance(double dt) {
         } else {
             cooldown_ = cooldown_for_level();
             phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
+            publish_cast_finished(world_, caster_.id(), name_, /*interrupted*/ false);
             world_    = nullptr;
         }
         return;
@@ -260,6 +291,7 @@ void Ability::advance(double dt) {
     if (phase_ == CastPhase::Backswing && phase_timer_ == 0.0) {
         cooldown_ = cooldown_for_level();
         phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
+        publish_cast_finished(world_, caster_.id(), name_, /*interrupted*/ false);
         world_    = nullptr;
     }
 }

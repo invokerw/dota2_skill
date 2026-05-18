@@ -22,13 +22,27 @@ public:
 
     // 通用元数据
     EntityId source_id() const { return source_id_; }
+    Team     source_team() const { return source_team_; }
+    EntityId pid() const { return pid_; }
+    void     set_pid(EntityId id) { pid_ = id; }
+    Vec2     position() const { return pos_; }
+
+    // 用于事件 / 渲染的描述查询. 默认为 tracking 风格(无 dir/length/width).
+    virtual bool     is_linear() const { return false; }
+    virtual Vec2     direction() const { return {0.0, 0.0}; }
+    virtual double   speed()     const { return 0.0; }
+    virtual double   length_total() const { return 0.0; }
+    virtual double   width()     const { return 0.0; }
+    virtual EntityId target_id() const { return kInvalidEntityId; }
 
     void set_on_hit(HitCallback cb)    { on_hit_ = std::move(cb); }
     void set_on_finish(FinishCallback cb) { on_finish_ = std::move(cb); }
 
 protected:
+    EntityId       pid_{kInvalidEntityId};
     EntityId       source_id_{kInvalidEntityId};
     Team           source_team_{Team::Neutral};
+    Vec2           pos_{};
     HitCallback    on_hit_;
     FinishCallback on_finish_;
 };
@@ -52,10 +66,16 @@ public:
 
     bool advance(double dt, World& world) override;
 
+    bool   is_linear() const override { return true; }
+    Vec2   direction() const override { return dir_; }
+    double speed()     const override { return speed_; }
+    double length_total() const override { return total_length_; }
+    double width()     const override { return width_; }
+
 private:
-    Vec2   pos_;
     Vec2   dir_;
     double speed_;
+    double total_length_;        // 初始 length, 用于事件 / 渲染
     double remaining_distance_;
     double width_;
     bool   destroy_on_first_hit_;
@@ -78,8 +98,11 @@ public:
 
     bool advance(double dt, World& world) override;
 
+    bool     is_linear() const override { return false; }
+    double   speed()     const override { return speed_; }
+    EntityId target_id() const override { return target_id_; }
+
 private:
-    Vec2     pos_;
     EntityId target_id_;
     double   speed_;
     bool     dodgeable_;

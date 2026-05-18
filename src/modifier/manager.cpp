@@ -1,9 +1,32 @@
 #include "dota/modifier/manager.hpp"
 
+#include "dota/core/unit.hpp"
+#include "dota/core/world.hpp"
+
 #include <algorithm>
 #include <limits>
 
 namespace dota {
+
+namespace {
+
+void publish_modifier_added(Unit& owner, Modifier& m) {
+    World* w = owner.world();
+    if (!w) return;
+    ModifierAddedEvent ev{owner.id(), m.name(),
+                          m.permanent() ? -1.0 : m.duration_remaining(),
+                          m.stack_count()};
+    w->events().publish(ev);
+}
+
+void publish_modifier_removed(Unit& owner, const std::string& name) {
+    World* w = owner.world();
+    if (!w) return;
+    ModifierRemovedEvent ev{owner.id(), name};
+    w->events().publish(ev);
+}
+
+} // namespace
 
 ModifierManager::ModifierManager(Unit& owner) : owner_(owner) {}
 
@@ -14,6 +37,7 @@ Modifier* ModifierManager::attach(std::unique_ptr<Modifier> mod) {
     Modifier* raw = mod.get();
     modifiers_.push_back(std::move(mod));
     raw->on_created();
+    publish_modifier_added(owner_, *raw);
     return raw;
 }
 
@@ -33,8 +57,10 @@ Modifier* ModifierManager::attach_motion(std::unique_ptr<Modifier> mod) {
     // 移除现有 MC(任何 priority 不高于新 MC 的, 被替换).
     for (auto& m : modifiers_) {
         if (m && m->is_motion_controller()) {
+            const std::string removed_name = m->name();
             m->on_destroyed();
             m.reset();
+            publish_modifier_removed(owner_, removed_name);
         }
     }
     modifiers_.erase(
@@ -45,6 +71,7 @@ Modifier* ModifierManager::attach_motion(std::unique_ptr<Modifier> mod) {
     Modifier* raw = mod.get();
     modifiers_.push_back(std::move(mod));
     raw->on_created();
+    publish_modifier_added(owner_, *raw);
     return raw;
 }
 
@@ -64,12 +91,19 @@ bool ModifierManager::remove(const std::string& name) {
     if (it == modifiers_.end()) return false;
     (*it)->on_destroyed();
     modifiers_.erase(it);
+    publish_modifier_removed(owner_, name);
     return true;
 }
 
 void ModifierManager::remove_all() {
-    for (auto& m : modifiers_) m->on_destroyed();
+    std::vector<std::string> removed;
+    removed.reserve(modifiers_.size());
+    for (auto& m : modifiers_) {
+        removed.push_back(m->name());
+        m->on_destroyed();
+    }
     modifiers_.clear();
+    for (const auto& n : removed) publish_modifier_removed(owner_, n);
 }
 
 Modifier* ModifierManager::find(const std::string& name) {
@@ -92,9 +126,13 @@ void ModifierManager::advance(double dt) {
     for (auto& m : modifiers_) snapshot.push_back(m.get());
     for (Modifier* m : snapshot) m->advance(dt);
 
-    // 清除过期的修饰器. 在移除前调用 on_destroyed(), 确保指针仍然有效; 然后就地擦除
+    // 收集 expired 的名字, 调用 on_destroyed, 擦除, 然后发事件
+    std::vector<std::string> expired_names;
     for (auto& m : modifiers_) {
-        if (m && m->expired()) m->on_destroyed();
+        if (m && m->expired()) {
+            expired_names.push_back(m->name());
+            m->on_destroyed();
+        }
     }
     modifiers_.erase(
         std::remove_if(modifiers_.begin(), modifiers_.end(),
@@ -102,6 +140,7 @@ void ModifierManager::advance(double dt) {
                            return m && m->expired();
                        }),
         modifiers_.end());
+    for (const auto& n : expired_names) publish_modifier_removed(owner_, n);
 }
 
 std::uint32_t ModifierManager::aggregated_states() const {

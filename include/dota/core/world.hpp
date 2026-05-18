@@ -31,6 +31,78 @@ struct AttackLandedEvent {
     bool     missed{false};
 };
 
+// --- 录像 / 可视化用事件(Stage A)---
+// 这些事件不影响游戏逻辑, 仅供 Recorder / 可视化层订阅.
+
+struct UnitSpawnedEvent {
+    EntityId id;
+};
+
+struct AbilityCastStartedEvent {
+    EntityId    caster;
+    std::string ability;
+    EntityId    target_unit{kInvalidEntityId};
+    Vec2        target_point{};
+    bool        has_point{false};
+};
+
+struct AbilityCastFinishedEvent {
+    EntityId    caster;
+    std::string ability;
+    bool        interrupted{false};
+};
+
+// 投射物 spawn. linear=true 时 dir/length/width 有效;
+// linear=false (tracking) 时 target 有效, dir/length/width 为零.
+struct ProjectileSpawnedEvent {
+    EntityId pid;
+    EntityId source;
+    Vec2     origin;
+    bool     linear{true};
+    Vec2     dir{};
+    double   speed{0.0};
+    double   length{0.0};
+    double   width{0.0};
+    EntityId target{kInvalidEntityId};
+};
+
+struct ProjectileHitEvent {
+    EntityId pid;
+    EntityId victim;
+    Vec2     point;
+};
+
+struct ProjectileFinishedEvent {
+    EntityId pid;
+};
+
+struct ModifierAddedEvent {
+    EntityId    unit;
+    std::string name;
+    double      duration;   // < 0 表示永久
+    int         stacks;
+};
+
+struct ModifierRemovedEvent {
+    EntityId    unit;
+    std::string name;
+};
+
+struct DamageAppliedEvent {
+    EntityId      attacker;        // 可能为 kInvalidEntityId
+    EntityId      victim;
+    DamageType    type;
+    double        amount_pre;      // 进入管线时(放大之后, resistance 之前)的数值
+    double        amount_applied;  // 实际扣血量
+    std::uint32_t flags;
+};
+
+struct HealAppliedEvent {
+    EntityId healer;   // 可能为 kInvalidEntityId
+    EntityId target;
+    double   amount;
+};
+
 class World {
 public:
     // 30Hz 固定时钟模拟

@@ -1,12 +1,29 @@
 #include "dota/projectile/manager.hpp"
 
+#include "dota/core/world.hpp"
+
 #include <algorithm>
 
 namespace dota {
 
 Projectile* ProjectileManager::spawn(std::unique_ptr<Projectile> p) {
     Projectile* raw = p.get();
+    raw->set_pid(next_pid_++);
     live_.push_back(std::move(p));
+    if (world_) {
+        ProjectileSpawnedEvent ev{
+            raw->pid(),
+            raw->source_id(),
+            raw->position(),
+            raw->is_linear(),
+            raw->direction(),
+            raw->speed(),
+            raw->length_total(),
+            raw->width(),
+            raw->target_id(),
+        };
+        world_->events().publish(ev);
+    }
     return raw;
 }
 
