@@ -150,7 +150,7 @@ target_compile_definitions(skill_tester PRIVATE
 - 底部 100 px 高的 ability bar, 4 个槽 (英雄技能少则空置), 显示 ability 短名 + cd 倒计时 + mana cost.
 - 鼠标 hover 时 raygui 默认高亮.
 
-**Status**: Not Started
+**Status**: Complete
 
 ### S3 UI 布局
 

@@ -1,9 +1,14 @@
 // 技能测试器: 选英雄 -> 选技能 -> 选目标 / 位置 -> 释放, 看效果.
-// 第一阶段 (S2) 仅有壳子: 默认 caster + 3 dummy 出现在战场, 没有 UI 选择.
 //
-// 控制 (S2): R 重置, ESC 退出.
+// 控制:
+//   左侧栏点击切换英雄 (= 重建 World).
+//   底部技能槽点击, 或按 1/2/3/4 选中技能 (高亮).
+//   R 重置当前英雄, SPACE 暂停, ESC 退出.
+//
+// 实际施法交互 (瞄准 / 释放) 留到 Stage S4.
 
 #include "dota/ability/ability.hpp"
+#include "dota/ability/behavior.hpp"
 #include "dota/ability/registry.hpp"
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
@@ -14,6 +19,7 @@
 #include "dota/tools/hero_catalog.hpp"
 
 #include "raylib.h"
+#include "raygui.h"
 #include "visual_common.hpp"
 
 #include <algorithm>
@@ -35,6 +41,11 @@ namespace {
 
 constexpr int kWindowW = 1280;
 constexpr int kWindowH = 720;
+
+// UI 布局参数. 战场区在 [kSidePanelW, kWindowW] x [0, kWindowH - kAbilityBarH].
+constexpr int kSidePanelW = 220;   // 左侧英雄列表面板宽
+constexpr int kAbilityBarH = 96;   // 底部技能栏高度
+constexpr int kAbilitySlotMax = 4; // 技能槽最大数量, 多余的不显示
 
 std::string data_dir() {
     if (const char* d = std::getenv("DOTA_DATA_DIR")) return d;
@@ -208,6 +219,25 @@ private:
 
 } // namespace
 
+// raygui 用 ';' 分隔的字符串作为列表项. 把英雄列表拼成一段.
+std::string build_hero_list_csv(const HeroCatalog& cat) {
+    std::string s;
+    for (std::size_t i = 0; i < cat.heroes().size(); ++i) {
+        if (i) s.push_back(';');
+        s += cat.heroes()[i].yaml_name;
+    }
+    return s;
+}
+
+// 把 ability behavior 翻成短标签, 显示在按钮上.
+const char* behavior_label(std::uint32_t b) {
+    if (has_flag(b, BehaviorFlag::Channelled))   return "CHN";
+    if (has_flag(b, BehaviorFlag::PointTarget))  return "PT";
+    if (has_flag(b, BehaviorFlag::UnitTarget))   return "UT";
+    if (has_flag(b, BehaviorFlag::NoTarget))     return "NT";
+    return "?";
+}
+
 int main() {
     HeroCatalog catalog;
     try {
@@ -225,12 +255,36 @@ int main() {
     SetTargetFPS(60);
 
     Scene scene(catalog);
+
+    // 战场视图: 把战场区域居中到 [kSidePanelW, kWindowW] x [0, kWindowH - kAbilityBarH].
     ViewCamera cam;
+    const int field_x0 = kSidePanelW;
+    const int field_x1 = kWindowW;
+    const int field_y0 = 0;
+    const int field_y1 = kWindowH - kAbilityBarH;
+    cam.window_w = field_x1 - field_x0;
+    cam.window_h = field_y1 - field_y0;
+    cam.origin_x = static_cast<float>(field_x0) + cam.window_w * 0.5f;
+    cam.origin_y = static_cast<float>(field_y0) + cam.window_h * 0.5f;
+
+    const std::string hero_csv = build_hero_list_csv(catalog);
+    int  hero_scroll  = 0;
+    int  hero_active  = 0;
+    int  selected_ability = -1;   // S3 仅记录选择, 不施法
     bool paused = false;
 
     while (!WindowShouldClose()) {
         if (IsKeyPressed(KEY_SPACE)) paused = !paused;
-        if (IsKeyPressed(KEY_R))     { scene.rebuild_with_hero(scene.hero_index()); paused = false; }
+        if (IsKeyPressed(KEY_R))     { scene.rebuild_with_hero(scene.hero_index()); selected_ability = -1; paused = false; }
+
+        // 数字键 1-4 选中技能槽 (前提是该槽存在)
+        const int key_slots[] = {KEY_ONE, KEY_TWO, KEY_THREE, KEY_FOUR};
+        const int slot_count =
+            std::min<int>(kAbilitySlotMax,
+                          static_cast<int>(scene.caster_abilities().size()));
+        for (int i = 0; i < slot_count; ++i) {
+            if (IsKeyPressed(key_slots[i])) selected_ability = i;
+        }
 
         const float dt_raw = GetFrameTime();
         const double dt = paused ? 0.0 : std::min(static_cast<double>(dt_raw), 0.05);
@@ -239,20 +293,85 @@ int main() {
         BeginDrawing();
         ClearBackground(Color{18, 22, 28, 255});
 
+        // --- 战场区域裁剪 + 网格 + 单位 + 投射物 + 飘字 ---
+        BeginScissorMode(field_x0, field_y0, cam.window_w, cam.window_h);
         dota::visual::draw_grid(cam, -1200, 1200, -800, 800, 200);
-
         for (const auto& p : scene.render_projectiles()) dota::visual::draw_projectile(cam, p);
         for (const auto& u : scene.render_units())       dota::visual::draw_unit(cam, u);
         for (auto& f : scene.texts())
             dota::visual::draw_floating_text(cam, f, scene.world()->time());
+        EndScissorMode();
 
+        // --- HUD 顶部状态行 ---
         DrawText(TextFormat("hero: %s   t = %.2fs%s",
                             catalog.heroes()[scene.hero_index()].yaml_name.c_str(),
                             scene.world()->time(),
                             paused ? "  [PAUSED]" : ""),
-                 12, 10, 20, RAYWHITE);
-        DrawText("R reset   SPACE pause   ESC quit  (UI in S3)",
-                 12, kWindowH - 26, 16, Color{160, 160, 160, 255});
+                 field_x0 + 12, 10, 20, RAYWHITE);
+
+        // --- 左侧英雄列表 ---
+        DrawRectangle(0, 0, kSidePanelW, kWindowH, Color{26, 30, 36, 255});
+        GuiPanel(Rectangle{0, 0, (float)kSidePanelW, 28.0f}, "Heroes");
+        const int prev_active = hero_active;
+        GuiListView(Rectangle{8, 32, (float)(kSidePanelW - 16),
+                              (float)(kWindowH - 32 - 16)},
+                    hero_csv.c_str(), &hero_scroll, &hero_active);
+        if (hero_active >= 0 && hero_active != prev_active &&
+            static_cast<std::size_t>(hero_active) != scene.hero_index()) {
+            scene.rebuild_with_hero(static_cast<std::size_t>(hero_active));
+            selected_ability = -1;
+            paused = false;
+        }
+
+        // --- 底部技能栏 ---
+        const int bar_y = kWindowH - kAbilityBarH;
+        DrawRectangle(kSidePanelW, bar_y, kWindowW - kSidePanelW, kAbilityBarH,
+                      Color{26, 30, 36, 255});
+        const int slots = std::min<int>(kAbilitySlotMax,
+                                        static_cast<int>(scene.caster_abilities().size()));
+        const float slot_w = 200.0f;
+        const float slot_h = 76.0f;
+        const float slot_y = static_cast<float>(bar_y) + (kAbilityBarH - slot_h) * 0.5f;
+        const float slots_total_w = slot_w * static_cast<float>(slots) + 8.0f * (slots - 1);
+        const float slot_x0 = static_cast<float>(kSidePanelW) +
+                              (kWindowW - kSidePanelW - slots_total_w) * 0.5f;
+        for (int i = 0; i < slots; ++i) {
+            Ability* ab = scene.caster_abilities()[i];
+            const float x = slot_x0 + i * (slot_w + 8.0f);
+            const Rectangle r{x, slot_y, slot_w, slot_h};
+            const bool selected = (selected_ability == i);
+            if (selected) {
+                DrawRectangleRec({r.x - 2, r.y - 2, r.width + 4, r.height + 4},
+                                 Color{255, 215, 80, 255});
+            }
+            // 用空 label 的按钮拿点击, 自己画文字 (raygui button 单行排版有限).
+            if (GuiButton(r, "")) selected_ability = i;
+            const double cd = ab->cooldown_remaining();
+            const double mp = ab->mana_cost_for_level();
+            const char* tag = behavior_label(ab->behavior());
+            const Color line1_c = ab->name().empty() ? GRAY : RAYWHITE;
+            DrawText(TextFormat("[%d] %s", i + 1, ab->name().c_str()),
+                     static_cast<int>(r.x) + 8,
+                     static_cast<int>(r.y) + 8,
+                     14, line1_c);
+            const Color line2_c = (cd > 0.0) ? Color{220, 120, 120, 255}
+                                              : Color{180, 180, 180, 255};
+            DrawText(TextFormat("%s  CD %.1fs  MP %d", tag, cd,
+                                static_cast<int>(mp)),
+                     static_cast<int>(r.x) + 8,
+                     static_cast<int>(r.y) + 30,
+                     14, line2_c);
+        }
+        if (slots == 0) {
+            DrawText("(no active abilities)",
+                     kSidePanelW + 16, bar_y + kAbilityBarH / 2 - 8,
+                     16, Color{180, 180, 180, 255});
+        }
+
+        // --- 帮助文字 (右下角) ---
+        DrawText("R reset   SPACE pause   1-4 select   ESC quit  (cast in S4)",
+                 kSidePanelW + 12, kWindowH - kAbilityBarH - 22,
+                 14, Color{160, 160, 160, 255});
 
         EndDrawing();
     }
