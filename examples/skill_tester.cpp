@@ -93,6 +93,13 @@ public:
         if (idx >= catalog_.heroes().size()) return;
         hero_index_ = idx;
 
+        // 销毁顺序: World 持有的 ScriptedAbility 内部 sol::table / sol::function
+        // 引用了 lua_ 拥有的 lua_State. 必须先销毁 world_ (连带 reg_), 再销毁
+        // lua_, 否则 sol 析构时会对已销毁的 state 调 luaL_unref 触发 segfault.
+        world_.reset();
+        reg_.reset();
+        lua_.reset();
+
         lua_   = std::make_unique<LuaState>();
         reg_   = std::make_unique<AbilityRegistry>();
         reg_->set_lua(lua_.get());

@@ -188,6 +188,7 @@ add_executable(dota_tests
     tests/test_recorder.cpp
     tests/test_replay_player.cpp
     tests/test_hero_catalog.cpp
+    tests/test_skill_tester_smoke.cpp
 )
 target_link_libraries(dota_tests PRIVATE dota_core GTest::gtest_main)
 target_compile_definitions(dota_tests PRIVATE

@@ -174,20 +174,28 @@ void World::advance(double dt) {
 void World::tick_once() {
     time_ += kTickDt;
 
+    // 注意: 下面的循环中, modifier / ability 钩子可能通过 Lua 回调
+    // World::create_thinker / spawn, 进而向 units_ push_back. 当 vector 扩容时
+    // 旧 buffer 会被释放, 任何范围 for 拿到的 reference / iterator 都会悬挂
+    // (heap-use-after-free). 因此在每个循环开始前 freeze 一次 size, 用索引
+    // 迭代 -- 每次 units_[i] 都重新解引用当前 buffer, 既安全又保留"本 tick
+    // 不处理新 spawn 单位"的原语义 (与投射物延一帧的设计一致).
+    const auto tick_units = [&](auto&& fn) {
+        const std::size_t n = units_.size();
+        for (std::size_t i = 0; i < n; ++i) {
+            auto& u = units_[i];
+            if (u->alive()) fn(*u);
+        }
+    };
+
     // 在处理指令前推进 modifier 持续时间/思考, 使即将过期的眩晕能让单位在同一 tick 内攻击
-    for (auto& u : units_) {
-        if (u->alive()) u->tick_modifiers(kTickDt);
-    }
+    tick_units([&](Unit& u) { u.tick_modifiers(kTickDt); });
     // motion controller 在普通 modifier tick 之后, ability tick 之前生效,
     // 使被击退的单位在同 tick 内可被技能命中其新位置(与 Dota2 行为一致).
-    for (auto& u : units_) {
-        if (u->alive()) u->modifiers().advance_motion(kTickDt);
-    }
+    tick_units([&](Unit& u) { u.modifiers().advance_motion(kTickDt); });
     // 在 modifier 之后推进技能(施法前摇计时器, 引导思考, 冷却),
     // 使刚过期的眩晕不会打断本 tick 应该完成的施法
-    for (auto& u : units_) {
-        if (u->alive()) u->tick_abilities(kTickDt);
-    }
+    tick_units([&](Unit& u) { u.tick_abilities(kTickDt); });
 
     // 投射物在 ability tick 之后; 这样 ability 在本 tick 中 spawn 的投射物
     // 会有一帧的延迟(与 Dota 一致), 给 hit 回调留出在下个 tick 引发
@@ -195,9 +203,7 @@ void World::tick_once() {
     projectiles_->advance(kTickDt, *this);
 
     // 首先递减所有攻击冷却, 使在同一 tick 内安排新攻击保持一致
-    for (auto& u : units_) {
-        if (u->alive()) u->tick_attack_cd(kTickDt);
-    }
+    tick_units([&](Unit& u) { u.tick_attack_cd(kTickDt); });
 
     // 处理未完成的攻击指令. 快照 orders_, 因为攻击可能发布移除指令的事件(例如死亡时)
     auto snapshot = orders_;
