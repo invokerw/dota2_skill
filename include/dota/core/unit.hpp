@@ -6,12 +6,26 @@
 #include "dota/modifier/manager.hpp"
 #include "dota/modifier/modifier.hpp"  // for DamageType used in apply_damage
 
+#include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace dota {
 
 class World;
+
+// 移动指令路径. v1 仅使用单一航点(vector size == 1); 预留 vector + index
+// 以便未来 A* 一次返回多个航点, 走完一个再切到下一个.
+struct MovePath {
+    std::vector<Vec2> waypoints;
+    std::size_t       index{0};
+
+    bool empty() const { return index >= waypoints.size(); }
+    Vec2 current()     const { return waypoints[index]; }
+    Vec2 final_point() const { return waypoints.back(); }
+};
 
 // 可控实体(英雄或小兵)的基础属性和战斗状态
 //
@@ -108,6 +122,20 @@ public:
     bool can_cast()   const;
     bool can_move()   const;
 
+    // --- 移动指令
+    // 设置目的地. World 上若挂了 Pathfinder 会用 find_path 填充多航点; 否则单航点.
+    void issue_move(Vec2 target);
+    // 清除当前指令.
+    void stop_move();
+    // 当前最终目的地; 没有指令时 nullopt.
+    std::optional<Vec2> move_target() const;
+    // 当前路径只读视图(供 World::tick_movement 与调试 UI 用).
+    const MovePath& move_path() const { return move_path_; }
+    // 内部: tick_movement 在到达终点航点后清空.
+    void clear_move_path()       { move_path_ = {}; }
+    // 内部: 推进到下个航点.
+    void advance_move_waypoint() { ++move_path_.index; }
+
     // 应用原始生命值/魔法值变化. 由伤害管线在抗性计算后使用.
     void heal(double amount);
     void spend_mana(double amount);
@@ -161,6 +189,8 @@ private:
     std::unique_ptr<ModifierManager> modifiers_;
     std::unique_ptr<AbilityManager>  abilities_;
     World* world_{nullptr};
+
+    MovePath move_path_{};
 };
 
 } // namespace dota

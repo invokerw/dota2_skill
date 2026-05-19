@@ -198,6 +198,63 @@ void World::stop_attack(Unit& attacker) {
         orders_.end());
 }
 
+void World::fill_move_path(Unit& u, Vec2 target, MovePath& out) {
+    out.waypoints.clear();
+    out.index = 0;
+    if (pathfinder_) {
+        auto pts = pathfinder_->find_path(u.position(), target);
+        if (!pts.empty()) {
+            out.waypoints = std::move(pts);
+            return;
+        }
+    }
+    out.waypoints.push_back(target);
+}
+
+void World::tick_movement(double dt) {
+    if (dt <= 0.0) return;
+    constexpr double kEps = 1e-6;
+    // 同 tick_once 中的 tick_units 模式: 用索引迭代避免 set_position 触发的 Lua
+    // 钩子在 vector 扩容时让 reference 悬挂.
+    const std::size_t n = units_.size();
+    for (std::size_t i = 0; i < n; ++i) {
+        Unit* u = units_[i].get();
+        if (!u || !u->alive()) continue;
+        if (u->move_path().empty()) continue;
+        if (!u->can_move()) continue;
+        // 任何 motion controller 正在驱动 -> 暂停指令式移动. KB / Hook 仍按其
+        // 优先级生效, 结束后玩家原指令自然续走.
+        bool has_mc = false;
+        for (const auto& m : u->modifiers().all()) {
+            if (m && m->is_motion_controller()) { has_mc = true; break; }
+        }
+        if (has_mc) continue;
+
+        const double speed = u->move_speed();
+        if (speed <= 0.0) continue;
+        const double step = speed * dt;
+        if (step <= 0.0) continue;
+
+        const Vec2 pos    = u->position();
+        const Vec2 wp     = u->move_path().current();
+        const Vec2 to_wp  = wp - pos;
+        const double remain = length(to_wp);
+
+        // 到达当前航点 -> 切到下一个(或清空 path).
+        if (remain <= step + kEps) {
+            u->set_position(wp);
+            u->advance_move_waypoint();
+            if (u->move_path().empty()) u->clear_move_path();
+            continue;
+        }
+
+        const Vec2 dir = to_wp * (1.0 / remain);
+        Vec2 desired = pos + dir * step;
+        // Stage 2 在此处插入 wall trace 切线滑动. 当前直接采用 desired.
+        u->set_position(desired);
+    }
+}
+
 void World::advance(double dt) {
     if (dt <= 0.0) return;
     // 细分为完整的 tick, 使行为具有确定性, 无论调用者的 `dt` 有多粗糙
@@ -227,6 +284,10 @@ void World::tick_once() {
     // motion controller 在普通 modifier tick 之后, ability tick 之前生效,
     // 使被击退的单位在同 tick 内可被技能命中其新位置(与 Dota2 行为一致).
     tick_units([&](Unit& u) { u.modifiers().advance_motion(kTickDt); });
+    // 玩家指令式移动: 在 motion controller 之后, ability 之前. 通过 set_position
+    // 改坐标 -- moved_this_tick_for_collision 自动置位, 末尾的 resolve_unit_collisions
+    // 兜底分离重叠.
+    tick_movement(kTickDt);
     // 在 modifier 之后推进技能(施法前摇计时器, 引导思考, 冷却),
     // 使刚过期的眩晕不会打断本 tick 应该完成的施法
     tick_units([&](Unit& u) { u.tick_abilities(kTickDt); });

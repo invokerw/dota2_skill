@@ -198,4 +198,24 @@ void Unit::tick_abilities(double dt) {
     abilities_->advance(dt);
 }
 
+void Unit::issue_move(Vec2 target) {
+    move_path_.waypoints.clear();
+    move_path_.index = 0;
+    if (world_) {
+        world_->fill_move_path(*this, target, move_path_);
+    } else {
+        // 无 World 上下文时(测试用裸 Unit) 退化为单航点
+        move_path_.waypoints.push_back(target);
+    }
+}
+
+void Unit::stop_move() {
+    move_path_ = {};
+}
+
+std::optional<Vec2> Unit::move_target() const {
+    if (move_path_.empty()) return std::nullopt;
+    return move_path_.final_point();
+}
+
 } // namespace dota

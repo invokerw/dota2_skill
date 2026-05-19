@@ -14,6 +14,16 @@ namespace dota {
 class ProjectileManager;
 class LuaState;
 
+// 静态地形寻路接口. 默认 World 不挂 Pathfinder, issue_move 退化为单航点
+// {target}. A* 实现是后续阶段的事; 此处仅留接口.
+class Pathfinder {
+public:
+    virtual ~Pathfinder() = default;
+    // 返回从 start 到 target 的航点序列. 第一个航点应是首个有意义的中转点
+    // (不必包含 start). 失败时返回空 vector, World 会回退到 {target}.
+    virtual std::vector<Vec2> find_path(Vec2 start, Vec2 target) = 0;
+};
+
 // --- 标准事件(阶段 1)---
 
 struct UnitDiedEvent {
@@ -169,6 +179,14 @@ public:
     void order_attack(Unit& attacker, Unit& target);
     void stop_attack(Unit& attacker);
 
+    // --- Pathfinder 接口(目前仅留 hook, A* 后续实现)
+    void set_pathfinder(std::unique_ptr<Pathfinder> p) { pathfinder_ = std::move(p); }
+    Pathfinder* pathfinder() const { return pathfinder_.get(); }
+
+    // 由 Unit::issue_move 回调; 把 pathfinder 与 fallback 逻辑集中在 World.
+    // 公开是因为 Unit 持有 World*, 不希望把策略散落到 unit.cpp.
+    void fill_move_path(Unit& u, Vec2 target, MovePath& out);
+
 private:
     struct AttackOrder {
         EntityId attacker;
@@ -177,6 +195,11 @@ private:
 
     void tick_once();
     void resolve_attack(Unit& attacker, Unit& target);
+
+    // 玩家移动指令: 在 motion controller 之后, ability 之前推进每个单位的
+    // move_path. 通过 set_position 改坐标 -- 末尾的 resolve_unit_collisions
+    // 会兜底分离, "moved_this_tick" 标志位也会自动置位.
+    void tick_movement(double dt);
 
     // 软碰撞分离: 把本 tick 起内任何重叠的单位沿连心线推开, 直到无重叠或迭代到上限.
     // "谁动谁推": 仅 a 动 -> 完全推 a; 仅 b 动 -> 完全推 b; 双方都动 -> 各一半.
@@ -191,6 +214,7 @@ private:
     std::uint64_t tick_count_{0};
     Rng      rng_;
     std::unique_ptr<ProjectileManager> projectiles_;
+    std::unique_ptr<Pathfinder>        pathfinder_;
 };
 
 } // namespace dota

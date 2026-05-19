@@ -200,6 +200,7 @@ add_executable(dota_tests
     tests/test_lua_modifier_registry.cpp
     tests/test_purge.cpp
     tests/test_motion_knockback.cpp
+    tests/test_movement_basic.cpp
     tests/test_projectile.cpp
     tests/test_thinker.cpp
     tests/test_hero_sven.cpp
