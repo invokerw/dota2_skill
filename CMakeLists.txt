@@ -76,6 +76,21 @@ if(BUILD_VISUAL)
             "BUILD_EXAMPLES OFF"
             "WITH_PIC ON"
     )
+
+    # raygui: 单 header immediate-mode GUI, 与 raylib 配套. 仅作为头文件下载,
+    # 由 src/visual/raygui_impl.c 提供实现.
+    CPMAddPackage(
+        NAME raygui
+        URL https://github.com/raysan5/raygui/archive/refs/tags/4.0.tar.gz
+        URL_HASH SHA256=299c8fcabda68309a60dc858741b76c32d7d0fc533cdc2539a55988cee236812
+        DOWNLOAD_ONLY YES
+    )
+    if(raygui_ADDED)
+        add_library(raygui STATIC src/visual/raygui_impl.c)
+        target_include_directories(raygui PUBLIC "${raygui_SOURCE_DIR}/src")
+        target_link_libraries(raygui PUBLIC raylib)
+        target_compile_options(raygui PRIVATE -w)
+    endif()
 endif()
 
 # --- Stage 4 dependency: sol2 (header-only C++ bindings) ---
