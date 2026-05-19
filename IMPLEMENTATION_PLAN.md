@@ -20,7 +20,7 @@
 - 新增一个测试 `tests/test_event_emission.cpp`, 订阅每个新事件并断言肉钩场景 (Pudge -> Lina) 触发了 ProjectileSpawned -> ProjectileHit -> DamageApplied -> ModifierAdded 序列.
 - `examples/duel.cpp` 不需要改动.
 
-**Status**: Not Started
+**Status**: Complete (commit 61523af)
 
 ### 新增事件 (放在 `include/dota/core/world.hpp` 现有事件下方)
 
@@ -94,7 +94,7 @@ ctest --test-dir build --output-on-failure
 - `./build/duel_visual` 打开窗口, 显示 6 个英雄 + HP 条, 自动开战, 看见肉钩飞行 + 拖拽 + 伤害飘字 + 单位死亡淡出.
 - 已有测试不变.
 
-**Status**: Not Started
+**Status**: Complete (commit f8f2e9d)
 
 ### 依赖引入
 
@@ -171,7 +171,7 @@ CPMAddPackage(
 - 文件第一行是 header (含 schema_version, kTickRate, hero list); 之后每个事件一行.
 - `tests/test_recorder.cpp`: 加载肉钩场景, record, 重新解析 JSONL, 断言事件计数 / 关键字段非空.
 
-**Status**: Not Started
+**Status**: Complete (commit 6c2bd15)
 
 ### Schema (写到 [doc/recording_schema.md](doc/recording_schema.md))
 
@@ -257,7 +257,7 @@ duel.cpp 用 `argc/argv` 解析 `--record`, 在 World 构造后立刻 new Record
 **Success Criteria**:
 - `./build/duel --record /tmp/d.jsonl` 然后 `./build/duel_visual --replay /tmp/d.jsonl` 视觉效果与实时模式接近一致 (位置 / 投射物 / 死亡).
 
-**Status**: Not Started
+**Status**: Complete
 
 ### 实现
 

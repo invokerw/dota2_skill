@@ -112,6 +112,7 @@ add_library(dota_core
     src/script/lua_state.cpp
     src/script/bindings.cpp
     src/replay/recorder.cpp
+    src/replay/player.cpp
 )
 target_include_directories(dota_core PUBLIC include)
 target_compile_features(dota_core PUBLIC cxx_std_20)
@@ -164,6 +165,7 @@ add_executable(dota_tests
     tests/test_hero_pudge.cpp
     tests/test_event_emission.cpp
     tests/test_recorder.cpp
+    tests/test_replay_player.cpp
 )
 target_link_libraries(dota_tests PRIVATE dota_core GTest::gtest_main)
 target_compile_definitions(dota_tests PRIVATE
