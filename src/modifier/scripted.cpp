@@ -100,6 +100,9 @@ void ScriptedModifier::on_created() {
 
 void ScriptedModifier::on_destroyed() {
     call_simple(lua_, name(), table_, spec_table_, "OnDestroyed", &owner());
+    // 与 C++ 的 MotionKnockback 一致: 拖拽 / 击退 modifier 销毁时, 通知分离
+    // pass 把单位推出 caster (本身 NoUnitCollision 状态刚解除).
+    if (is_motion_controller()) owner().force_moved_for_collision();
 }
 
 void ScriptedModifier::on_stack_changed(int old_count, int new_count) {

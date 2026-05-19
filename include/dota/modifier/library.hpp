@@ -240,6 +240,10 @@ public:
         owner().set_position(pos);
     }
 
+    // 击退 / hook 拖拽结束时, NoUnitCollision 状态刚解除, 单位很可能与
+    // caster 或路径上的单位贴在一起. 通知分离 pass 在下一 tick 把它推出.
+    void on_destroyed() override { owner().force_moved_for_collision(); }
+
 private:
     Vec2   dir_;
     double velocity_;     // 单位/秒

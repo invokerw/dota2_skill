@@ -29,6 +29,8 @@ const ProjectileManager& World::projectiles() const {
 Unit* World::spawn(std::string name, Team team, UnitStats stats, Vec2 position) {
     auto unit = std::make_unique<Unit>(next_id_++, std::move(name), team, stats);
     unit->set_position(position);
+    // 与分离 pass 对齐 baseline -- spawn 当帧不算"移动".
+    unit->snapshot_tick_position();
     unit->set_world(this);
     Unit* raw = unit.get();
     units_.push_back(std::move(unit));
@@ -234,6 +236,14 @@ void World::tick_once() {
     // 链式反应的余地.
     projectiles_->advance(kTickDt, *this);
 
+    // 软碰撞分离: 在 motion / ability / projectile 全部移动完之后, 攻击之前.
+    // 这样攻击距离判定看到的是分离后的位置.
+    resolve_unit_collisions();
+
+    // 分离结束后刷新 baseline -- 下一 tick 的"是否移动过"判定基于此 snapshot,
+    // 即外部代码 (Lua / 测试) 在 tick 间隔中通过 set_position 改坐标也算"动过".
+    tick_units([&](Unit& u) { u.snapshot_tick_position(); });
+
     // 首先递减所有攻击冷却, 使在同一 tick 内安排新攻击保持一致
     tick_units([&](Unit& u) { u.tick_attack_cd(kTickDt); });
 
@@ -261,6 +271,82 @@ void World::tick_once() {
     ++tick_count_;
     TickEndEvent ev{time_, tick_count_};
     events_.publish(ev);
+}
+
+void World::resolve_unit_collisions() {
+    // 收集本 tick 参与碰撞的单位 (alive / 非 Neutral / 无 NoUnitCollision).
+    // Neutral 用于 thinker, 已经常态带 NoUnitCollision, 但保留 team 过滤兜底.
+    struct Body {
+        Unit*  u;
+        double r;
+        bool   moved;
+    };
+    std::vector<Body> bodies;
+    bodies.reserve(units_.size());
+    for (auto& up : units_) {
+        Unit* u = up.get();
+        if (!u || !u->alive()) continue;
+        if (u->team() == Team::Neutral) continue;
+        if (u->modifiers().has_state(ModifierState::NoUnitCollision)) continue;
+        bodies.push_back({u, u->hull_radius(), u->moved_this_tick_for_collision()});
+    }
+    if (bodies.size() < 2) return;
+
+    // 多轮迭代以处理链式挤压. 每轮所有重叠对各推一次.
+    constexpr int kMaxPasses = 4;
+    constexpr double kEps = 1e-6;
+    for (int pass = 0; pass < kMaxPasses; ++pass) {
+        bool any_overlap = false;
+        for (std::size_t i = 0; i < bodies.size(); ++i) {
+            for (std::size_t j = i + 1; j < bodies.size(); ++j) {
+                Body& a = bodies[i];
+                Body& b = bodies[j];
+                const Vec2 pa = a.u->position();
+                const Vec2 pb = b.u->position();
+                double dx = pa.x - pb.x;
+                double dy = pa.y - pb.y;
+                const double min_d = a.r + b.r;
+                const double dist2 = dx * dx + dy * dy;
+                if (dist2 >= min_d * min_d) continue;
+
+                any_overlap = true;
+                double dist = std::sqrt(dist2);
+                // 重叠量先锁住, fallback 选方向时不会被新的 |sa-sb| 污染.
+                const double overlap = min_d - dist;
+                // 圆心几乎重合时, 用 "a 的 tick 起点 -> b 当前位置" 作为方向,
+                // 让 a 沿它走来的方向退回去 (而非随机方向). 起点也重合则退回 b
+                // 的起点反方向; 都不行就给个默认 (1, 0).
+                if (dist < kEps) {
+                    const Vec2 sa = a.u->tick_start_position();
+                    const Vec2 sb = b.u->tick_start_position();
+                    dx = sa.x - sb.x;
+                    dy = sa.y - sb.y;
+                    double sd = std::sqrt(dx * dx + dy * dy);
+                    if (sd < kEps) { dx = 1.0; dy = 0.0; sd = 1.0; }
+                    dist = sd;
+                }
+                const double inv = 1.0 / dist;
+                const double nx = dx * inv;
+                const double ny = dy * inv;
+
+                double share_a = 0.0, share_b = 0.0;
+                if (a.moved && b.moved)      { share_a = 0.5; share_b = 0.5; }
+                else if (a.moved)            { share_a = 1.0; }
+                else if (b.moved)            { share_b = 1.0; }
+                else                         { /* 双方都没动: 保留初始重叠 */ continue; }
+
+                if (share_a > 0.0) {
+                    a.u->set_position({pa.x + nx * overlap * share_a,
+                                       pa.y + ny * overlap * share_a});
+                }
+                if (share_b > 0.0) {
+                    b.u->set_position({pb.x - nx * overlap * share_b,
+                                       pb.y - ny * overlap * share_b});
+                }
+            }
+        }
+        if (!any_overlap) break;
+    }
 }
 
 void World::resolve_attack(Unit& attacker, Unit& target) {

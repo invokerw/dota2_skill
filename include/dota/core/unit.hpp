@@ -58,6 +58,24 @@ public:
     // 几乎不被 buff 改变, 直接读 stats.
     double hull_radius() const { return stats_.hull_radius; }
 
+    // 本 tick 起始位置. World 在 tick 开始时快照, tick 末的软碰撞分离 pass
+    // 据此判断谁是"本 tick 的移动者", 仅推开移动者(双方都动则各推一半).
+    Vec2 tick_start_position() const { return tick_start_pos_; }
+    void snapshot_tick_position() {
+        tick_start_pos_   = position_;
+        force_moved_flag_ = false;
+    }
+
+    // 强制下一次分离 pass 把本单位视为"动过". 用于 hook 拖拽 / 击退结束等
+    // 场景: 单位本 tick 没有再 set_position, 但 NoUnitCollision 状态刚解除,
+    // 需要被分离 pass 推出重叠. 由对应 modifier 在 on_destroyed 中调用.
+    void force_moved_for_collision() { force_moved_flag_ = true; }
+    bool moved_this_tick_for_collision() const {
+        if (force_moved_flag_) return true;
+        return position_.x != tick_start_pos_.x ||
+               position_.y != tick_start_pos_.y;
+    }
+
     // --- 战斗属性(通过 ModifierManager aggregation 聚合)---
     double armor()          const;
     double attack_damage()  const;
@@ -137,6 +155,8 @@ private:
     double mana_{0.0};
     double attack_cd_{0.0};
     Vec2   position_{};
+    Vec2   tick_start_pos_{};
+    bool   force_moved_flag_{false};
 
     std::unique_ptr<ModifierManager> modifiers_;
     std::unique_ptr<AbilityManager>  abilities_;

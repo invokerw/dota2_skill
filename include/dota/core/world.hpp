@@ -178,6 +178,11 @@ private:
     void tick_once();
     void resolve_attack(Unit& attacker, Unit& target);
 
+    // 软碰撞分离: 把本 tick 起内任何重叠的单位沿连心线推开, 直到无重叠或迭代到上限.
+    // "谁动谁推": 仅 a 动 -> 完全推 a; 仅 b 动 -> 完全推 b; 双方都动 -> 各一半.
+    // 跳过死亡 / Neutral / 带 NoUnitCollision 状态的单位.
+    void resolve_unit_collisions();
+
     std::vector<std::unique_ptr<Unit>> units_;
     std::vector<AttackOrder>           orders_;
     EventBus events_;

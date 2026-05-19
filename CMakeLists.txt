@@ -179,6 +179,7 @@ enable_testing()
 add_executable(dota_tests
     tests/test_event_bus.cpp
     tests/test_unit_basic.cpp
+    tests/test_unit_collision.cpp
     tests/test_modifier_property.cpp
     tests/test_modifier_state.cpp
     tests/test_modifier_event.cpp
