@@ -15,7 +15,8 @@
 
 namespace dota::visual {
 
-inline constexpr float kUnitRadiusPx = 26.0f;
+// 渲染端单位圆的最小像素半径. 真实尺寸 = max(hull_radius * zoom, kMinUnitRadiusPx).
+inline constexpr float kMinUnitRadiusPx = 10.0f;
 
 // --- 渲染端中间表示 (live / replay 都填这个) ---
 
@@ -27,6 +28,7 @@ struct RenderUnit {
     double      hp{0.0};
     double      max_hp{0.0};
     Vec2        position{};
+    double      hull_radius{24.0};      // 与 Unit::hull_radius 对齐, 决定渲染圆大小
     std::vector<std::string> modifiers;
     std::string casting_ability;
     float       cast_progress{-1.0f};   // 0..1; <0 = 未知
@@ -83,13 +85,14 @@ inline Color team_color(Team t, bool alive) {
 inline void draw_unit(const ViewCamera& cam, const RenderUnit& u) {
     const Vector2 c = cam.to_screen(u.position);
     const Color body = team_color(u.team, u.alive);
-    DrawCircleV(c, kUnitRadiusPx, body);
+    const float r_px = std::max(kMinUnitRadiusPx, cam.scalar(u.hull_radius));
+    DrawCircleV(c, r_px, body);
     DrawCircleLines(static_cast<int>(c.x), static_cast<int>(c.y),
-                    kUnitRadiusPx, BLACK);
+                    r_px, BLACK);
 
     const float bar_w = 60.0f;
     const float bar_h = 6.0f;
-    const float bar_y = c.y - kUnitRadiusPx - 14.0f;
+    const float bar_y = c.y - r_px - 14.0f;
     const float bar_x = c.x - bar_w * 0.5f;
     const float frac  = u.alive ? static_cast<float>(u.hp / u.max_hp) : 0.0f;
     DrawRectangle(static_cast<int>(bar_x), static_cast<int>(bar_y),
@@ -104,7 +107,7 @@ inline void draw_unit(const ViewCamera& cam, const RenderUnit& u) {
              static_cast<int>(c.x) - name_w / 2,
              static_cast<int>(bar_y) - 16, 14, RAYWHITE);
 
-    const float mod_y = c.y + kUnitRadiusPx + 6.0f;
+    const float mod_y = c.y + r_px + 6.0f;
     float mod_x = c.x - (u.modifiers.size() * 12.0f) * 0.5f;
     for (auto& name : u.modifiers) {
         // 没有 is_debuff 元数据时, 用名字粗判
@@ -127,7 +130,7 @@ inline void draw_unit(const ViewCamera& cam, const RenderUnit& u) {
     if (!u.casting_ability.empty()) {
         const float cb_w = 70.0f;
         const float cb_h = 5.0f;
-        const float cb_y = c.y + kUnitRadiusPx + 22.0f;
+        const float cb_y = c.y + r_px + 22.0f;
         const float cb_x = c.x - cb_w * 0.5f;
         DrawRectangle(static_cast<int>(cb_x), static_cast<int>(cb_y),
                       static_cast<int>(cb_w), static_cast<int>(cb_h),
@@ -169,7 +172,7 @@ inline void draw_floating_text(const ViewCamera& cam, const FloatingText& f, dou
     const int w = MeasureText(f.text.c_str(), 18);
     DrawText(f.text.c_str(),
              static_cast<int>(base.x) - w / 2,
-             static_cast<int>(base.y) - kUnitRadiusPx - 30 + static_cast<int>(dy),
+             static_cast<int>(base.y) - kMinUnitRadiusPx - 30 + static_cast<int>(dy),
              18, c);
 }
 

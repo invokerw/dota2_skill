@@ -99,12 +99,12 @@ Unit* World::create_thinker(Vec2 position, double duration,
 }
 
 std::vector<Unit*> World::find_enemies_in_radius(Vec2 origin, double radius, Team source_team) {
-    const double r2 = radius * radius;
     std::vector<Unit*> out;
     for (auto& u : units_) {
         if (!u->alive()) continue;
         if (u->team() == source_team || u->team() == Team::Neutral) continue;
-        if (distance_sq(origin, u->position()) <= r2) out.push_back(u.get());
+        const double r = radius + u->hull_radius();
+        if (distance_sq(origin, u->position()) <= r * r) out.push_back(u.get());
     }
     return out;
 }
@@ -114,21 +114,35 @@ std::vector<Unit*> World::find_enemies_in_line(Vec2 start, Vec2 end, double widt
     const Vec2   seg = end - start;
     const double seg_len2 = seg.x * seg.x + seg.y * seg.y;
     if (seg_len2 <= 0.0) return out;
-    const double half_w2 = (width * 0.5) * (width * 0.5);
 
     for (auto& u : units_) {
         if (!u->alive()) continue;
         if (u->team() == source_team || u->team() == Team::Neutral) continue;
         const Vec2 d = u->position() - start;
-        // 投影参数 t∈[0,1]
+        // 投影参数 t∈[0,1] (clamp 后端点形成胶囊)
         double t = (d.x * seg.x + d.y * seg.y) / seg_len2;
         if (t < 0.0) t = 0.0;
         else if (t > 1.0) t = 1.0;
         const Vec2 proj{start.x + seg.x * t, start.y + seg.y * t};
-        if (distance_sq(proj, u->position()) <= half_w2) out.push_back(u.get());
+        const double thresh = width * 0.5 + u->hull_radius();
+        if (distance_sq(proj, u->position()) <= thresh * thresh) out.push_back(u.get());
     }
     return out;
 }
+
+namespace {
+// 点 p 到线段 [a,b] 的距离平方
+double point_to_segment_dist_sq(Vec2 p, Vec2 a, Vec2 b) {
+    const Vec2 ab{b.x - a.x, b.y - a.y};
+    const double len2 = ab.x * ab.x + ab.y * ab.y;
+    if (len2 <= 0.0) return distance_sq(p, a);
+    double t = ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / len2;
+    if (t < 0.0) t = 0.0;
+    else if (t > 1.0) t = 1.0;
+    const Vec2 proj{a.x + ab.x * t, a.y + ab.y * t};
+    return distance_sq(p, proj);
+}
+} // namespace
 
 std::vector<Unit*> World::find_enemies_in_cone(Vec2 origin, Vec2 direction, double length,
                                                 double half_angle_rad, Team source_team) {
@@ -136,18 +150,36 @@ std::vector<Unit*> World::find_enemies_in_cone(Vec2 origin, Vec2 direction, doub
     const Vec2 dir = normalized(direction);
     if (dir.x == 0.0 && dir.y == 0.0) return out;
     const double cos_half = std::cos(half_angle_rad);
-    const double r2 = length * length;
+    const double sin_half = std::sin(half_angle_rad);
+    // 锥的两条边界射线终点 (将 dir 旋转 ±half_angle 后乘 length)
+    const Vec2 left_end{
+        origin.x + ( dir.x * cos_half - dir.y * sin_half) * length,
+        origin.y + ( dir.x * sin_half + dir.y * cos_half) * length
+    };
+    const Vec2 right_end{
+        origin.x + ( dir.x * cos_half + dir.y * sin_half) * length,
+        origin.y + (-dir.x * sin_half + dir.y * cos_half) * length
+    };
     for (auto& u : units_) {
         if (!u->alive()) continue;
         if (u->team() == source_team || u->team() == Team::Neutral) continue;
-        const Vec2 d = u->position() - origin;
+        const double r  = u->hull_radius();
+        const double r2 = r * r;
+        const Vec2 P = u->position();
+        const Vec2 d{P.x - origin.x, P.y - origin.y};
         const double dist2 = d.x * d.x + d.y * d.y;
-        if (dist2 > r2) continue;
-        if (dist2 <= 1e-9) { out.push_back(u.get()); continue; }
+        // (a) origin 在单位圆内 -> 命中
+        if (dist2 <= r2) { out.push_back(u.get()); continue; }
+        // (b) 圆心距 origin 超过 length + r -> 不可能命中
+        const double max_reach = length + r;
+        if (dist2 > max_reach * max_reach) continue;
         const double dist = std::sqrt(dist2);
-        // dot(dir, d/|d|) ≥ cos(half_angle)
+        // (c) 圆心在角度楔形内 -> 命中
         const double cos_to = (dir.x * d.x + dir.y * d.y) / dist;
-        if (cos_to >= cos_half) out.push_back(u.get());
+        if (cos_to >= cos_half) { out.push_back(u.get()); continue; }
+        // (d) 圆心在锥外, 但圆与边界射线段相交 -> 命中
+        if (point_to_segment_dist_sq(P, origin, left_end)  <= r2) { out.push_back(u.get()); continue; }
+        if (point_to_segment_dist_sq(P, origin, right_end) <= r2) { out.push_back(u.get()); continue; }
     }
     return out;
 }

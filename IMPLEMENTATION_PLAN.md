@@ -1,82 +1,225 @@
 ## 总目标
 
-把现有的纯逻辑引擎可视化:
+为单位增加 `hull_radius` (碰撞半径), 让三个空间查询从"点判定"升级为"圆判定", 与 Dota 2 的 hull_radius 机制对齐. 投射物 / AoE / cone 全部受益.
 
-1. **Stage A** -- 在引擎关键路径上补齐 EventBus 事件 (技能 / 投射物 / 伤害 / 修饰器 / 单位 spawn-die-move).
-2. **Stage C** -- 用 raylib 写实时渲染 demo, 直接读 `World` 状态.
-3. **Stage B** -- 定义录像 schema, 写 Recorder 订阅 EventBus, 输出 JSONL.
-4. **Stage D** (可选) -- raylib demo 加 `--replay` 模式.
-
-每阶段都是一个可单独提交的独立增量, 完成即跑 `cmake --build build -j && ctest --test-dir build --output-on-failure`, 已有 125 个测试不能回归.
+参考 Dota 2: 默认英雄 24, 大型/肥肉单位 27. AoE 命中按 `aoe_radius + target.hull_radius` 判定, 投射物按 `width/2 + target.hull_radius` 判定.
 
 ---
 
-## Stage A: 引擎事件埋点
+## Stage 1: 引入 hull_radius 字段
 
-**Goal**: 在 [include/dota/core/world.hpp](include/dota/core/world.hpp) 增加事件结构体, 并在引擎关键路径 publish 它们. 仅扩展, 不改既有行为.
+**Goal**: `UnitStats` 增加 `hull_radius`, 暴露 getter, 接入 YAML loader + Lua 绑定.
 
 **Success Criteria**:
-- 已有 125 个测试全部通过, 行为不变.
-- 新增一个测试 `tests/test_event_emission.cpp`, 订阅每个新事件并断言肉钩场景 (Pudge -> Lina) 触发了 ProjectileSpawned -> ProjectileHit -> DamageApplied -> ModifierAdded 序列.
-- `examples/duel.cpp` 不需要改动.
+- `Unit::hull_radius()` 返回 stats 中的值, 默认 24.0.
+- YAML hero 文件可选字段 `hull_radius` 覆盖默认值.
+- Lua 可调 `unit:hull_radius()`.
+- 已有 125+ 测试全部通过 (此阶段不改空间查询行为, 默认值通过测试 fixture 显式置 0 屏蔽).
 
-**Status**: Complete (commit 61523af)
+**Status**: Not Started
 
-### 新增事件 (放在 `include/dota/core/world.hpp` 现有事件下方)
+### 改动
+
+- [include/dota/core/unit.hpp](include/dota/core/unit.hpp) `UnitStats` 加 `double hull_radius = 24.0;`
+- 同文件 `Unit` 加 `double hull_radius() const { return stats_.hull_radius; }` (内联即可, 不走 modifier 聚合)
+- [include/dota/tools/hero_catalog.hpp](include/dota/tools/hero_catalog.hpp) `HeroEntry` 加 `double hull_radius = 24.0;`
+- [src/tools/hero_catalog.cpp](src/tools/hero_catalog.cpp) 解析 `hero["hull_radius"]`
+- [src/script/bindings.cpp](src/script/bindings.cpp) Unit 用户类型表添加 `"hull_radius", &Unit::hull_radius`
+
+### 测试
+
+- 在 [tests/test_unit_basic.cpp](tests/test_unit_basic.cpp) 增加 1 个测试: 默认 24, stats 显式赋值后通过 getter 读出.
+
+---
+
+## Stage 2: 把 hull_radius 接入三个空间查询
+
+**Goal**: 三个查询从"点判定"改为"圆判定". `LinearProjectile` 自动继承.
+
+**Success Criteria**:
+- `find_enemies_in_radius`: 命中条件 `distance(origin, u.pos) <= radius + u.hull_radius`.
+- `find_enemies_in_line`: 命中条件 `distance(proj_clamped, u.pos) <= width/2 + u.hull_radius`. 端点也按胶囊处理 (clamp t∈[0,1] 后逐目标比距离, 现行结构正好支持).
+- `find_enemies_in_cone`: 精确实现. 命中条件: 单位圆与扇形相交.
+  - 公式: 扇形 = 圆心 origin + 半径 length 的圆盘 ∩ 角度 ≤ half_angle 的楔形.
+  - 精确判据 (单位圆心 P, 半径 r):
+    1. `dist(P, origin) <= r` -> 命中 (origin 在单位内)
+    2. `dist(P, origin) - r > length` -> 不命中 (太远)
+    3. 角度判据: 设 `angle = acos(dot(dir, normalize(P - origin)))`. 若 `angle <= half_angle` -> 命中 (在锥内).
+       否则比较单位圆到锥两条边界射线的最短距离 -- 若任一射线到 P 的最短距离 ≤ r, 仍命中.
+  - 边界射线: 从 origin 沿 `rotate(dir, ±half_angle)`, 长度 `length`. "圆到射线段最短距离" 用线段距离公式 (clamp 投影 t∈[0, length]).
+- 已有 125+ 测试通过 (spatial_queries 在 Stage 3 调整).
+
+**Status**: Not Started
+
+### 改动 (全部在 [src/core/world.cpp](src/core/world.cpp))
 
 ```cpp
-struct UnitSpawnedEvent       { EntityId id; };
-struct UnitMovedEvent         { EntityId id; Vec2 from; Vec2 to; };       // 仅在 set_position 改值时
-struct AbilityCastStartedEvent{ EntityId caster; std::string ability; CastTarget target; };
-struct AbilityCastFinishedEvent{ EntityId caster; std::string ability; bool interrupted; };
-struct ProjectileSpawnedEvent { EntityId pid; EntityId source; Vec2 origin;
-                                Vec2 dir; double speed; double length; double width;
-                                bool tracking; EntityId target; };
-struct ProjectileHitEvent     { EntityId pid; EntityId victim; Vec2 point; };
-struct ProjectileFinishedEvent{ EntityId pid; };
-struct ModifierAddedEvent     { EntityId unit; std::string name; double duration; int stacks; };
-struct ModifierRemovedEvent   { EntityId unit; std::string name; };
-struct DamageAppliedEvent     { EntityId attacker; EntityId victim;
-                                DamageType type; double amount_pre; double amount_applied;
-                                std::uint32_t flags; };
-struct HealAppliedEvent       { EntityId healer; EntityId target; double amount; };
+std::vector<Unit*> World::find_enemies_in_radius(Vec2 origin, double radius, Team source_team) {
+    std::vector<Unit*> out;
+    for (auto& u : units_) {
+        if (!u->alive()) continue;
+        if (u->team() == source_team || u->team() == Team::Neutral) continue;
+        const double r = radius + u->hull_radius();
+        if (distance_sq(origin, u->position()) <= r * r) out.push_back(u.get());
+    }
+    return out;
+}
 ```
 
-`AttackLandedEvent` 和 `UnitDiedEvent` 已存在, 复用.
+```cpp
+std::vector<Unit*> World::find_enemies_in_line(Vec2 start, Vec2 end, double width, Team source_team) {
+    std::vector<Unit*> out;
+    const Vec2   seg = end - start;
+    const double seg_len2 = seg.x * seg.x + seg.y * seg.y;
+    if (seg_len2 <= 0.0) return out;
+    for (auto& u : units_) {
+        if (!u->alive()) continue;
+        if (u->team() == source_team || u->team() == Team::Neutral) continue;
+        const Vec2 d = u->position() - start;
+        double t = (d.x * seg.x + d.y * seg.y) / seg_len2;
+        if (t < 0.0) t = 0.0; else if (t > 1.0) t = 1.0;
+        const Vec2 proj{start.x + seg.x * t, start.y + seg.y * t};
+        const double thresh = width * 0.5 + u->hull_radius();
+        if (distance_sq(proj, u->position()) <= thresh * thresh) out.push_back(u.get());
+    }
+    return out;
+}
+```
 
-### 埋点位置
+精确 cone (新增静态 helper `point_to_segment_dist2`):
 
-| 事件 | 文件:位置 | 新加几行 |
-|---|---|---|
-| `UnitSpawnedEvent` | [src/core/world.cpp:33](src/core/world.cpp#L33) `World::spawn` 末尾 | publish |
-| `UnitMovedEvent` | `Unit::set_position` (在 [include/dota/core/unit.hpp:54](include/dota/core/unit.hpp#L54)) -- 改成调用 `world_->events()` 的内联实现需要 .cpp 化 | 需要把 `set_position` 移到 [src/core/unit.cpp](src/core/unit.cpp), 比较位置, 改了再 publish. **注意**: motion controller / projectile 每 tick 都会大量调用, 不能造成 N 次 publish. → 改方案: 不在 set_position 里 publish, 改由 Stage B 的 Recorder 在每 tick 末尾扫描所有 unit 的 position 增量 (Recorder 自己保存上一 tick 的 pos 字典). Stage A 不需要 UnitMovedEvent. **从 schema 删除该事件.** |
-| `AbilityCastStartedEvent` | [src/ability/ability.cpp:177](src/ability/ability.cpp#L177) `enter_phase(Casting)` 之前 / 当 cast_point<=0 立即触发分支也要发 | 需要 `Ability::world_` 拿 EventBus -- 已有 |
-| `AbilityCastFinishedEvent` | [src/ability/ability.cpp](src/ability/ability.cpp) `interrupt`, backswing 结束, on_spell_start 完成进入 OnCooldown 三处 | publish |
-| `ProjectileSpawnedEvent` | [src/projectile/manager.cpp:9](src/projectile/manager.cpp#L9) `spawn` -- 但 manager 没拿到 World&, 要改签名 | 改 `spawn(unique_ptr<Projectile>, World&)` 或在 `World::projectiles().spawn(...)` 包装. **简化**: 直接给 `Projectile` 基类加 `EntityId pid_`, `pid` 由 manager 在 `spawn()` 里分配 (内置静态 counter 或 manager 成员); 然后 manager 在 spawn 里 publish 需要 World&, 所以给 `ProjectileManager` 加 `World* world_` 反指针 (在 World 构造时 set), 或者把 publish 推迟到 advance 第一次 tick (引入"未发布"标志). **方案**: 给 manager 加 `World* owner_`, `World` 构造时 `projectiles_->set_world(this)`. |
-| `ProjectileHitEvent` | [src/projectile/projectile.cpp:42](src/projectile/projectile.cpp#L42) (Linear) 和 [src/projectile/projectile.cpp:90](src/projectile/projectile.cpp#L90) (Tracking) `on_hit_` 调用前 | publish via `world.events()` -- advance 已有 World& |
-| `ProjectileFinishedEvent` | 上述两个 .cpp 中所有 `on_finish_` 之前 | publish |
-| `ModifierAddedEvent` | [src/modifier/manager.cpp:15](src/modifier/manager.cpp#L15) `attach` 末尾 + [src/modifier/manager.cpp:46](src/modifier/manager.cpp#L46) `attach_motion` 末尾 | publish. **问题**: ModifierManager 没有 World*. → 通过 `owner_.world()` 取得. 当 owner 在 World 外 (单元测试) 时跳过 publish. |
-| `ModifierRemovedEvent` | [src/modifier/manager.cpp:61](src/modifier/manager.cpp#L61) `remove`, [src/modifier/manager.cpp:71](src/modifier/manager.cpp#L71) `remove_all`, [src/modifier/manager.cpp:96](src/modifier/manager.cpp#L96) expire 块 | publish |
-| `DamageAppliedEvent` | [src/combat/damage.cpp:101](src/combat/damage.cpp#L101) 应用生命值变化之后 | publish via `victim->world()->events()` |
-| `HealAppliedEvent` | [src/combat/damage.cpp:138](src/combat/damage.cpp#L138) | publish |
+```cpp
+static double point_to_segment_dist2(Vec2 p, Vec2 a, Vec2 b) {
+    const Vec2 ab = b - a;
+    const double len2 = ab.x*ab.x + ab.y*ab.y;
+    if (len2 <= 0.0) return distance_sq(p, a);
+    double t = ((p.x-a.x)*ab.x + (p.y-a.y)*ab.y) / len2;
+    if (t < 0.0) t = 0.0; else if (t > 1.0) t = 1.0;
+    const Vec2 proj{a.x + ab.x*t, a.y + ab.y*t};
+    return distance_sq(p, proj);
+}
 
-### 已知风险与对策
+std::vector<Unit*> World::find_enemies_in_cone(Vec2 origin, Vec2 direction, double length,
+                                                double half_angle_rad, Team source_team) {
+    std::vector<Unit*> out;
+    const Vec2 dir = normalized(direction);
+    if (dir.x == 0.0 && dir.y == 0.0) return out;
+    const double cos_half = std::cos(half_angle_rad);
+    const double sin_half = std::sin(half_angle_rad);
+    // 边界射线终点
+    const Vec2 left_end {origin.x + (dir.x*cos_half - dir.y*sin_half) * length,
+                         origin.y + (dir.x*sin_half + dir.y*cos_half) * length};
+    const Vec2 right_end{origin.x + (dir.x*cos_half + dir.y*sin_half) * length,
+                         origin.y + (-dir.x*sin_half + dir.y*cos_half) * length};
+    for (auto& u : units_) {
+        if (!u->alive()) continue;
+        if (u->team() == source_team || u->team() == Team::Neutral) continue;
+        const double r  = u->hull_radius();
+        const double r2 = r * r;
+        const Vec2 P = u->position();
+        const Vec2 d = P - origin;
+        const double dist2 = d.x*d.x + d.y*d.y;
+        // (a) 圆心包含 origin
+        if (dist2 <= r2) { out.push_back(u.get()); continue; }
+        // (b) 距离超过 length + r 直接淘汰
+        const double max_reach = length + r;
+        if (dist2 > max_reach * max_reach) continue;
+        // (c) 锥内: 圆心在角度楔形内 + 距离 <= length + r
+        const double dist = std::sqrt(dist2);
+        const double cos_to = (dir.x * d.x + dir.y * d.y) / dist;
+        if (cos_to >= cos_half && dist - r <= length) { out.push_back(u.get()); continue; }
+        // (d) 圆与边界射线段相交
+        if (point_to_segment_dist2(P, origin, left_end)  <= r2) { out.push_back(u.get()); continue; }
+        if (point_to_segment_dist2(P, origin, right_end) <= r2) { out.push_back(u.get()); continue; }
+    }
+    return out;
+}
+```
 
-- **set_position 不发事件**: 见上, Stage B 的 Recorder 用差分快照解决, schema 把 UnitMoved 划归"由 Recorder 合成的事件".
-- **ModifierManager / Ability 拿 EventBus 的途径**: 都通过 `owner / caster -> world() -> events()`. 测试里直接 new Unit 不挂 World 的, 只要 `world() == nullptr` 就跳过, 已有测试不破.
-- **Projectile id 分配**: `ProjectileManager` 内 `EntityId next_pid_{1}`. Projectile 基类增加 `EntityId pid_{kInvalidEntityId}`, manager 在 `spawn()` 里赋值并发事件.
+注意:
+- 楔形角度判据用 `cos_to >= cos_half` 仍然是"圆心在锥内"的近似, 但配合 (a)(d) 两步覆盖了所有"圆心在锥外但圆切入"的场景 -- 整体判据变成精确解.
+- (c) 步加了 `dist - r <= length` 防止单位圆心在锥内但远超长度仍被命中 (例如 origin 后方向上方).
 
-### 测试 (新增 `tests/test_event_emission.cpp`)
+---
 
-只测一个完整链路: 用 Pudge YAML 装载肉钩, Pudge 锁定 Lina, advance 直到 hook 命中, 收集所有事件, 断言:
-- 至少 1 条 `AbilityCastStartedEvent` (ability="pudge_meat_hook")
-- 至少 1 条 `ProjectileSpawnedEvent`
-- 至少 1 条 `ProjectileHitEvent` victim==Lina.id()
-- 至少 1 条 `DamageAppliedEvent` victim==Lina.id() amount_applied>0
-- 至少 1 条 `ModifierAddedEvent` (motion knockback 修饰器)
-- 序列顺序: Cast < Spawn < Hit < Damage
+## Stage 3: 数据 + 测试调整
 
-### Tests 命令
+**Goal**: hero YAML 标注真实 hull_radius. 老 spatial_queries 用例显式置 0 保留几何精确语义, 新增 hull_radius>0 的覆盖测试.
+
+**Success Criteria**:
+- 全部 ctest 通过.
+- 新增 4 个 spatial_queries 测试 (radius/line/cone 各 1, 加 1 个 cone 边界射线相切).
+
+**Status**: Not Started
+
+### YAML 数据
+
+按 Dota 2 wiki 真实值:
+
+| 英雄 | hull_radius |
+|---|---|
+| Pudge | 27 |
+| Sven | 27 |
+| Earthshaker | 24 |
+| Juggernaut | 24 |
+| Lina | 24 |
+| Lion | 24 |
+
+只需改非默认值 (Pudge / Sven). 其余英雄留空走默认.
+
+### test_spatial_queries.cpp 调整
+
+`stats()` fixture 加 `s.hull_radius = 0.0;` -- 现有 7 个用例保持原"点判定"语义, 不破.
+
+### 新增 4 个测试
+
+```cpp
+TEST(SpatialQuery, RadiusUsesTargetHullRadius) {
+    // hull=30 的目标圆心在半径外 (520), 但边缘切入 500 半径 -> 命中
+    World w;
+    w.spawn("hero", Team::Radiant, stats(), {0.0, 0.0});
+    UnitStats fat = stats(); fat.hull_radius = 30.0;
+    auto* e = w.spawn("e", Team::Dire, fat, {520.0, 0.0});
+    auto hit = w.find_enemies_in_radius({0.0,0.0}, 500.0, Team::Radiant);
+    ASSERT_EQ(hit.size(), 1u);
+    EXPECT_EQ(hit[0]->id(), e->id());
+}
+
+TEST(SpatialQuery, LineUsesTargetHullRadius) {
+    // line width=100 (半宽 50), 单位圆心 y=70 但 hull=30 -> 距线 70-30=40 ≤ 50, 命中
+    World w;
+    w.spawn("hero", Team::Radiant, stats(), {0.0, 0.0});
+    UnitStats fat = stats(); fat.hull_radius = 30.0;
+    auto* e = w.spawn("e", Team::Dire, fat, {500.0, 70.0});
+    auto hit = w.find_enemies_in_line({0,0}, {1000,0}, 100.0, Team::Radiant);
+    ASSERT_EQ(hit.size(), 1u);
+    EXPECT_EQ(hit[0]->id(), e->id());
+}
+
+TEST(SpatialQuery, ConeIncludesUnitOutsideAngleButTangent) {
+    // 圆心在锥外但圆切入边界射线
+    World w;
+    w.spawn("hero", Team::Radiant, stats(), {0.0, 0.0});
+    UnitStats fat = stats(); fat.hull_radius = 50.0;
+    // half=45度, 边界射线方向 (cos45, sin45). 圆心垂直于该射线偏离 40 单位 (< hull 50)
+    auto* e = w.spawn("e", Team::Dire, fat, {200.0, 250.0}); // 垂线距离约 35
+    auto hit = w.find_enemies_in_cone({0,0}, {1.0,0.0}, 500.0, M_PI/4.0, Team::Radiant);
+    ASSERT_EQ(hit.size(), 1u);
+    EXPECT_EQ(hit[0]->id(), e->id());
+}
+
+TEST(SpatialQuery, ConeRejectsBehindEvenWithLargeHull) {
+    // 单位在身后, 即使 hull 大也不命中 (origin 在单位外)
+    World w;
+    w.spawn("hero", Team::Radiant, stats(), {0.0, 0.0});
+    UnitStats fat = stats(); fat.hull_radius = 80.0;
+    w.spawn("e", Team::Dire, fat, {-200.0, 0.0});
+    auto hit = w.find_enemies_in_cone({0,0}, {1.0,0.0}, 500.0, M_PI/4.0, Team::Radiant);
+    EXPECT_TRUE(hit.empty());
+}
+```
+
+### 命令
 
 ```sh
 cmake --build build -j
@@ -85,194 +228,10 @@ ctest --test-dir build --output-on-failure
 
 ---
 
-## Stage C: raylib 实时渲染 demo
+## 提交节奏
 
-**Goal**: 一个新的可执行 `duel_visual`, 在窗口里实时绘制 `examples/duel.cpp` 的同一场战斗. 不录像, 不重放, 直接每帧 `world.advance(dt)` + 读 World 状态绘制.
+按 Stage 1 → 2 → 3, 每个 stage 一个 commit. 每次都跑全量测试, 不能回归.
 
-**Success Criteria**:
-- `cmake --build build -j --target duel_visual` 成功.
-- `./build/duel_visual` 打开窗口, 显示 6 个英雄 + HP 条, 自动开战, 看见肉钩飞行 + 拖拽 + 伤害飘字 + 单位死亡淡出.
-- 已有测试不变.
-
-**Status**: Complete (commit f8f2e9d)
-
-### 依赖引入
-
-在 [CMakeLists.txt](CMakeLists.txt) CPM 段末尾追加:
-
-```cmake
-CPMAddPackage(
-    NAME raylib
-    GITHUB_REPOSITORY raysan5/raylib
-    GIT_TAG 5.0
-    OPTIONS
-        "BUILD_EXAMPLES OFF"
-        "WITH_PIC ON"
-)
-```
-
-新建 `add_executable(duel_visual examples/duel_visual.cpp)`, link `dota_core` + `raylib`, 设 `DOTA_DATA_DIR`.
-
-### 渲染设计
-
-- 世界坐标直接是引擎里的 Vec2 (不缩放), 视图按窗口分辨率自动 fit (求所有单位包围盒, 留 200 px 边距, 算 zoom).
-- 60 fps 实时渲染, 每帧调 `world.advance(GetFrameTime())` -- World 内部细分为 30 Hz tick, 不需要我们管.
-- 元素:
-  | 元素 | 数据来源 | 视觉 |
-  |---|---|---|
-  | 单位 | `world.units_on_team(...)` | 圆 (天辉绿 / 夜魇红 / 中立灰), 半径 30; 死亡变灰 |
-  | HP 条 | `unit.health() / unit.max_health()` | 圆上方矩形 |
-  | 名字 | `unit.name()` | HP 条上方小字 |
-  | 投射物 | `world.projectiles()` -- **需要 manager 暴露 const &live_** | 黄线段 (linear) / 黄圆 (tracking). 需要从 `Projectile` 基类暴露 `pos()`. |
-  | 修饰器图标 | `unit.modifiers().all()` | 单位下方一行小方块, 颜色按 is_debuff |
-  | 施法读条 | 遍历 ability, phase==Casting | 单位下方蓝条 (1 - phase_timer/cast_point) |
-  | 伤害飘字 | 订阅 `DamageAppliedEvent`, push 到本地队列 (text+pos+expire) | 红字向上飘 1 秒 |
-
-### 需要让引擎暴露的小接口
-
-- `ProjectileManager::live() const -> const std::vector<unique_ptr<Projectile>>&` (现已有 `live_count`, 加一个 `live()` getter).
-- `Projectile::position() const -> Vec2` 纯虚或基类存 `Vec2 pos_` 让子类 update.
-  - 现状: `LinearProjectile` 有 `pos_`, `TrackingProjectile` 有 `pos_`. 改基类: `protected: Vec2 pos_; public: Vec2 position() const { return pos_; }`. 子类构造里通过基类直接初始化.
-- `Projectile::is_linear() const`, `Projectile::direction() const`, `Projectile::width() const` 仅 LinearProjectile 用 -- 给 base 加 `virtual` 默认返回值.
-
-### duel_visual.cpp 大致结构 (约 250 行)
-
-```cpp
-// 设置 raylib 窗口 1280x720
-// 复用 examples/duel.cpp 的英雄装载 / 排兵代码 (考虑提取一个 helper, 但保持简单先复制)
-// 订阅 DamageAppliedEvent / UnitDiedEvent 推 floating_texts
-// 主循环:
-//   dt = GetFrameTime() (capped to 0.1)
-//   if !paused: world.advance(dt)
-//   BeginDrawing / camera transform / 绘制单位 / 投射物 / 修饰器图标 / 飘字 / EndDrawing
-// 键: SPACE 暂停, R 重开 (重新构建 World)
-```
-
-### 风险
-
-- raylib 在 macOS Apple Silicon 上 CPM 编译: 已知 5.0 + CMake 3.20+ OK, 不需要额外配置.
-- 字体: 用 raylib 默认字体, 不引入额外字体文件.
-
-### Tests
-
-不写 GTest (UI 改动测不动). 手动验收:
-- 跑 `./build/duel_visual`, 看到肉钩从 Pudge 飞出击中并拖回 Lina.
-- 看到伤害飘字.
-- 6 个英雄都能死, 死亡变灰.
-
----
-
-## Stage B: 录像 schema + Recorder
-
-**Goal**: 定义 JSONL 录像格式; 写 `Recorder` 订阅 Stage A 的所有事件, 输出文件; duel.cpp 加 `--record path` 选项.
-
-**Success Criteria**:
-- `./build/duel --record /tmp/duel.jsonl` 跑完产生有效 JSONL.
-- 文件第一行是 header (含 schema_version, kTickRate, hero list); 之后每个事件一行.
-- `tests/test_recorder.cpp`: 加载肉钩场景, record, 重新解析 JSONL, 断言事件计数 / 关键字段非空.
-
-**Status**: Complete (commit 6c2bd15)
-
-### Schema (写到 [doc/recording_schema.md](doc/recording_schema.md))
-
-每行一条 JSON 对象, 字段约定:
-
-```jsonc
-// 第 0 行: header
-{"v":1,"tick_rate":30,"started_at":"2026-05-18T12:00:00Z",
- "units":[{"id":1,"name":"Pudge","team":1,"max_hp":1500,"max_mana":280,"pos":[0,0]},...]}
-
-// 之后每行: tick frame, 事件按时间顺序
-{"t":0.033,"events":[
-  {"type":"unit_moved","id":1,"to":[3.2,0]},
-  {"type":"cast_start","caster":1,"ability":"pudge_meat_hook","point":[600,0]},
-  {"type":"projectile_spawn","pid":7,"src":1,"origin":[0,0],"dir":[1,0],
-   "speed":1300,"length":1300,"width":100,"tracking":false},
-  {"type":"projectile_hit","pid":7,"victim":4,"point":[598,0]},
-  {"type":"damage","src":1,"dst":4,"dtype":"magical","pre":225,"applied":169},
-  {"type":"modifier_add","unit":4,"name":"motion_knockback","duration":0.46},
-  {"type":"projectile_finish","pid":7},
-  {"type":"unit_died","id":4,"killer":1}
-]}
-```
-
-字段速查:
-
-| type | 必填字段 |
-|---|---|
-| `unit_spawn` | id, name, team, max_hp, max_mana, pos |
-| `unit_moved` | id, to (合成事件: Recorder 在每 tick 末尾比对 prev_pos, 变化才输出) |
-| `unit_died` | id, killer |
-| `cast_start` | caster, ability, target_id?(unit target) / point?(point target) |
-| `cast_finish` | caster, ability, interrupted |
-| `projectile_spawn` | pid, src, origin, dir, speed, length?, width?, tracking, target?(tracking only) |
-| `projectile_hit` | pid, victim, point |
-| `projectile_finish` | pid |
-| `modifier_add` | unit, name, duration, stacks |
-| `modifier_remove` | unit, name |
-| `damage` | src, dst, dtype, pre, applied |
-| `heal` | src, dst, amount |
-| `attack_landed` | src, dst, dmg, missed |
-
-类型枚举字符串: `dtype` ∈ `physical|magical|pure`; `team` ∈ `0|1|2` (复用 Team 数值).
-
-时间 `t` 单位秒, 起点 0 = world spawn 完毕. 位置直接是引擎 Vec2 双精度数, 不做缩放.
-
-### 实现
-
-新增 `include/dota/replay/recorder.hpp` + `src/replay/recorder.cpp`:
-
-```cpp
-class Recorder {
-public:
-    Recorder(World& world, std::ostream& out);  // 构造时订阅所有事件
-    ~Recorder();
-    void write_header(const std::string& started_at);
-    void flush_tick();   // 每 tick 末尾把累积的 events 写一行 JSON
-private:
-    // event handlers append to current_frame_events_
-    // 还要维护 prev_positions_ -> 在 flush_tick 里合成 unit_moved 事件
-};
-```
-
-JSON 输出**手写**, 不引依赖 -- 字段固定, 几个 helper 拼字符串够用. 需要的话 200 行内.
-
-CMakeLists.txt 把 `src/replay/recorder.cpp` 加进 dota_core.
-
-duel.cpp 用 `argc/argv` 解析 `--record`, 在 World 构造后立刻 new Recorder, 主循环每次 advance 后调 `recorder->flush_tick()`. **问题**: World::advance 内部 30 次 tick, Recorder 该不该在每次 tick_once 末尾 flush? 应该: 在 World 增加一个"tick 边界"事件或者每 tick `advance` 1 帧 (duel.cpp 改成手动 30 fps 循环). **决定**: duel.cpp 改成 `for (int i = 0; i < total_ticks; ++i) { world.advance(World::kTickDt); recorder->flush_tick(); }`.
-
-### Tests
-
-`tests/test_recorder.cpp`:
-- 模拟 1 秒肉钩场景, record 到 stringstream.
-- 拆行解析 (粗解析: 找 `"type":"projectile_hit"` 子串就够了, 不写完整 JSON parser).
-- 断言: header 出现, projectile_spawn / hit / damage / modifier_add 都出现.
-
----
-
-## Stage D: raylib --replay 模式 (可选, 视前面进度决定)
-
-**Goal**: `duel_visual --replay file.jsonl` 不跑 World, 直接读文件按时间戳重放.
-
-**Success Criteria**:
-- `./build/duel --record /tmp/d.jsonl` 然后 `./build/duel_visual --replay /tmp/d.jsonl` 视觉效果与实时模式接近一致 (位置 / 投射物 / 死亡).
-
-**Status**: Complete
-
-### 实现
-
-加 `include/dota/replay/player.hpp`: 简单 JSONL 解析器 (够用即可, 字段固定), 维护 `unordered_map<EntityId, UnitView>` + `unordered_map<EntityId, ProjectileView>`. duel_visual 抽出 `RenderState` 结构, 让 live 模式和 replay 模式都填这个结构再绘制.
-
-跳过实现细节, 等 A/B/C 跑通再回来定.
-
----
-
-## 执行顺序与提交节奏
-
-按 A → C → B → D, 每个阶段一个 commit:
-1. `feat: 引擎事件埋点 (Stage A)` -- 包含 world.hpp 事件结构 + 各 .cpp publish + 新测试.
-2. `feat: raylib 实时渲染 demo (Stage C)` -- CMake 引入 raylib, 新增 duel_visual.
-3. `feat: 录像 schema + Recorder (Stage B)` -- doc + replay/ 目录 + duel --record + 新测试.
-4. (可选) `feat: replay 模式 (Stage D)`.
-
-每次 commit 前必跑 `cmake --build build -j && ctest --test-dir build --output-on-failure`.
+1. `feat: 单位增加 hull_radius 字段 (Stage 1)`
+2. `feat: 空间查询接入 hull_radius (Stage 2)`
+3. `feat: 调整 spatial_queries 测试 + 标注 hero hull_radius (Stage 3)`

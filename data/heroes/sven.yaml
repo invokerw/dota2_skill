@@ -4,6 +4,7 @@ hero:
   base_mana: 270
   base_armor: 2
   base_magic_resist: 0.25
+  hull_radius: 27
 
 abilities:
   - name: sven_storm_hammer

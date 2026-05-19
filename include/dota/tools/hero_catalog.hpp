@@ -28,6 +28,7 @@ struct HeroEntry {
     double      base_mana    = 0.0;
     double      base_armor   = 0.0;
     double      magic_resist = 0.25;
+    double      hull_radius  = 24.0;
     std::vector<AbilityMeta> abilities;  // 按 yaml 顺序
 };
 

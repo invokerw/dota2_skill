@@ -28,6 +28,7 @@ struct UnitStats {
     double base_attack_time  = 1.7;    // 100 攻速时的攻击间隔(秒)
     double move_speed        = 300.0;
     double attack_range      = 150.0;
+    double hull_radius       = 24.0;   // 碰撞 / 命中判定半径(Dota 2 默认英雄 24)
 };
 
 class Unit {
@@ -52,6 +53,10 @@ public:
 
     Vec2   position() const { return position_; }
     void   set_position(Vec2 p) { position_ = p; }
+
+    // 单位的碰撞 / 命中判定半径. 不走 modifier 聚合 -- 与 Dota 2 一致, hull
+    // 几乎不被 buff 改变, 直接读 stats.
+    double hull_radius() const { return stats_.hull_radius; }
 
     // --- 战斗属性(通过 ModifierManager aggregation 聚合)---
     double armor()          const;

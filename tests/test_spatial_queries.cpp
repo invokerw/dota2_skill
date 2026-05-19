@@ -12,9 +12,17 @@ using dota::Vec2;
 using dota::World;
 
 namespace {
+// 默认 hull_radius=0, 让原有几何精确边界测试不受 24 默认值干扰.
+// hull_radius>0 的覆盖测试在文件末尾另外用 fat_stats() 显式构造.
 UnitStats stats() {
     UnitStats s;
-    s.max_health = 500.0;
+    s.max_health  = 500.0;
+    s.hull_radius = 0.0;
+    return s;
+}
+UnitStats fat_stats(double hull) {
+    UnitStats s = stats();
+    s.hull_radius = hull;
     return s;
 }
 } // namespace
@@ -102,4 +110,65 @@ TEST(SpatialQuery, ConeIncludesPointAtOrigin) {
     auto hit = w.find_enemies_in_cone({0.0, 0.0}, {1.0, 0.0}, 100.0, M_PI / 4.0, Team::Radiant);
     ASSERT_EQ(hit.size(), 1u);
     EXPECT_EQ(hit[0]->id(), on_top->id());
+}
+
+// --- hull_radius 接入测试 ---
+
+TEST(SpatialQuery, RadiusUsesTargetHullRadius) {
+    // 圆心在 520, 但 hull=30, 边缘伸到 490, 落在 500 半径内 -> 命中
+    World w;
+    w.spawn("hero", Team::Radiant, stats(), {0.0, 0.0});
+    auto* in_edge  = w.spawn("e_in",  Team::Dire, fat_stats(30.0), {520.0, 0.0});
+    auto* far_off  = w.spawn("e_far", Team::Dire, fat_stats(10.0), {520.0, 0.0});
+    (void)far_off; // hull=10, 边缘到 510, 在 500 外 -> 不命中
+
+    auto hit = w.find_enemies_in_radius({0.0, 0.0}, 500.0, Team::Radiant);
+    ASSERT_EQ(hit.size(), 1u);
+    EXPECT_EQ(hit[0]->id(), in_edge->id());
+}
+
+TEST(SpatialQuery, LineUsesTargetHullRadius) {
+    // line width=100 (半宽 50), 单位圆心 y=70 但 hull=30 -> 距线 70-30=40 ≤ 50, 命中
+    World w;
+    w.spawn("hero", Team::Radiant, stats(), {0.0, 0.0});
+    auto* fat_e   = w.spawn("fat",   Team::Dire, fat_stats(30.0), {500.0, 70.0});
+    auto* slim_e  = w.spawn("slim",  Team::Dire, fat_stats(10.0), {500.0, 70.0});
+    (void)slim_e; // hull=10, 边缘 60 > 50 半宽 -> 不命中
+
+    auto hit = w.find_enemies_in_line({0.0, 0.0}, {1000.0, 0.0}, 100.0, Team::Radiant);
+    ASSERT_EQ(hit.size(), 1u);
+    EXPECT_EQ(hit[0]->id(), fat_e->id());
+}
+
+TEST(SpatialQuery, ConeIncludesUnitOutsideAngleButTangentToBoundaryRay) {
+    // 圆心位于 cone 边界射线之外, 但圆与边界射线相切
+    // 锥: 朝 +x, half=45°, length=500, 边界射线 +y 方向斜 45°
+    // 边界射线方向: (cos45, sin45) ≈ (0.7071, 0.7071)
+    // 取圆心在射线"上方"(逆时针方向之外), 沿 normal (-sin45, cos45) 偏离 40 单位.
+    // 射线上 t=300 处的点 (212.13, 212.13), normal 方向偏 40 -> (212.13-28.28, 212.13+28.28)
+    World w;
+    w.spawn("hero", Team::Radiant, stats(), {0.0, 0.0});
+    const double t = 300.0;
+    const double s = std::sqrt(0.5);
+    const Vec2 ray_pt{ s * t, s * t };
+    const double off = 40.0;          // 离边界射线垂直距离 40
+    const Vec2 P{ ray_pt.x + (-s) * off, ray_pt.y + s * off };
+    auto* fat_e = w.spawn("fat", Team::Dire, fat_stats(50.0), P);  // hull=50 > 40 -> 切入
+    auto* slim_e = w.spawn("slim", Team::Dire, fat_stats(20.0),
+                           Vec2{P.x + 200.0, P.y + 200.0});         // 远离, 不命中
+    (void)slim_e;
+
+    auto hit = w.find_enemies_in_cone({0.0, 0.0}, {1.0, 0.0}, 500.0, M_PI / 4.0, Team::Radiant);
+    ASSERT_EQ(hit.size(), 1u);
+    EXPECT_EQ(hit[0]->id(), fat_e->id());
+}
+
+TEST(SpatialQuery, ConeRejectsBehindEvenWithLargeHull) {
+    // 单位整个在锥后方, 即使 hull 大, 也不应命中
+    World w;
+    w.spawn("hero", Team::Radiant, stats(), {0.0, 0.0});
+    w.spawn("behind", Team::Dire, fat_stats(80.0), {-200.0, 0.0});
+
+    auto hit = w.find_enemies_in_cone({0.0, 0.0}, {1.0, 0.0}, 500.0, M_PI / 4.0, Team::Radiant);
+    EXPECT_TRUE(hit.empty());
 }

@@ -111,6 +111,7 @@ void register_bindings(sol::state& lua, LuaState* owner) {
         "attack_damage", &Unit::attack_damage,
         "magic_resist",  &Unit::magic_resist,
         "move_speed",    &Unit::move_speed,
+        "hull_radius",   &Unit::hull_radius,
         "evasion",       &Unit::evasion,
         "lifesteal_pct", &Unit::lifesteal_pct,
         "health_regen",  &Unit::health_regen,

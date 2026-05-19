@@ -65,6 +65,30 @@ TEST_F(HeroPudgeTest, MeatHookStopsOnFirstHit) {
     EXPECT_DOUBLE_EQ(second->health(), 1500.0);  // 第二目标未被命中
 }
 
+TEST_F(HeroPudgeTest, MeatHookHitsTargetOffsetByHullRadius) {
+    // hook width=100 (半宽 50). 默认 dummy hull_radius=24.
+    // 把目标放在偏离主轴 70 单位的位置: 50+24=74 > 70 -> 应命中.
+    enemy_->set_position({500, 70});
+    Ability* hook = reg_.instantiate("pudge_meat_hook", *pudge_);
+    ASSERT_NE(hook, nullptr);
+    CastTarget t; t.point = {1300, 0}; t.has_point = true;
+    EXPECT_EQ(hook->order_cast(t, world_), CastError::None);
+
+    world_.advance(0.75);
+    EXPECT_LT(enemy_->health(), 1500.0);  // 应被命中受到伤害
+}
+
+TEST_F(HeroPudgeTest, MeatHookMissesBeyondHullRadius) {
+    // 偏离 100 单位 > 50+24=74, 不应命中
+    enemy_->set_position({500, 100});
+    Ability* hook = reg_.instantiate("pudge_meat_hook", *pudge_);
+    CastTarget t; t.point = {1300, 0}; t.has_point = true;
+    hook->order_cast(t, world_);
+
+    world_.advance(2.0);
+    EXPECT_DOUBLE_EQ(enemy_->health(), 1500.0);
+}
+
 TEST_F(HeroPudgeTest, DismemberChannelsDamageOverTime) {
     pudge_->set_position({100, 0});
     enemy_->set_position({150, 0});   // 进入施法距离 175

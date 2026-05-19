@@ -4,6 +4,7 @@ hero:
   base_mana: 280
   base_armor: 0
   base_magic_resist: 0.25
+  hull_radius: 27
 
 abilities:
   - name: pudge_meat_hook

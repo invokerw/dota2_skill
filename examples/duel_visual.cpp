@@ -109,6 +109,7 @@ public:
                 ru.hp      = u->health();
                 ru.max_hp  = u->max_health();
                 ru.position= u->position();
+                ru.hull_radius = u->hull_radius();
                 for (auto& m : u->modifiers().all()) ru.modifiers.push_back(m->name());
                 for (const auto& a : u->abilities().all()) {
                     if (a->phase() != CastPhase::Casting) continue;

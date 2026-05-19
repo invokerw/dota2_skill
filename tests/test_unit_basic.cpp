@@ -22,6 +22,18 @@ UnitStats basic_stats(double hp = 500.0, double dmg = 50.0) {
 
 } // namespace
 
+TEST(Unit, HullRadiusDefaultsTo24) {
+    Unit u(1, "test", Team::Radiant, basic_stats(500.0));
+    EXPECT_DOUBLE_EQ(u.hull_radius(), 24.0);
+}
+
+TEST(Unit, HullRadiusReadsStatsOverride) {
+    UnitStats s = basic_stats();
+    s.hull_radius = 27.0;
+    Unit u(1, "fat", Team::Radiant, s);
+    EXPECT_DOUBLE_EQ(u.hull_radius(), 27.0);
+}
+
 TEST(Unit, StartsAtFullHealth) {
     Unit u(1, "test", Team::Radiant, basic_stats(750.0));
     EXPECT_EQ(u.health(), 750.0);

@@ -29,6 +29,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -118,6 +119,7 @@ public:
         cs.attack_damage    = 55.0;
         cs.base_armor       = h.base_armor;
         cs.magic_resist     = h.magic_resist;
+        cs.hull_radius      = h.hull_radius;
         cs.base_attack_time = 1.7;
         caster_ = world_->spawn(h.yaml_name, Team::Radiant, cs, {-600.0, 0.0});
 
@@ -206,6 +208,7 @@ public:
                 ru.hp      = u->health();
                 ru.max_hp  = u->max_health();
                 ru.position= u->position();
+                ru.hull_radius = u->hull_radius();
                 for (auto& m : u->modifiers().all()) ru.modifiers.push_back(m->name());
                 for (const auto& a : u->abilities().all()) {
                     if (a->phase() != CastPhase::Casting) continue;
@@ -294,16 +297,28 @@ const char* cast_error_text(CastError e) {
     return "?";
 }
 
-// 找 ability_special 里第一个能用的尺寸提示 (radius / width). 找不到给默认.
-double preview_size(const Ability& ab, std::uint32_t behavior, double fallback) {
+// 解析当前等级下的 special 字段值; 不存在返回 NaN.
+double special_or_nan(const Ability& ab, const char* key) {
     const auto& sp = ab.ability_special();
-    static const char* keys[] = {"radius", "width", "hook_width"};
-    for (const char* k : keys) {
-        auto it = sp.find(k);
-        if (it != sp.end()) return it->second.get_float(ab.level());
-    }
-    (void)behavior;
-    return fallback;
+    auto it = sp.find(key);
+    if (it == sp.end()) return std::numeric_limits<double>::quiet_NaN();
+    return it->second.get_float(ab.level());
+}
+
+// AoE 预览 (圆形): 优先 radius. 找不到给默认.
+double preview_aoe_radius(const Ability& ab, double fallback) {
+    const double r = special_or_nan(ab, "radius");
+    return std::isnan(r) ? fallback : r;
+}
+
+// 线性投射物预览参数. 没有 width/length 时返回 false.
+struct LinearPreview { double length; double width; };
+bool preview_linear(const Ability& ab, LinearPreview& out) {
+    const double w = special_or_nan(ab, "width");
+    const double l = special_or_nan(ab, "length");
+    if (std::isnan(w) || std::isnan(l)) return false;
+    out.width = w; out.length = l;
+    return true;
 }
 
 double dist2(Vec2 a, Vec2 b) {
@@ -457,14 +472,15 @@ int main() {
             ms.y >= field_y0 && ms.y < field_y1;
         const Vec2 mouse_world = cam.to_world(ms);
 
-        // 拾取最近的活着的 dummy (圆形碰撞, 半径 = kUnitRadiusPx / zoom)
+        // 拾取最近的活着的 dummy. 拾取半径 = 单位 hull_radius, 但保证最小屏幕半径
+        // 不低于 kMinUnitRadiusPx 等价的世界距离, 避免 zoom 过大时点不到.
         Unit* hover_unit = nullptr;
         if (mouse_in_field) {
-            const double pick_r = dota::visual::kUnitRadiusPx / cam.zoom;
-            const double pick_r2 = pick_r * pick_r;
+            const double min_world_r = dota::visual::kMinUnitRadiusPx / cam.zoom;
             for (Unit* u : scene.dummies()) {
                 if (!u || !u->alive()) continue;
-                if (dist2(u->position(), mouse_world) <= pick_r2) {
+                const double pick_r = std::max(u->hull_radius(), min_world_r);
+                if (dist2(u->position(), mouse_world) <= pick_r * pick_r) {
                     hover_unit = u;
                     break;
                 }
@@ -535,10 +551,12 @@ int main() {
                     const Color ring = (range <= 0.0 || d <= range)
                         ? Color{255, 220, 80, 255}
                         : Color{220, 80, 80, 255};
+                    const float r_px = std::max(dota::visual::kMinUnitRadiusPx,
+                                                cam.scalar(hover_unit->hull_radius()));
                     DrawCircleLines(static_cast<int>(us.x), static_cast<int>(us.y),
-                                    dota::visual::kUnitRadiusPx + 4.0f, ring);
+                                    r_px + 4.0f, ring);
                     DrawCircleLines(static_cast<int>(us.x), static_cast<int>(us.y),
-                                    dota::visual::kUnitRadiusPx + 6.0f, ring);
+                                    r_px + 6.0f, ring);
                 }
             } else if (aim == AimMode::AwaitPointTarget && mouse_in_field) {
                 const Vector2 ts = cam.to_screen(mouse_world);
@@ -546,12 +564,41 @@ int main() {
                 const Color line_c = (range <= 0.0 || d <= range)
                     ? Color{255, 220, 80, 200}
                     : Color{220, 80, 80, 200};
-                DrawLineEx(cs, ts, 2.0f, line_c);
-                const double size = preview_size(*ab, ab->behavior(), 100.0);
-                DrawCircleLines(static_cast<int>(ts.x), static_cast<int>(ts.y),
-                                cam.scalar(size), line_c);
-                DrawLineEx({ts.x - 8, ts.y}, {ts.x + 8, ts.y}, 2.0f, line_c);
-                DrawLineEx({ts.x, ts.y - 8}, {ts.x, ts.y + 8}, 2.0f, line_c);
+
+                LinearPreview lp;
+                if (preview_linear(*ab, lp)) {
+                    // 线性投射物: 画从 caster 沿瞄准方向, 长度 lp.length, 宽 lp.width
+                    // 的胶囊 (= 中线 + 两端半圆 + 两侧平行线). 单位被命中条件:
+                    // 圆心到该胶囊距离 <= hull_radius (由引擎处理).
+                    const double dx = mouse_world.x - caster_pos.x;
+                    const double dy = mouse_world.y - caster_pos.y;
+                    const double len = std::sqrt(dx*dx + dy*dy);
+                    if (len > 1e-3) {
+                        const double ux = dx / len, uy = dy / len;
+                        const Vec2 end_w{caster_pos.x + ux * lp.length,
+                                         caster_pos.y + uy * lp.length};
+                        const Vector2 es = cam.to_screen(end_w);
+                        const float hw = cam.scalar(lp.width * 0.5);
+                        // 法向单位向量 (-uy, ux), 转屏幕像素 (zoom 已在 hw 中)
+                        const float nx = static_cast<float>(-uy) * hw;
+                        const float ny = static_cast<float>( ux) * hw;
+                        DrawLineEx({cs.x + nx, cs.y + ny},
+                                   {es.x + nx, es.y + ny}, 1.5f, line_c);
+                        DrawLineEx({cs.x - nx, cs.y - ny},
+                                   {es.x - nx, es.y - ny}, 1.5f, line_c);
+                        DrawCircleLines(static_cast<int>(cs.x), static_cast<int>(cs.y), hw, line_c);
+                        DrawCircleLines(static_cast<int>(es.x), static_cast<int>(es.y), hw, line_c);
+                        DrawLineEx(cs, es, 1.0f, Color{line_c.r, line_c.g, line_c.b, 120});
+                    }
+                } else {
+                    // AoE 圆形预览
+                    DrawLineEx(cs, ts, 2.0f, line_c);
+                    const double size = preview_aoe_radius(*ab, 100.0);
+                    DrawCircleLines(static_cast<int>(ts.x), static_cast<int>(ts.y),
+                                    cam.scalar(size), line_c);
+                    DrawLineEx({ts.x - 8, ts.y}, {ts.x + 8, ts.y}, 2.0f, line_c);
+                    DrawLineEx({ts.x, ts.y - 8}, {ts.x, ts.y + 8}, 2.0f, line_c);
+                }
             }
             // AwaitConfirmNoTarget: 预览只是 cast_range 圆, 已经画过.
         }
