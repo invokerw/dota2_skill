@@ -2,10 +2,12 @@
 //
 // 控制:
 //   左侧栏点击切换英雄 (= 重建 World).
-//   底部技能槽点击, 或按 1/2/3/4 选中技能 (高亮).
-//   R 重置当前英雄, SPACE 暂停, ESC 退出.
-//
-// 实际施法交互 (瞄准 / 释放) 留到 Stage S4.
+//   底部技能槽点击, 或按 1/2/3/4 选中技能, 进入瞄准模式.
+//   * UnitTarget: 鼠标 hover 一个 dummy, 左键释放; 距离过远显示红圈.
+//   * PointTarget: 鼠标移动时画从 caster 到指针的线 + width / radius 提示, 左键释放.
+//   * NoTarget: 进入待确认状态, 再次按数字键 / SPACE / 左键释放.
+//   ESC 或右键取消瞄准.
+//   R 重置当前英雄, SPACE 暂停 (非瞄准时), ESC 退出 (无瞄准时).
 
 #include "dota/ability/ability.hpp"
 #include "dota/ability/behavior.hpp"
@@ -23,6 +25,7 @@
 #include "visual_common.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -238,6 +241,57 @@ const char* behavior_label(std::uint32_t b) {
     return "?";
 }
 
+// --- S4: 瞄准状态 ---
+enum class AimMode {
+    None,
+    AwaitUnitTarget,
+    AwaitPointTarget,
+    AwaitConfirmNoTarget,
+};
+
+AimMode aim_for_behavior(std::uint32_t b) {
+    if (has_flag(b, BehaviorFlag::PointTarget)) return AimMode::AwaitPointTarget;
+    if (has_flag(b, BehaviorFlag::UnitTarget))  return AimMode::AwaitUnitTarget;
+    if (has_flag(b, BehaviorFlag::NoTarget))    return AimMode::AwaitConfirmNoTarget;
+    return AimMode::None;
+}
+
+const char* cast_error_text(CastError e) {
+    switch (e) {
+        case CastError::None:              return "OK";
+        case CastError::NotReady:          return "Not ready";
+        case CastError::OnCooldown:        return "On cooldown";
+        case CastError::NotEnoughMana:     return "Not enough mana";
+        case CastError::Silenced:          return "Silenced";
+        case CastError::Stunned:           return "Stunned";
+        case CastError::Hexed:             return "Hexed";
+        case CastError::CasterDead:        return "Caster dead";
+        case CastError::InvalidTarget:     return "Invalid target";
+        case CastError::TargetMagicImmune: return "Target magic immune";
+        case CastError::OutOfRange:        return "Out of range";
+        case CastError::NotLearned:        return "Not learned";
+    }
+    return "?";
+}
+
+// 找 ability_special 里第一个能用的尺寸提示 (radius / width). 找不到给默认.
+double preview_size(const Ability& ab, std::uint32_t behavior, double fallback) {
+    const auto& sp = ab.ability_special();
+    static const char* keys[] = {"radius", "width", "hook_width"};
+    for (const char* k : keys) {
+        auto it = sp.find(k);
+        if (it != sp.end()) return it->second.get_float(ab.level());
+    }
+    (void)behavior;
+    return fallback;
+}
+
+double dist2(Vec2 a, Vec2 b) {
+    const double dx = a.x - b.x;
+    const double dy = a.y - b.y;
+    return dx * dx + dy * dy;
+}
+
 int main() {
     HeroCatalog catalog;
     try {
@@ -253,6 +307,8 @@ int main() {
 
     InitWindow(kWindowW, kWindowH, "dota2_skill -- skill tester");
     SetTargetFPS(60);
+    // 我们自己处理 ESC: 优先取消瞄准, 其次退出. 不让 raylib 直接 set close.
+    SetExitKey(KEY_NULL);
 
     Scene scene(catalog);
 
@@ -270,20 +326,126 @@ int main() {
     const std::string hero_csv = build_hero_list_csv(catalog);
     int  hero_scroll  = 0;
     int  hero_active  = 0;
-    int  selected_ability = -1;   // S3 仅记录选择, 不施法
+    int  selected_ability = -1;
+    AimMode aim = AimMode::None;
     bool paused = false;
+    std::string toast_text;     // 顶部 toast (1.5s 淡出)
+    double      toast_t0 = -10.0;
+    Color       toast_color = Color{255, 200, 80, 255};
+    auto show_toast = [&](const std::string& s, Color c) {
+        toast_text = s;
+        toast_t0   = scene.world()->time();
+        toast_color = c;
+    };
 
-    while (!WindowShouldClose()) {
-        if (IsKeyPressed(KEY_SPACE)) paused = !paused;
-        if (IsKeyPressed(KEY_R))     { scene.rebuild_with_hero(scene.hero_index()); selected_ability = -1; paused = false; }
+    auto reset_aim = [&] { aim = AimMode::None; };
 
-        // 数字键 1-4 选中技能槽 (前提是该槽存在)
+    auto try_cast = [&](Ability* ab, const CastTarget& tgt) {
+        const CastError e = ab->order_cast(tgt, *scene.world());
+        if (e != CastError::None) {
+            show_toast(std::string(cast_error_text(e)),
+                       Color{220, 100, 100, 255});
+        } else {
+            show_toast("Cast: " + ab->name(),
+                       Color{120, 230, 120, 255});
+        }
+        reset_aim();
+    };
+
+    bool quit = false;
+    while (!quit && !WindowShouldClose()) {
+        // ESC: 优先取消瞄准, 没在瞄准时退出窗口.
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            if (aim != AimMode::None) {
+                reset_aim();
+            } else {
+                quit = true;
+            }
+        }
+
+        if (aim == AimMode::None && IsKeyPressed(KEY_SPACE)) paused = !paused;
+        if (IsKeyPressed(KEY_R)) {
+            scene.rebuild_with_hero(scene.hero_index());
+            selected_ability = -1;
+            reset_aim();
+            paused = false;
+        }
+
+        // 数字键 1-4 选中技能槽: 第一次按 = 选并进入瞄准; 已在该槽瞄准时, 对
+        // NoTarget 触发释放, 其他类型切回选择 (无变化).
         const int key_slots[] = {KEY_ONE, KEY_TWO, KEY_THREE, KEY_FOUR};
         const int slot_count =
             std::min<int>(kAbilitySlotMax,
                           static_cast<int>(scene.caster_abilities().size()));
         for (int i = 0; i < slot_count; ++i) {
-            if (IsKeyPressed(key_slots[i])) selected_ability = i;
+            if (!IsKeyPressed(key_slots[i])) continue;
+            Ability* ab = scene.caster_abilities()[i];
+            const AimMode want = aim_for_behavior(ab->behavior());
+            if (selected_ability == i && aim == AimMode::AwaitConfirmNoTarget) {
+                // 已选 NoTarget 槽再按一次 = 释放.
+                CastTarget tgt;
+                try_cast(ab, tgt);
+                selected_ability = -1;
+            } else {
+                selected_ability = i;
+                aim = want;
+            }
+        }
+
+        // SPACE 在 NoTarget 待确认时也可释放
+        if (aim == AimMode::AwaitConfirmNoTarget && IsKeyPressed(KEY_SPACE) &&
+            selected_ability >= 0 && selected_ability < slot_count) {
+            CastTarget tgt;
+            try_cast(scene.caster_abilities()[selected_ability], tgt);
+            selected_ability = -1;
+        }
+
+        // 鼠标位置 -> 世界坐标; 仅当鼠标在战场区时有效
+        const Vector2 ms = GetMousePosition();
+        const bool mouse_in_field =
+            ms.x >= field_x0 && ms.x < field_x1 &&
+            ms.y >= field_y0 && ms.y < field_y1;
+        const Vec2 mouse_world = cam.to_world(ms);
+
+        // 拾取最近的活着的 dummy (圆形碰撞, 半径 = kUnitRadiusPx / zoom)
+        Unit* hover_unit = nullptr;
+        if (mouse_in_field) {
+            const double pick_r = dota::visual::kUnitRadiusPx / cam.zoom;
+            const double pick_r2 = pick_r * pick_r;
+            for (Unit* u : scene.dummies()) {
+                if (!u || !u->alive()) continue;
+                if (dist2(u->position(), mouse_world) <= pick_r2) {
+                    hover_unit = u;
+                    break;
+                }
+            }
+        }
+
+        // 右键取消瞄准
+        if (aim != AimMode::None && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+            reset_aim();
+        }
+
+        // 左键 -- 仅在战场内有效
+        if (mouse_in_field && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+            selected_ability >= 0 && selected_ability < slot_count) {
+            Ability* ab = scene.caster_abilities()[selected_ability];
+            CastTarget tgt;
+            bool fire = false;
+            if (aim == AimMode::AwaitUnitTarget && hover_unit) {
+                tgt.unit = hover_unit;
+                fire = true;
+            } else if (aim == AimMode::AwaitPointTarget) {
+                tgt.point = mouse_world;
+                tgt.has_point = true;
+                fire = true;
+            } else if (aim == AimMode::AwaitConfirmNoTarget) {
+                fire = true;
+            }
+            if (fire) {
+                try_cast(ab, tgt);
+                selected_ability = -1;
+            }
         }
 
         const float dt_raw = GetFrameTime();
@@ -300,6 +462,48 @@ int main() {
         for (const auto& u : scene.render_units())       dota::visual::draw_unit(cam, u);
         for (auto& f : scene.texts())
             dota::visual::draw_floating_text(cam, f, scene.world()->time());
+
+        // --- 瞄准预览 ---
+        if (aim != AimMode::None && selected_ability >= 0 &&
+            selected_ability < slot_count && scene.caster() && scene.caster()->alive()) {
+            Ability* ab = scene.caster_abilities()[selected_ability];
+            const Vec2 caster_pos = scene.caster()->position();
+            const double range = ab->cast_range();
+            const Vector2 cs = cam.to_screen(caster_pos);
+
+            // cast_range 圆 (浅色)
+            if (range > 0.0) {
+                DrawCircleLines(static_cast<int>(cs.x), static_cast<int>(cs.y),
+                                cam.scalar(range), Color{200, 200, 80, 90});
+            }
+
+            if (aim == AimMode::AwaitUnitTarget) {
+                if (hover_unit) {
+                    const Vector2 us = cam.to_screen(hover_unit->position());
+                    const double d = std::sqrt(dist2(caster_pos, hover_unit->position()));
+                    const Color ring = (range <= 0.0 || d <= range)
+                        ? Color{255, 220, 80, 255}
+                        : Color{220, 80, 80, 255};
+                    DrawCircleLines(static_cast<int>(us.x), static_cast<int>(us.y),
+                                    dota::visual::kUnitRadiusPx + 4.0f, ring);
+                    DrawCircleLines(static_cast<int>(us.x), static_cast<int>(us.y),
+                                    dota::visual::kUnitRadiusPx + 6.0f, ring);
+                }
+            } else if (aim == AimMode::AwaitPointTarget && mouse_in_field) {
+                const Vector2 ts = cam.to_screen(mouse_world);
+                const double d = std::sqrt(dist2(caster_pos, mouse_world));
+                const Color line_c = (range <= 0.0 || d <= range)
+                    ? Color{255, 220, 80, 200}
+                    : Color{220, 80, 80, 200};
+                DrawLineEx(cs, ts, 2.0f, line_c);
+                const double size = preview_size(*ab, ab->behavior(), 100.0);
+                DrawCircleLines(static_cast<int>(ts.x), static_cast<int>(ts.y),
+                                cam.scalar(size), line_c);
+                DrawLineEx({ts.x - 8, ts.y}, {ts.x + 8, ts.y}, 2.0f, line_c);
+                DrawLineEx({ts.x, ts.y - 8}, {ts.x, ts.y + 8}, 2.0f, line_c);
+            }
+            // AwaitConfirmNoTarget: 预览只是 cast_range 圆, 已经画过.
+        }
         EndScissorMode();
 
         // --- HUD 顶部状态行 ---
@@ -368,10 +572,32 @@ int main() {
                      16, Color{180, 180, 180, 255});
         }
 
-        // --- 帮助文字 (右下角) ---
-        DrawText("R reset   SPACE pause   1-4 select   ESC quit  (cast in S4)",
+        // --- 帮助文字 (技能栏上方一行) ---
+        const char* aim_hint = "";
+        switch (aim) {
+            case AimMode::AwaitUnitTarget:    aim_hint = "  [aim: click a target]"; break;
+            case AimMode::AwaitPointTarget:   aim_hint = "  [aim: click a point]"; break;
+            case AimMode::AwaitConfirmNoTarget: aim_hint = "  [confirm: SPACE / number / left-click]"; break;
+            default: break;
+        }
+        DrawText(TextFormat(
+                     "1-4 / click to select   LMB cast   RMB / ESC cancel   "
+                     "R reset   SPACE pause%s",
+                     aim_hint),
                  kSidePanelW + 12, kWindowH - kAbilityBarH - 22,
                  14, Color{160, 160, 160, 255});
+
+        // --- Toast (战场顶部居中) ---
+        const double age = scene.world()->time() - toast_t0;
+        if (age >= 0.0 && age < 1.5) {
+            const float alpha = static_cast<float>(1.0 - age / 1.5);
+            Color tc = toast_color;
+            tc.a = static_cast<unsigned char>(std::clamp(alpha, 0.0f, 1.0f) * 255.0f);
+            const int tw = MeasureText(toast_text.c_str(), 22);
+            const int tx = field_x0 + (cam.window_w - tw) / 2;
+            const int ty = 38;
+            DrawText(toast_text.c_str(), tx, ty, 22, tc);
+        }
 
         EndDrawing();
     }

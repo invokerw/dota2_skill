@@ -195,7 +195,7 @@ raygui API 使用:
 - 没法力 / 在 CD 时, 屏幕底部 toast 显示 "Not enough mana" / "On cooldown 2.3s".
 - `Esc` 取消瞄准.
 
-**Status**: Not Started
+**Status**: Complete
 
 ### S4 状态机
 
