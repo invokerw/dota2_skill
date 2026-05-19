@@ -493,6 +493,13 @@ int main() {
             reset_aim();
         }
 
+        // 非 aim 模式下 RMB 命令 caster 走位
+        if (mouse_in_field && aim == AimMode::None &&
+            IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) &&
+            scene.caster() && scene.caster()->alive()) {
+            scene.caster()->issue_move(mouse_world);
+        }
+
         // 左键 -- 仅在战场内有效
         if (mouse_in_field && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
             selected_ability >= 0 && selected_ability < slot_count) {
@@ -601,6 +608,19 @@ int main() {
                 }
             }
             // AwaitConfirmNoTarget: 预览只是 cast_range 圆, 已经画过.
+        }
+
+        // 移动目标 marker
+        if (scene.caster()) {
+            auto t = scene.caster()->move_target();
+            if (t) {
+                const Vector2 ms_pt = cam.to_screen(*t);
+                const Color c{120, 230, 120, 200};
+                DrawCircleLines(static_cast<int>(ms_pt.x),
+                                static_cast<int>(ms_pt.y), 8.0f, c);
+                DrawLineEx({ms_pt.x - 6, ms_pt.y}, {ms_pt.x + 6, ms_pt.y}, 1.5f, c);
+                DrawLineEx({ms_pt.x, ms_pt.y - 6}, {ms_pt.x, ms_pt.y + 6}, 1.5f, c);
+            }
         }
         EndScissorMode();
 
@@ -724,8 +744,8 @@ int main() {
             default: break;
         }
         DrawText(TextFormat(
-                     "1-4 / click to select   LMB cast   RMB / ESC cancel   "
-                     "R reset   SPACE pause%s",
+                     "1-4 / click to select   LMB cast   RMB move / cancel   "
+                     "ESC cancel   R reset   SPACE pause%s",
                      aim_hint),
                  kSidePanelW + 12, kWindowH - kAbilityBarH - 22,
                  14, Color{160, 160, 160, 255});

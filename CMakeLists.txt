@@ -202,6 +202,7 @@ add_executable(dota_tests
     tests/test_motion_knockback.cpp
     tests/test_movement_basic.cpp
     tests/test_movement_wall_trace.cpp
+    tests/test_movement_motion_controller.cpp
     tests/test_projectile.cpp
     tests/test_thinker.cpp
     tests/test_hero_sven.cpp
