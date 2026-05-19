@@ -45,8 +45,10 @@ namespace {
 constexpr int kWindowW = 1280;
 constexpr int kWindowH = 720;
 
-// UI 布局参数. 战场区在 [kSidePanelW, kWindowW] x [0, kWindowH - kAbilityBarH].
+// UI 布局参数. 战场区在 [kSidePanelW, kWindowW - kTunePanelW] x
+// [0, kWindowH - kAbilityBarH].
 constexpr int kSidePanelW = 220;   // 左侧英雄列表面板宽
+constexpr int kTunePanelW = 240;   // 右侧调参面板宽
 constexpr int kAbilityBarH = 96;   // 底部技能栏高度
 constexpr int kAbilitySlotMax = 4; // 技能槽最大数量, 多余的不显示
 
@@ -66,6 +68,18 @@ constexpr DummySpec kDummies[] = {
     {"Dummy MR0%",  { 600.0, -150.0}, 0.00,  0.0},
     {"Dummy MR25%", { 600.0,    0.0}, 0.25,  5.0},
     {"Dummy MR50%", { 600.0,  150.0}, 0.50, 10.0},
+};
+
+// S5 调参覆盖: 仅在 Apply / Reset 时由 main 写入, rebuild_with_hero 消费.
+// 三个 dummy 共用同一份 override (各自的 magic_resist / base_armor 还是按
+// kDummies 区分; 这里只统一 max_health / attack_damage / 以及"额外 MR / 装甲
+// 偏移"). 第一版保持简单.
+struct DummyOverride {
+    bool   active        = false;
+    double max_health    = 6000.0;
+    double attack_damage = 0.0;
+    double magic_resist_bonus = 0.0;   // 加到每个 dummy 的 base MR 上
+    double base_armor_bonus   = 0.0;
 };
 
 // 主场景: 一个 caster + 3 dummy. 切英雄 / R 都走 rebuild_with_hero().
@@ -107,15 +121,19 @@ public:
             if (inst) caster_abilities_.push_back(inst);
         }
 
-        // 3 个 dummy
+        // 3 个 dummy. 若 dummy_override_.active, 用调参面板的 stats.
         dummies_.clear();
         for (const auto& d : kDummies) {
             UnitStats ds;
-            ds.max_health    = 6000.0;
+            ds.max_health    = dummy_override_.active
+                ? dummy_override_.max_health : 6000.0;
             ds.max_mana      = 0.0;
-            ds.attack_damage = 0.0;
-            ds.base_armor    = d.base_armor;
-            ds.magic_resist  = d.magic_resist;
+            ds.attack_damage = dummy_override_.active
+                ? dummy_override_.attack_damage : 0.0;
+            ds.base_armor    = d.base_armor +
+                (dummy_override_.active ? dummy_override_.base_armor_bonus : 0.0);
+            ds.magic_resist  = d.magic_resist +
+                (dummy_override_.active ? dummy_override_.magic_resist_bonus : 0.0);
             ds.base_attack_time = 1.7;
             dummies_.push_back(world_->spawn(d.label, Team::Dire, ds, d.pos));
         }
@@ -161,6 +179,9 @@ public:
     const std::vector<Ability*>&      caster_abilities() const { return caster_abilities_; }
     std::size_t                       hero_index() const { return hero_index_; }
     std::vector<FloatingText>&        texts()        { return texts_; }
+
+    void set_dummy_override(const DummyOverride& o) { dummy_override_ = o; }
+    const DummyOverride& dummy_override() const     { return dummy_override_; }
 
     // 收集当前所有要绘制的 RenderUnit / RenderProjectile (复用 visual_common)
     std::vector<RenderUnit> render_units() const {
@@ -218,6 +239,7 @@ private:
     std::vector<Unit*>              dummies_;
     std::vector<Ability*>           caster_abilities_;
     std::vector<FloatingText>       texts_;
+    DummyOverride                   dummy_override_{};
 };
 
 } // namespace
@@ -312,10 +334,11 @@ int main() {
 
     Scene scene(catalog);
 
-    // 战场视图: 把战场区域居中到 [kSidePanelW, kWindowW] x [0, kWindowH - kAbilityBarH].
+    // 战场视图: 居中到 [kSidePanelW, kWindowW - kTunePanelW] x
+    // [0, kWindowH - kAbilityBarH].
     ViewCamera cam;
     const int field_x0 = kSidePanelW;
-    const int field_x1 = kWindowW;
+    const int field_x1 = kWindowW - kTunePanelW;
     const int field_y0 = 0;
     const int field_y1 = kWindowH - kAbilityBarH;
     cam.window_w = field_x1 - field_x0;
@@ -329,6 +352,26 @@ int main() {
     int  selected_ability = -1;
     AimMode aim = AimMode::None;
     bool paused = false;
+
+    // S5: 调参面板状态. 用 float 跟 raygui 滑动条绑定.
+    float tune_max_health  = 6000.0f;
+    float tune_attack_dmg  = 0.0f;
+    float tune_mr_bonus    = 0.0f;     // -1.0..+1.0
+    float tune_armor_bonus = 0.0f;     // -10..+30
+    auto apply_dummy_tune = [&](bool also_rebuild) {
+        DummyOverride o;
+        o.active             = true;
+        o.max_health         = std::max(1.0f, tune_max_health);
+        o.attack_damage      = std::max(0.0f, tune_attack_dmg);
+        o.magic_resist_bonus = tune_mr_bonus;
+        o.base_armor_bonus   = tune_armor_bonus;
+        scene.set_dummy_override(o);
+        if (also_rebuild) {
+            scene.rebuild_with_hero(scene.hero_index());
+            selected_ability = -1;
+            aim = AimMode::None;
+        }
+    };
     std::string toast_text;     // 顶部 toast (1.5s 淡出)
     double      toast_t0 = -10.0;
     Color       toast_color = Color{255, 200, 80, 255};
@@ -571,6 +614,63 @@ int main() {
                      kSidePanelW + 16, bar_y + kAbilityBarH / 2 - 8,
                      16, Color{180, 180, 180, 255});
         }
+
+        // --- 右侧调参面板 ---
+        const int tune_x = kWindowW - kTunePanelW;
+        DrawRectangle(tune_x, 0, kTunePanelW, kWindowH, Color{26, 30, 36, 255});
+        GuiPanel(Rectangle{(float)tune_x, 0.0f, (float)kTunePanelW, 28.0f},
+                 "Dummy Tuning");
+        // 滑动条布局: 左 8px label, 右 8px 数值, 中间 slider.
+        const float pad = 12.0f;
+        const float row_h = 22.0f;
+        const float gap  = 14.0f;
+        const float label_w = 40.0f;
+        const float right_w = 56.0f;
+        const float slider_x = tune_x + pad + label_w;
+        const float slider_w = kTunePanelW - 2 * pad - label_w - right_w;
+        float row_y = 48.0f;
+
+        auto slider_row = [&](const char* label, float* val,
+                              float vmin, float vmax,
+                              const char* fmt) {
+            const Rectangle r{slider_x, row_y, slider_w, row_h};
+            GuiSliderBar(r, label,
+                         TextFormat(fmt, *val), val, vmin, vmax);
+            row_y += row_h + gap;
+        };
+
+        slider_row("HP",    &tune_max_health,  100.0f, 10000.0f, "%.0f");
+        slider_row("MR+",   &tune_mr_bonus,    -1.0f,  1.0f,    "%+.2f");
+        slider_row("Arm+",  &tune_armor_bonus, -10.0f, 30.0f,   "%+.1f");
+        slider_row("AD",    &tune_attack_dmg,   0.0f,  200.0f,  "%.0f");
+
+        // 按钮: Apply / Reset Dummies (二者都重建 dummy, 只是命名)
+        const float btn_w = (kTunePanelW - 2 * pad - 8.0f) * 0.5f;
+        const float btn_y = row_y + 6.0f;
+        if (GuiButton(Rectangle{(float)tune_x + pad, btn_y, btn_w, 28.0f},
+                      "Apply")) {
+            apply_dummy_tune(true);
+            show_toast("Dummy stats applied", Color{120, 230, 120, 255});
+        }
+        if (GuiButton(Rectangle{(float)tune_x + pad + btn_w + 8.0f, btn_y,
+                                btn_w, 28.0f},
+                      "Reset")) {
+            // 重置滑动条到默认值并重建 dummy.
+            tune_max_health  = 6000.0f;
+            tune_attack_dmg  = 0.0f;
+            tune_mr_bonus    = 0.0f;
+            tune_armor_bonus = 0.0f;
+            scene.set_dummy_override({});
+            scene.rebuild_with_hero(scene.hero_index());
+            selected_ability = -1;
+            aim = AimMode::None;
+            show_toast("Dummies reset", Color{200, 200, 80, 255});
+        }
+
+        // 提示: 滑动条只是预览, 必须 Apply 才生效 (因为内部走 World 重建).
+        DrawText("Apply rebuilds dummies\n(caster persists, S4 mid-cast aborts)",
+                 tune_x + pad, static_cast<int>(btn_y) + 38,
+                 12, Color{160, 160, 160, 255});
 
         // --- 帮助文字 (技能栏上方一行) ---
         const char* aim_hint = "";
