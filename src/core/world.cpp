@@ -144,6 +144,23 @@ double point_to_segment_dist_sq(Vec2 p, Vec2 a, Vec2 b) {
     const Vec2 proj{a.x + ab.x * t, a.y + ab.y * t};
     return distance_sq(p, proj);
 }
+
+// wall tracing 用: 找出 desired 位置上与 self 重叠(圆心距 < hull 之和)的
+// 第一个其他单位. 过滤规则与 resolve_unit_collisions 保持一致 -- 否则会出现
+// "wall trace 挡了, 分离 pass 又不挡"的不一致.
+Unit* first_blocker(const std::vector<std::unique_ptr<Unit>>& units,
+                     const Unit& self, Vec2 desired, double self_hull) {
+    for (const auto& up : units) {
+        Unit* u = up.get();
+        if (!u || u == &self) continue;
+        if (!u->alive()) continue;
+        if (u->team() == Team::Neutral) continue;
+        if (u->modifiers().has_state(ModifierState::NoUnitCollision)) continue;
+        const double r = self_hull + u->hull_radius();
+        if (distance_sq(desired, u->position()) < r * r) return u;
+    }
+    return nullptr;
+}
 } // namespace
 
 std::vector<Unit*> World::find_enemies_in_cone(Vec2 origin, Vec2 direction, double length,
@@ -250,7 +267,32 @@ void World::tick_movement(double dt) {
 
         const Vec2 dir = to_wp * (1.0 / remain);
         Vec2 desired = pos + dir * step;
-        // Stage 2 在此处插入 wall trace 切线滑动. 当前直接采用 desired.
+
+        // Wall tracing 切线滑动: 路径上有其他单位阻挡时, 沿连心线垂直方向
+        // 滑动 step 长度(不缩短步长, 视觉速度连续), 朝目标方向那一侧.
+        // 楔形夹角内卡住 -> 本 tick 放弃, 下 tick 再尝试.
+        constexpr int kMaxSlideIters = 3;
+        Vec2 try_pos = desired;
+        for (int iter = 0; iter < kMaxSlideIters; ++iter) {
+            Unit* b = first_blocker(units_, *u, try_pos, u->hull_radius());
+            if (!b) break;
+            const Vec2 to_b = b->position() - pos;
+            Vec2 tangent{-to_b.y, to_b.x};
+            // 选朝目标推进的一侧
+            if (dot(tangent, to_wp) < 0.0) {
+                tangent.x = -tangent.x;
+                tangent.y = -tangent.y;
+            }
+            const double tlen = length(tangent);
+            if (tlen <= kEps) { try_pos = pos; break; }
+            const Vec2 tn{tangent.x / tlen, tangent.y / tlen};
+            try_pos = pos + tn * step;
+        }
+        // 迭代用尽仍重叠 -> 不动
+        if (first_blocker(units_, *u, try_pos, u->hull_radius()) != nullptr) {
+            try_pos = pos;
+        }
+        desired = try_pos;
         u->set_position(desired);
     }
 }
