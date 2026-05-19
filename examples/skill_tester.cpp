@@ -366,6 +366,13 @@ int main() {
     AimMode aim = AimMode::None;
     bool paused = false;
 
+    // Stage 4: dummy AI 模式. 每帧推进 -- Idle 不动, Strafe 上下来回,
+    // Charge 持续追击 caster (wall trace 自动避障).
+    enum class DummyAI { Idle = 0, Strafe = 1, Charge = 2 };
+    int dummy_ai_idx = 0;
+    // Strafe 状态: +1 表示朝 +Y bookend, -1 朝 -Y. 与 dummies 索引对齐.
+    std::vector<int> strafe_dir = {1, 1, 1};
+
     // S5: 调参面板状态. 用 float 跟 imgui 滑动条绑定.
     float tune_max_health  = 6000.0f;
     float tune_attack_dmg  = 0.0f;
@@ -524,6 +531,31 @@ int main() {
 
         const float dt_raw = GetFrameTime();
         const double dt = paused ? 0.0 : std::min(static_cast<double>(dt_raw), 0.05);
+
+        // Dummy AI 在 scene.update 之前推进 -- 命令在本 tick 即生效.
+        if (dt > 0.0 && dummy_ai_idx != static_cast<int>(DummyAI::Idle)) {
+            const auto& ds = scene.dummies();
+            // 保证 strafe_dir 大小匹配
+            if (strafe_dir.size() < ds.size()) strafe_dir.resize(ds.size(), 1);
+            const DummyAI mode = static_cast<DummyAI>(dummy_ai_idx);
+            for (std::size_t i = 0; i < ds.size(); ++i) {
+                Unit* d = ds[i];
+                if (!d || !d->alive()) continue;
+                if (mode == DummyAI::Charge) {
+                    if (scene.caster() && scene.caster()->alive()) {
+                        d->issue_move(scene.caster()->position());
+                    }
+                } else if (mode == DummyAI::Strafe) {
+                    // 在 (pos.x, pos.y ± 200) 之间往返. 到达后(无 target)切方向.
+                    if (!d->move_target().has_value()) {
+                        const Vec2 p = d->position();
+                        d->issue_move({p.x, p.y + 200.0 * strafe_dir[i]});
+                        strafe_dir[i] = -strafe_dir[i];
+                    }
+                }
+            }
+        }
+
         if (dt > 0.0) scene.update(dt);
 
         BeginDrawing();
@@ -732,6 +764,20 @@ int main() {
             }
             ImGui::Spacing();
             ImGui::TextWrapped("Apply rebuilds dummies (caster persists, mid-cast aborts).");
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::TextDisabled("Dummy AI");
+            const char* ai_items[] = {"Idle", "Strafe", "Charge"};
+            const int prev_ai = dummy_ai_idx;
+            ImGui::Combo("##dummy_ai", &dummy_ai_idx, ai_items, IM_ARRAYSIZE(ai_items));
+            if (prev_ai != dummy_ai_idx) {
+                // 切到 Idle 时清掉所有 dummy 的 move 指令
+                if (dummy_ai_idx == static_cast<int>(DummyAI::Idle)) {
+                    for (Unit* d : scene.dummies()) {
+                        if (d) d->stop_move();
+                    }
+                }
+            }
         }
         ImGui::End();
 
