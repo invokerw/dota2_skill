@@ -21,7 +21,8 @@
 #include "dota/tools/hero_catalog.hpp"
 
 #include "raylib.h"
-#include "raygui.h"
+#include "imgui.h"
+#include "rlImGui.h"
 #include "visual_common.hpp"
 
 #include <algorithm>
@@ -251,16 +252,6 @@ private:
 
 } // namespace
 
-// raygui 用 ';' 分隔的字符串作为列表项. 把英雄列表拼成一段.
-std::string build_hero_list_csv(const HeroCatalog& cat) {
-    std::string s;
-    for (std::size_t i = 0; i < cat.heroes().size(); ++i) {
-        if (i) s.push_back(';');
-        s += cat.heroes()[i].yaml_name;
-    }
-    return s;
-}
-
 // 把 ability behavior 翻成短标签, 显示在按钮上.
 const char* behavior_label(std::uint32_t b) {
     if (has_flag(b, BehaviorFlag::Channelled))   return "CHN";
@@ -339,6 +330,8 @@ int main() {
     // 我们自己处理 ESC: 优先取消瞄准, 其次退出. 不让 raylib 直接 set close.
     SetExitKey(KEY_NULL);
 
+    rlImGuiSetup(/*dark theme=*/true);
+
     Scene scene(catalog);
 
     // 战场视图: 居中到 [kSidePanelW, kWindowW - kTunePanelW] x
@@ -353,14 +346,12 @@ int main() {
     cam.origin_x = static_cast<float>(field_x0) + cam.window_w * 0.5f;
     cam.origin_y = static_cast<float>(field_y0) + cam.window_h * 0.5f;
 
-    const std::string hero_csv = build_hero_list_csv(catalog);
-    int  hero_scroll  = 0;
     int  hero_active  = 0;
     int  selected_ability = -1;
     AimMode aim = AimMode::None;
     bool paused = false;
 
-    // S5: 调参面板状态. 用 float 跟 raygui 滑动条绑定.
+    // S5: 调参面板状态. 用 float 跟 imgui 滑动条绑定.
     float tune_max_health  = 6000.0f;
     float tune_attack_dmg  = 0.0f;
     float tune_mr_bonus    = 0.0f;     // -1.0..+1.0
@@ -404,8 +395,15 @@ int main() {
 
     bool quit = false;
     while (!quit && !WindowShouldClose()) {
+        // imgui 在每帧开始时消费 raylib 事件, 之后通过 io.WantCapture* 告诉我们
+        // 输入是否被 GUI 截获. 必须在 rlImGuiBegin 之后再 query.
+        rlImGuiBegin();
+        const ImGuiIO& io = ImGui::GetIO();
+        const bool gui_wants_mouse    = io.WantCaptureMouse;
+        const bool gui_wants_keyboard = io.WantCaptureKeyboard;
+
         // ESC: 优先取消瞄准, 没在瞄准时退出窗口.
-        if (IsKeyPressed(KEY_ESCAPE)) {
+        if (!gui_wants_keyboard && IsKeyPressed(KEY_ESCAPE)) {
             if (aim != AimMode::None) {
                 reset_aim();
             } else {
@@ -413,8 +411,8 @@ int main() {
             }
         }
 
-        if (aim == AimMode::None && IsKeyPressed(KEY_SPACE)) paused = !paused;
-        if (IsKeyPressed(KEY_R)) {
+        if (!gui_wants_keyboard && aim == AimMode::None && IsKeyPressed(KEY_SPACE)) paused = !paused;
+        if (!gui_wants_keyboard && IsKeyPressed(KEY_R)) {
             scene.rebuild_with_hero(scene.hero_index());
             selected_ability = -1;
             reset_aim();
@@ -427,7 +425,7 @@ int main() {
         const int slot_count =
             std::min<int>(kAbilitySlotMax,
                           static_cast<int>(scene.caster_abilities().size()));
-        for (int i = 0; i < slot_count; ++i) {
+        for (int i = 0; i < slot_count && !gui_wants_keyboard; ++i) {
             if (!IsKeyPressed(key_slots[i])) continue;
             Ability* ab = scene.caster_abilities()[i];
             const AimMode want = aim_for_behavior(ab->behavior());
@@ -443,16 +441,18 @@ int main() {
         }
 
         // SPACE 在 NoTarget 待确认时也可释放
-        if (aim == AimMode::AwaitConfirmNoTarget && IsKeyPressed(KEY_SPACE) &&
+        if (!gui_wants_keyboard &&
+            aim == AimMode::AwaitConfirmNoTarget && IsKeyPressed(KEY_SPACE) &&
             selected_ability >= 0 && selected_ability < slot_count) {
             CastTarget tgt;
             try_cast(scene.caster_abilities()[selected_ability], tgt);
             selected_ability = -1;
         }
 
-        // 鼠标位置 -> 世界坐标; 仅当鼠标在战场区时有效
+        // 鼠标位置 -> 世界坐标; 仅当鼠标在战场区且未被 GUI 截获时有效
         const Vector2 ms = GetMousePosition();
         const bool mouse_in_field =
+            !gui_wants_mouse &&
             ms.x >= field_x0 && ms.x < field_x1 &&
             ms.y >= field_y0 && ms.y < field_y1;
         const Vec2 mouse_world = cam.to_world(ms);
@@ -472,7 +472,8 @@ int main() {
         }
 
         // 右键取消瞄准
-        if (aim != AimMode::None && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+        if (!gui_wants_mouse && aim != AimMode::None &&
+            IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
             reset_aim();
         }
 
@@ -563,121 +564,109 @@ int main() {
                             paused ? "  [PAUSED]" : ""),
                  field_x0 + 12, 10, 20, RAYWHITE);
 
-        // --- 左侧英雄列表 ---
-        DrawRectangle(0, 0, kSidePanelW, kWindowH, Color{26, 30, 36, 255});
-        GuiPanel(Rectangle{0, 0, (float)kSidePanelW, 28.0f}, "Heroes");
-        const int prev_active = hero_active;
-        GuiListView(Rectangle{8, 32, (float)(kSidePanelW - 16),
-                              (float)(kWindowH - 32 - 16)},
-                    hero_csv.c_str(), &hero_scroll, &hero_active);
-        if (hero_active >= 0 && hero_active != prev_active &&
-            static_cast<std::size_t>(hero_active) != scene.hero_index()) {
-            scene.rebuild_with_hero(static_cast<std::size_t>(hero_active));
-            selected_ability = -1;
-            paused = false;
-        }
+        // --- imgui 面板: Heroes (左) / Ability Bar (底) / Dummy Tuning (右) ---
+        // 三块都钉死位置 + 关掉 move/resize/collapse, 当成固定 dock.
+        constexpr ImGuiWindowFlags kFixedFlags =
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoCollapse;
 
-        // --- 底部技能栏 ---
-        const int bar_y = kWindowH - kAbilityBarH;
-        DrawRectangle(kSidePanelW, bar_y, kWindowW - kSidePanelW, kAbilityBarH,
-                      Color{26, 30, 36, 255});
-        const int slots = std::min<int>(kAbilitySlotMax,
-                                        static_cast<int>(scene.caster_abilities().size()));
-        const float slot_w = 200.0f;
-        const float slot_h = 76.0f;
-        const float slot_y = static_cast<float>(bar_y) + (kAbilityBarH - slot_h) * 0.5f;
-        const float slots_total_w = slot_w * static_cast<float>(slots) + 8.0f * (slots - 1);
-        const float slot_x0 = static_cast<float>(kSidePanelW) +
-                              (kWindowW - kSidePanelW - slots_total_w) * 0.5f;
-        for (int i = 0; i < slots; ++i) {
-            Ability* ab = scene.caster_abilities()[i];
-            const float x = slot_x0 + i * (slot_w + 8.0f);
-            const Rectangle r{x, slot_y, slot_w, slot_h};
-            const bool selected = (selected_ability == i);
-            if (selected) {
-                DrawRectangleRec({r.x - 2, r.y - 2, r.width + 4, r.height + 4},
-                                 Color{255, 215, 80, 255});
+        // Heroes 面板.
+        ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
+        ImGui::SetNextWindowSize(ImVec2(static_cast<float>(kSidePanelW),
+                                        static_cast<float>(kWindowH - kAbilityBarH)));
+        if (ImGui::Begin("Heroes", nullptr, kFixedFlags)) {
+            const int prev_active = hero_active;
+            for (std::size_t i = 0; i < catalog.heroes().size(); ++i) {
+                const bool sel = (static_cast<int>(i) == hero_active);
+                if (ImGui::Selectable(catalog.heroes()[i].yaml_name.c_str(), sel)) {
+                    hero_active = static_cast<int>(i);
+                }
             }
-            // 用空 label 的按钮拿点击, 自己画文字 (raygui button 单行排版有限).
-            if (GuiButton(r, "")) selected_ability = i;
-            const double cd = ab->cooldown_remaining();
-            const double mp = ab->mana_cost_for_level();
-            const char* tag = behavior_label(ab->behavior());
-            const Color line1_c = ab->name().empty() ? GRAY : RAYWHITE;
-            DrawText(TextFormat("[%d] %s", i + 1, ab->name().c_str()),
-                     static_cast<int>(r.x) + 8,
-                     static_cast<int>(r.y) + 8,
-                     14, line1_c);
-            const Color line2_c = (cd > 0.0) ? Color{220, 120, 120, 255}
-                                              : Color{180, 180, 180, 255};
-            DrawText(TextFormat("%s  CD %.1fs  MP %d", tag, cd,
-                                static_cast<int>(mp)),
-                     static_cast<int>(r.x) + 8,
-                     static_cast<int>(r.y) + 30,
-                     14, line2_c);
+            if (hero_active >= 0 && hero_active != prev_active &&
+                static_cast<std::size_t>(hero_active) != scene.hero_index()) {
+                scene.rebuild_with_hero(static_cast<std::size_t>(hero_active));
+                selected_ability = -1;
+                paused = false;
+            }
         }
-        if (slots == 0) {
-            DrawText("(no active abilities)",
-                     kSidePanelW + 16, bar_y + kAbilityBarH / 2 - 8,
-                     16, Color{180, 180, 180, 255});
+        ImGui::End();
+
+        // Ability Bar 面板 (底部, 横跨战场宽度).
+        const int bar_y = kWindowH - kAbilityBarH;
+        ImGui::SetNextWindowPos(ImVec2(static_cast<float>(kSidePanelW),
+                                        static_cast<float>(bar_y)));
+        ImGui::SetNextWindowSize(ImVec2(
+            static_cast<float>(kWindowW - kSidePanelW - kTunePanelW),
+            static_cast<float>(kAbilityBarH)));
+        if (ImGui::Begin("Abilities", nullptr,
+                         kFixedFlags | ImGuiWindowFlags_NoTitleBar)) {
+            const int slots = std::min<int>(
+                kAbilitySlotMax,
+                static_cast<int>(scene.caster_abilities().size()));
+            if (slots == 0) {
+                ImGui::TextDisabled("(no active abilities)");
+            }
+            const ImVec2 slot_sz(200.0f, 64.0f);
+            for (int i = 0; i < slots; ++i) {
+                if (i > 0) ImGui::SameLine();
+                Ability* ab = scene.caster_abilities()[i];
+                const bool selected = (selected_ability == i);
+                ImGui::PushID(i);
+                if (selected) {
+                    ImGui::PushStyleColor(ImGuiCol_Button,
+                        ImVec4(0.95f, 0.78f, 0.25f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                        ImVec4(1.0f, 0.85f, 0.35f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                        ImVec4(0.85f, 0.7f, 0.2f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0,0,0,1));
+                }
+                const double cd = ab->cooldown_remaining();
+                const double mp = ab->mana_cost_for_level();
+                const char* tag = behavior_label(ab->behavior());
+                char label[128];
+                std::snprintf(label, sizeof(label),
+                              "[%d] %s\n%s  CD %.1fs  MP %d",
+                              i + 1, ab->name().c_str(), tag, cd,
+                              static_cast<int>(mp));
+                if (ImGui::Button(label, slot_sz)) selected_ability = i;
+                if (selected) ImGui::PopStyleColor(4);
+                ImGui::PopID();
+            }
         }
+        ImGui::End();
 
-        // --- 右侧调参面板 ---
-        const int tune_x = kWindowW - kTunePanelW;
-        DrawRectangle(tune_x, 0, kTunePanelW, kWindowH, Color{26, 30, 36, 255});
-        GuiPanel(Rectangle{(float)tune_x, 0.0f, (float)kTunePanelW, 28.0f},
-                 "Dummy Tuning");
-        // 滑动条布局: 左 8px label, 右 8px 数值, 中间 slider.
-        const float pad = 12.0f;
-        const float row_h = 22.0f;
-        const float gap  = 14.0f;
-        const float label_w = 40.0f;
-        const float right_w = 56.0f;
-        const float slider_x = tune_x + pad + label_w;
-        const float slider_w = kTunePanelW - 2 * pad - label_w - right_w;
-        float row_y = 48.0f;
-
-        auto slider_row = [&](const char* label, float* val,
-                              float vmin, float vmax,
-                              const char* fmt) {
-            const Rectangle r{slider_x, row_y, slider_w, row_h};
-            GuiSliderBar(r, label,
-                         TextFormat(fmt, *val), val, vmin, vmax);
-            row_y += row_h + gap;
-        };
-
-        slider_row("HP",    &tune_max_health,  100.0f, 10000.0f, "%.0f");
-        slider_row("MR+",   &tune_mr_bonus,    -1.0f,  1.0f,    "%+.2f");
-        slider_row("Arm+",  &tune_armor_bonus, -10.0f, 30.0f,   "%+.1f");
-        slider_row("AD",    &tune_attack_dmg,   0.0f,  200.0f,  "%.0f");
-
-        // 按钮: Apply / Reset Dummies (二者都重建 dummy, 只是命名)
-        const float btn_w = (kTunePanelW - 2 * pad - 8.0f) * 0.5f;
-        const float btn_y = row_y + 6.0f;
-        if (GuiButton(Rectangle{(float)tune_x + pad, btn_y, btn_w, 28.0f},
-                      "Apply")) {
-            apply_dummy_tune(true);
-            show_toast("Dummy stats applied", Color{120, 230, 120, 255});
+        // Dummy Tuning 面板 (右侧).
+        ImGui::SetNextWindowPos(ImVec2(static_cast<float>(kWindowW - kTunePanelW), 0.0f));
+        ImGui::SetNextWindowSize(ImVec2(static_cast<float>(kTunePanelW),
+                                        static_cast<float>(kWindowH)));
+        if (ImGui::Begin("Dummy Tuning", nullptr, kFixedFlags)) {
+            ImGui::SliderFloat("HP",   &tune_max_health,  100.0f, 10000.0f, "%.0f");
+            ImGui::SliderFloat("MR+",  &tune_mr_bonus,     -1.0f,    1.0f,  "%+.2f");
+            ImGui::SliderFloat("Arm+", &tune_armor_bonus, -10.0f,   30.0f,  "%+.1f");
+            ImGui::SliderFloat("AD",   &tune_attack_dmg,    0.0f,  200.0f,  "%.0f");
+            ImGui::Spacing();
+            const float btn_w = (ImGui::GetContentRegionAvail().x - 8.0f) * 0.5f;
+            if (ImGui::Button("Apply", ImVec2(btn_w, 28.0f))) {
+                apply_dummy_tune(true);
+                show_toast("Dummy stats applied", Color{120, 230, 120, 255});
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Reset", ImVec2(btn_w, 28.0f))) {
+                tune_max_health  = 6000.0f;
+                tune_attack_dmg  = 0.0f;
+                tune_mr_bonus    = 0.0f;
+                tune_armor_bonus = 0.0f;
+                scene.set_dummy_override({});
+                scene.rebuild_with_hero(scene.hero_index());
+                selected_ability = -1;
+                aim = AimMode::None;
+                show_toast("Dummies reset", Color{200, 200, 80, 255});
+            }
+            ImGui::Spacing();
+            ImGui::TextWrapped("Apply rebuilds dummies (caster persists, mid-cast aborts).");
         }
-        if (GuiButton(Rectangle{(float)tune_x + pad + btn_w + 8.0f, btn_y,
-                                btn_w, 28.0f},
-                      "Reset")) {
-            // 重置滑动条到默认值并重建 dummy.
-            tune_max_health  = 6000.0f;
-            tune_attack_dmg  = 0.0f;
-            tune_mr_bonus    = 0.0f;
-            tune_armor_bonus = 0.0f;
-            scene.set_dummy_override({});
-            scene.rebuild_with_hero(scene.hero_index());
-            selected_ability = -1;
-            aim = AimMode::None;
-            show_toast("Dummies reset", Color{200, 200, 80, 255});
-        }
-
-        // 提示: 滑动条只是预览, 必须 Apply 才生效 (因为内部走 World 重建).
-        DrawText("Apply rebuilds dummies\n(caster persists, S4 mid-cast aborts)",
-                 tune_x + pad, static_cast<int>(btn_y) + 38,
-                 12, Color{160, 160, 160, 255});
+        ImGui::End();
 
         // --- 帮助文字 (技能栏上方一行) ---
         const char* aim_hint = "";
@@ -706,9 +695,11 @@ int main() {
             DrawText(toast_text.c_str(), tx, ty, 22, tc);
         }
 
+        rlImGuiEnd();
         EndDrawing();
     }
 
+    rlImGuiShutdown();
     CloseWindow();
     return 0;
 }

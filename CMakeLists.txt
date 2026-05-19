@@ -77,19 +77,39 @@ if(BUILD_VISUAL)
             "WITH_PIC ON"
     )
 
-    # raygui: 单 header immediate-mode GUI, 与 raylib 配套. 仅作为头文件下载,
-    # 由 src/visual/raygui_impl.c 提供实现.
+    # Dear ImGui: immediate-mode GUI 库. 用 docking 之外的 stable tag.
+    # rlImGui 提供 raylib 的渲染/输入后端 (Setup / Begin / End / Shutdown).
     CPMAddPackage(
-        NAME raygui
-        URL https://github.com/raysan5/raygui/archive/refs/tags/4.0.tar.gz
-        URL_HASH SHA256=299c8fcabda68309a60dc858741b76c32d7d0fc533cdc2539a55988cee236812
+        NAME imgui
+        URL https://github.com/ocornut/imgui/archive/refs/tags/v1.90.4.tar.gz
+        URL_HASH SHA256=5d9dc738af74efa357f2a9fc39fe4a28d29ef1dfc725dd2977ccf3f3194e996e
         DOWNLOAD_ONLY YES
     )
-    if(raygui_ADDED)
-        add_library(raygui STATIC src/visual/raygui_impl.c)
-        target_include_directories(raygui PUBLIC "${raygui_SOURCE_DIR}/src")
-        target_link_libraries(raygui PUBLIC raylib)
-        target_compile_options(raygui PRIVATE -w)
+    if(imgui_ADDED)
+        add_library(imgui STATIC
+            "${imgui_SOURCE_DIR}/imgui.cpp"
+            "${imgui_SOURCE_DIR}/imgui_draw.cpp"
+            "${imgui_SOURCE_DIR}/imgui_tables.cpp"
+            "${imgui_SOURCE_DIR}/imgui_widgets.cpp"
+            "${imgui_SOURCE_DIR}/imgui_demo.cpp"
+        )
+        target_include_directories(imgui PUBLIC "${imgui_SOURCE_DIR}")
+        target_compile_options(imgui PRIVATE -w)
+    endif()
+
+    # rlImGui: imgui 的 raylib 后端. master 分支稳定够用; 固定到一个具体 commit
+    # 以保证可复现.
+    CPMAddPackage(
+        NAME rlImGui
+        GITHUB_REPOSITORY raylib-extras/rlImGui
+        GIT_TAG d765c1ef3d37cf939f88aaa272a59a2713d654c9
+        DOWNLOAD_ONLY YES
+    )
+    if(rlImGui_ADDED)
+        add_library(rlImGui STATIC "${rlImGui_SOURCE_DIR}/rlImGui.cpp")
+        target_include_directories(rlImGui PUBLIC "${rlImGui_SOURCE_DIR}")
+        target_link_libraries(rlImGui PUBLIC imgui raylib)
+        target_compile_options(rlImGui PRIVATE -w)
     endif()
 endif()
 
@@ -149,7 +169,7 @@ if(BUILD_VISUAL)
         DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
 
     add_executable(skill_tester examples/skill_tester.cpp)
-    target_link_libraries(skill_tester PRIVATE dota_core raylib raygui)
+    target_link_libraries(skill_tester PRIVATE dota_core raylib rlImGui)
     target_compile_definitions(skill_tester PRIVATE
         DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
 endif()
