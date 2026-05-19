@@ -147,6 +147,11 @@ if(BUILD_VISUAL)
     target_link_libraries(duel_visual PRIVATE dota_core raylib)
     target_compile_definitions(duel_visual PRIVATE
         DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
+
+    add_executable(skill_tester examples/skill_tester.cpp)
+    target_link_libraries(skill_tester PRIVATE dota_core raylib raygui)
+    target_compile_definitions(skill_tester PRIVATE
+        DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
 endif()
 
 # --- Tests ---

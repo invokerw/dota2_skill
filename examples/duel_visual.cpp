@@ -16,6 +16,7 @@
 #include "dota/script/lua_state.hpp"
 
 #include "raylib.h"
+#include "visual_common.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -26,68 +27,19 @@
 #include <vector>
 
 using namespace dota;
+using dota::visual::FloatingText;
+using dota::visual::RenderProjectile;
+using dota::visual::RenderUnit;
+using dota::visual::ViewCamera;
 
 namespace {
 
-constexpr int   kWindowW = 1280;
-constexpr int   kWindowH = 720;
-constexpr float kUnitRadiusPx = 26.0f;
+constexpr int kWindowW = 1280;
+constexpr int kWindowH = 720;
 
 std::string data_dir() {
     if (const char* d = std::getenv("DOTA_DATA_DIR")) return d;
     return DOTA_DATA_DIR;
-}
-
-// --- 渲染端中间表示 (live / replay 都填这个) ---
-
-struct RenderUnit {
-    EntityId    id;
-    std::string name;
-    Team        team;
-    bool        alive;
-    double      hp;
-    double      max_hp;
-    Vec2        position;
-    std::vector<std::string> modifiers;  // 名字; 用于显示数量
-    std::string casting_ability;          // 当前 cast 的技能, 空 = 没在 cast
-    float       cast_progress{-1.0f};     // 0..1; <0 表示未知 (replay)
-};
-
-struct RenderProjectile {
-    EntityId pid;
-    Vec2     pos;
-    Vec2     dir;
-    double   width;
-    bool     linear;
-};
-
-// 飘字 (live / replay 共用)
-struct FloatingText {
-    Vec2        world_pos;
-    std::string text;
-    Color       color;
-    double      spawn_time;
-};
-
-struct ViewCamera {
-    float zoom{0.45f};
-    Vec2  center{0.0f, 0.0f};
-    Vector2 to_screen(Vec2 w) const {
-        return {
-            kWindowW * 0.5f + static_cast<float>((w.x - center.x) * zoom),
-            kWindowH * 0.5f + static_cast<float>((w.y - center.y) * zoom),
-        };
-    }
-    float scalar(double s) const { return static_cast<float>(s * zoom); }
-};
-
-Color team_color(Team t, bool alive) {
-    if (!alive) return Color{90, 90, 90, 255};
-    switch (t) {
-        case Team::Radiant: return Color{86, 171, 47, 255};
-        case Team::Dire:    return Color{200, 60, 60, 255};
-        default:            return Color{160, 160, 160, 255};
-    }
 }
 
 // --- 数据源接口 ---
@@ -372,100 +324,8 @@ private:
     bool                       loaded_{false};
 };
 
-// --- 渲染 ---
-
-void draw_unit(const ViewCamera& cam, const RenderUnit& u) {
-    const Vector2 c = cam.to_screen(u.position);
-    const Color body = team_color(u.team, u.alive);
-    DrawCircleV(c, kUnitRadiusPx, body);
-    DrawCircleLines(static_cast<int>(c.x), static_cast<int>(c.y),
-                    kUnitRadiusPx, BLACK);
-
-    const float bar_w = 60.0f;
-    const float bar_h = 6.0f;
-    const float bar_y = c.y - kUnitRadiusPx - 14.0f;
-    const float bar_x = c.x - bar_w * 0.5f;
-    const float frac  = u.alive ? static_cast<float>(u.hp / u.max_hp) : 0.0f;
-    DrawRectangle(static_cast<int>(bar_x), static_cast<int>(bar_y),
-                  static_cast<int>(bar_w), static_cast<int>(bar_h),
-                  Color{40, 40, 40, 230});
-    DrawRectangle(static_cast<int>(bar_x), static_cast<int>(bar_y),
-                  static_cast<int>(bar_w * std::clamp(frac, 0.0f, 1.0f)),
-                  static_cast<int>(bar_h), Color{80, 220, 80, 255});
-
-    const int name_w = MeasureText(u.name.c_str(), 14);
-    DrawText(u.name.c_str(),
-             static_cast<int>(c.x) - name_w / 2,
-             static_cast<int>(bar_y) - 16, 14, RAYWHITE);
-
-    const float mod_y = c.y + kUnitRadiusPx + 6.0f;
-    float mod_x = c.x - (u.modifiers.size() * 12.0f) * 0.5f;
-    for (auto& name : u.modifiers) {
-        // replay 没有 is_debuff 信息, 用名字里 _slow / _stun / _hex / _silence / _dot 粗判
-        const bool dbg =
-            name.find("_slow")  != std::string::npos ||
-            name.find("_stun")  != std::string::npos ||
-            name.find("_hex")   != std::string::npos ||
-            name.find("_silence") != std::string::npos ||
-            name.find("_drag")  != std::string::npos ||
-            name.find("_dot")   != std::string::npos ||
-            name.find("burning")!= std::string::npos;
-        Color mc = dbg ? Color{220, 80, 80, 255} : Color{80, 180, 220, 255};
-        DrawRectangle(static_cast<int>(mod_x), static_cast<int>(mod_y),
-                      10, 10, mc);
-        DrawRectangleLines(static_cast<int>(mod_x), static_cast<int>(mod_y),
-                           10, 10, BLACK);
-        mod_x += 12.0f;
-    }
-
-    if (!u.casting_ability.empty()) {
-        const float cb_w = 70.0f;
-        const float cb_h = 5.0f;
-        const float cb_y = c.y + kUnitRadiusPx + 22.0f;
-        const float cb_x = c.x - cb_w * 0.5f;
-        DrawRectangle(static_cast<int>(cb_x), static_cast<int>(cb_y),
-                      static_cast<int>(cb_w), static_cast<int>(cb_h),
-                      Color{20, 20, 20, 220});
-        const float p = u.cast_progress >= 0.0f ? u.cast_progress : 0.5f;
-        DrawRectangle(static_cast<int>(cb_x), static_cast<int>(cb_y),
-                      static_cast<int>(cb_w * p), static_cast<int>(cb_h),
-                      Color{255, 220, 80, 255});
-    }
-}
-
-void draw_projectile(const ViewCamera& cam, const RenderProjectile& p) {
-    const Vector2 c = cam.to_screen(p.pos);
-    if (p.linear) {
-        const double tail_world = 60.0;
-        const Vec2 tail{p.pos.x - p.dir.x * tail_world,
-                        p.pos.y - p.dir.y * tail_world};
-        const Vector2 t = cam.to_screen(tail);
-        const float thickness = std::max(2.0f, cam.scalar(p.width * 0.3));
-        DrawLineEx(t, c, thickness, Color{255, 200, 60, 220});
-        DrawCircleV(c, std::max(4.0f, thickness * 0.7f),
-                    Color{255, 240, 120, 255});
-    } else {
-        DrawCircleV(c, 8.0f, Color{255, 160, 60, 255});
-        DrawCircleLines(static_cast<int>(c.x), static_cast<int>(c.y),
-                        8.0f, BLACK);
-    }
-}
-
-void draw_floating_text(const ViewCamera& cam, const FloatingText& f, double now) {
-    const double age = now - f.spawn_time;
-    const float life = 1.2f;
-    const float t = static_cast<float>(age / life);
-    const Vector2 base = cam.to_screen(f.world_pos);
-    const float dy = -50.0f * t;
-    const unsigned char alpha = static_cast<unsigned char>(
-        std::max(0.0f, 255.0f * (1.0f - t)));
-    Color c = f.color; c.a = alpha;
-    const int w = MeasureText(f.text.c_str(), 18);
-    DrawText(f.text.c_str(),
-             static_cast<int>(base.x) - w / 2,
-             static_cast<int>(base.y) - kUnitRadiusPx - 30 + static_cast<int>(dy),
-             18, c);
-}
+// 渲染辅助来自 visual_common.hpp (draw_unit / draw_projectile /
+// draw_floating_text / team_color / draw_grid).
 
 } // namespace
 
@@ -507,20 +367,11 @@ int main(int argc, char** argv) {
         BeginDrawing();
         ClearBackground(Color{18, 22, 28, 255});
 
-        for (int gx = -1200; gx <= 1200; gx += 200) {
-            const Vector2 a = cam.to_screen({static_cast<double>(gx), -800.0});
-            const Vector2 b = cam.to_screen({static_cast<double>(gx),  800.0});
-            DrawLineV(a, b, Color{32, 38, 46, 255});
-        }
-        for (int gy = -800; gy <= 800; gy += 200) {
-            const Vector2 a = cam.to_screen({-1200.0, static_cast<double>(gy)});
-            const Vector2 b = cam.to_screen({ 1200.0, static_cast<double>(gy)});
-            DrawLineV(a, b, Color{32, 38, 46, 255});
-        }
+        dota::visual::draw_grid(cam, -1200, 1200, -800, 800, 200);
 
-        for (const auto& p : source->projectiles()) draw_projectile(cam, p);
-        for (const auto& u : source->units())       draw_unit(cam, u);
-        for (auto& f : source->texts())             draw_floating_text(cam, f, source->time());
+        for (const auto& p : source->projectiles()) dota::visual::draw_projectile(cam, p);
+        for (const auto& u : source->units())       dota::visual::draw_unit(cam, u);
+        for (auto& f : source->texts())             dota::visual::draw_floating_text(cam, f, source->time());
 
         DrawText(TextFormat("[%s] t = %.2fs%s",
                             source->mode_label(), source->time(),

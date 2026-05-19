@@ -95,7 +95,7 @@ private:
 - `./build/skill_tester` 打开窗口, 看到 4 个圆 (1 绿 3 红) + HP 条 + 名字.
 - `R` 重置, `ESC` 退出, 暂无别的交互.
 
-**Status**: Not Started
+**Status**: Complete
 
 ### S2 设计
 
