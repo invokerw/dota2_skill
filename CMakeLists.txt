@@ -63,7 +63,7 @@ if(lua_ADDED)
     target_compile_options(lua PRIVATE -w)
 endif()
 
-# --- Visualization dependency: raylib (only needed by duel_visual) ---
+# --- Visualization dependency: raylib (only needed by skill_tester) ---
 # 仅在 BUILD_VISUAL 开启时拉取, 默认开启; 如想跳过请 -DBUILD_VISUAL=OFF.
 option(BUILD_VISUAL "Build raylib-based visual demos" ON)
 if(BUILD_VISUAL)
@@ -156,19 +156,17 @@ target_link_libraries(dota_core PUBLIC yaml-cpp::yaml-cpp sol2)
 target_compile_definitions(dota_core PUBLIC
     DOTA_SCRIPT_DIR=\"${CMAKE_SOURCE_DIR}/data/scripts\")
 
-# --- Example ---
-add_executable(duel examples/duel.cpp)
-target_link_libraries(duel PRIVATE dota_core)
-target_compile_definitions(duel PRIVATE
-    DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
-
+# --- Example: skill_tester (raylib + imgui 交互式技能测试器) ---
 if(BUILD_VISUAL)
-    add_executable(duel_visual examples/duel_visual.cpp)
-    target_link_libraries(duel_visual PRIVATE dota_core raylib)
-    target_compile_definitions(duel_visual PRIVATE
-        DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
-
-    add_executable(skill_tester examples/skill_tester.cpp)
+    add_executable(skill_tester
+        examples/skill_tester/main.cpp
+        examples/skill_tester/scene.cpp
+        examples/skill_tester/aim.cpp
+        examples/skill_tester/input.cpp
+        examples/skill_tester/waypoints.cpp
+        examples/skill_tester/panels.cpp
+        examples/skill_tester/modifier_catalog.cpp
+    )
     target_link_libraries(skill_tester PRIVATE dota_core raylib rlImGui)
     target_compile_definitions(skill_tester PRIVATE
         DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")

@@ -1,10 +1,10 @@
 #pragma once
 
-// 给 raylib 的可视化 demo (duel_visual / skill_tester) 共用的渲染辅助.
-// 所有内容 inline (header-only), 让两个 example 各自包含即可.
+// skill_tester 的渲染辅助 (header-only). 提供 RenderUnit / RenderProjectile /
+// FloatingText 中间表示, 以及对应的 raylib 绘制函数和 ViewCamera 视图变换.
 
 #include "dota/core/types.hpp"
-#include "dota/core/world.hpp"  // 需要 Team 枚举的成员
+#include "dota/core/world.hpp"
 
 #include "raylib.h"
 
@@ -18,8 +18,6 @@ namespace dota::visual {
 // 渲染端单位圆的最小像素半径. 真实尺寸 = max(hull_radius * zoom, kMinUnitRadiusPx).
 inline constexpr float kMinUnitRadiusPx = 10.0f;
 
-// --- 渲染端中间表示 (live / replay 都填这个) ---
-
 struct RenderUnit {
     EntityId    id{kInvalidEntityId};
     std::string name;
@@ -28,7 +26,7 @@ struct RenderUnit {
     double      hp{0.0};
     double      max_hp{0.0};
     Vec2        position{};
-    double      hull_radius{24.0};      // 与 Unit::hull_radius 对齐, 决定渲染圆大小
+    double      hull_radius{24.0};
     std::vector<std::string> modifiers;
     std::string casting_ability;
     float       cast_progress{-1.0f};   // 0..1; <0 = 未知
@@ -49,12 +47,12 @@ struct FloatingText {
     double      spawn_time{0.0};
 };
 
-// 视图: 世界坐标 → 屏幕像素. 默认按窗口 1280x720 居中, 调用方可改 zoom / center.
+// 视图: 世界坐标 -> 屏幕像素. 默认按窗口 1280x720 居中, 调用方可改 zoom / center.
 struct ViewCamera {
     int   window_w{1280};
     int   window_h{720};
-    float origin_x{640.0f};   // 屏幕中心 x (像素)
-    float origin_y{360.0f};   // 屏幕中心 y (像素)
+    float origin_x{640.0f};
+    float origin_y{360.0f};
     float zoom{0.45f};
     Vec2  center{0.0, 0.0};
 
@@ -110,7 +108,6 @@ inline void draw_unit(const ViewCamera& cam, const RenderUnit& u) {
     const float mod_y = c.y + r_px + 6.0f;
     float mod_x = c.x - (u.modifiers.size() * 12.0f) * 0.5f;
     for (auto& name : u.modifiers) {
-        // 没有 is_debuff 元数据时, 用名字粗判
         const bool dbg =
             name.find("_slow")    != std::string::npos ||
             name.find("_stun")    != std::string::npos ||

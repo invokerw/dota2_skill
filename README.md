@@ -25,8 +25,8 @@
 ```sh
 cmake -B build
 cmake --build build -j
-ctest --test-dir build --output-on-failure    # 运行全部 125 个测试
-./build/duel                                   # 多英雄团战演示
+ctest --test-dir build --output-on-failure    # 运行全部测试
+./build/skill_tester                           # 交互式技能测试器 (raylib + imgui)
 ```
 
 需要 C++20 编译器(AppleClang 15+, Clang 15+, GCC 12+ 或 MSVC 19.30+). 所有依赖项(GoogleTest, yaml-cpp, Lua 5.4, sol2)在首次配置时通过 [CPM.cmake](cmake/CPM.cmake) 自动获取.
@@ -133,7 +133,7 @@ dota2_skill/
 │   ├── test_thinker.cpp
 │   └── test_hero_*.cpp          # 每个英雄的集成测试
 └── examples/
-    └── duel.cpp           # 多英雄团战演示
+    └── skill_tester/     # 交互式技能测试器 (raylib + imgui), 按模块拆分多文件
 ```
 
 ## 添加新英雄
@@ -344,7 +344,7 @@ register_modifier("modifier_pudge_hook_drag", {
 ## 编译时定义
 
 - `DOTA_SCRIPT_DIR`: `scripts/` 的绝对路径(在 `dota_core` 目标上设置)
-- `DOTA_DATA_DIR`: `data/` 的绝对路径(在测试和 duel 目标上设置)
+- `DOTA_DATA_DIR`: `data/` 的绝对路径(在测试和 skill_tester 目标上设置)
 
 ## 编辑器设置
 
