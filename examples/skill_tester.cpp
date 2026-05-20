@@ -930,28 +930,32 @@ int main() {
 
     // 通过指令队列发起施法. 距离不够时单位会自动靠近, 而非弹 OutOfRange toast.
     // 仍然先调 can_cast 一次, 把"魔不够 / 已死 / cooldown / silence"等本地可判
-    // 定的失败抛 toast -- 这些不该派生跟随移动.
-    auto try_cast = [&](Ability* ab, const CastTarget& tgt) {
-        const CastError pre = ab->can_cast(tgt);
-        // OutOfRange / InvalidTarget(纯距离派生上来的) 留给 OrderQueue 处理.
-        if (pre != CastError::None && pre != CastError::OutOfRange) {
-            show_toast(std::string(cast_error_text(pre)),
-                       Color{220, 100, 100, 255});
-            reset_aim();
-            return;
+    // 定的失败抛 toast -- 这些不该派生跟随移动. queue=true 时追加到队尾 (Shift).
+    auto try_cast = [&](Ability* ab, const CastTarget& tgt, bool queue) {
+        // Shift 追加时不做 can_cast 检查 -- 队尾命令将来才执行, mana / cooldown
+        // 现在不达标不代表执行时也不达标. 仅做最基本的 ability 解析.
+        if (!queue) {
+            const CastError pre = ab->can_cast(tgt);
+            // OutOfRange / InvalidTarget (纯距离派生上来的) 留给 OrderQueue 处理.
+            if (pre != CastError::None && pre != CastError::OutOfRange) {
+                show_toast(std::string(cast_error_text(pre)),
+                           Color{220, 100, 100, 255});
+                reset_aim();
+                return;
+            }
         }
         const int idx = ability_index_of(ab);
         if (idx < 0) { reset_aim(); return; }
         Unit* caster = scene.caster();
         if (!caster) { reset_aim(); return; }
         if (tgt.unit) {
-            caster->issue_order(OrderCastTarget{idx, tgt.unit->id()});
+            caster->issue_order(OrderCastTarget{idx, tgt.unit->id()}, queue);
         } else if (tgt.has_point) {
-            caster->issue_order(OrderCastPoint{idx, tgt.point});
+            caster->issue_order(OrderCastPoint{idx, tgt.point}, queue);
         } else {
-            caster->issue_order(OrderCastNoTarget{idx});
+            caster->issue_order(OrderCastNoTarget{idx}, queue);
         }
-        show_toast("Cast: " + ab->name(),
+        show_toast(std::string(queue ? "Queue: " : "Cast: ") + ab->name(),
                    Color{120, 230, 120, 255});
         reset_aim();
     };
@@ -990,6 +994,10 @@ int main() {
             reset_aim();
         }
 
+        // Shift 按住 -> 队列追加模式. 影响下面的 RMB 移动 / LMB 施法 / SPACE 释放.
+        const bool queue_mod =
+            IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+
         // 数字键 1-4 选中技能槽: 第一次按 = 选并进入瞄准; 已在该槽瞄准时, 对
         // NoTarget 触发释放, 其他类型切回选择 (无变化).
         const int key_slots[] = {KEY_ONE, KEY_TWO, KEY_THREE, KEY_FOUR};
@@ -1003,7 +1011,7 @@ int main() {
             if (selected_ability == i && aim == AimMode::AwaitConfirmNoTarget) {
                 // 已选 NoTarget 槽再按一次 = 释放.
                 CastTarget tgt;
-                try_cast(ab, tgt);
+                try_cast(ab, tgt, queue_mod);
                 selected_ability = -1;
             } else {
                 selected_ability = i;
@@ -1016,7 +1024,7 @@ int main() {
             aim == AimMode::AwaitConfirmNoTarget && IsKeyPressed(KEY_SPACE) &&
             selected_ability >= 0 && selected_ability < slot_count) {
             CastTarget tgt;
-            try_cast(scene.caster_abilities()[selected_ability], tgt);
+            try_cast(scene.caster_abilities()[selected_ability], tgt, queue_mod);
             selected_ability = -1;
         }
 
@@ -1060,11 +1068,11 @@ int main() {
             reset_aim();
         }
 
-        // 非 aim 模式下 RMB 命令 caster 走位
+        // 非 aim 模式下 RMB 命令 caster 走位 (Shift 追加).
         if (mouse_in_field && aim == AimMode::None &&
             IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) &&
             scene.caster() && scene.caster()->alive()) {
-            scene.caster()->issue_move(mouse_world);
+            scene.caster()->issue_order(OrderMoveToPoint{mouse_world}, queue_mod);
         }
 
         // 非 aim 模式下 LMB 选中任意单位, 右侧 Inspector 显示其状态.
@@ -1090,7 +1098,7 @@ int main() {
                 fire = true;
             }
             if (fire) {
-                try_cast(ab, tgt);
+                try_cast(ab, tgt, queue_mod);
                 selected_ability = -1;
             }
         }
@@ -1243,6 +1251,62 @@ int main() {
                                 static_cast<int>(ms_pt.y), 8.0f, c);
                 DrawLineEx({ms_pt.x - 6, ms_pt.y}, {ms_pt.x + 6, ms_pt.y}, 1.5f, c);
                 DrawLineEx({ms_pt.x, ms_pt.y - 6}, {ms_pt.x, ms_pt.y + 6}, 1.5f, c);
+            }
+        }
+
+        // OrderQueue 航点虚线: caster -> 每条 Order 的目的点串成一条虚线, 标号
+        // 1..N 标在每段终点. Move 用 point, AttackTarget/CastTarget/MoveToUnit
+        // 用目标当前位置, CastPoint 用 point. NoTarget/Stop 跳过 (无空间位置).
+        if (scene.caster() && scene.caster()->orders().size() > 1) {
+            const Vec2 caster_pos = scene.caster()->position();
+            std::vector<Vec2> waypoints;
+            waypoints.reserve(scene.caster()->orders().size());
+            for (const Order& o : scene.caster()->orders()) {
+                std::optional<Vec2> wp;
+                std::visit([&](const auto& v) {
+                    using T = std::decay_t<decltype(v)>;
+                    if constexpr (std::is_same_v<T, OrderMoveToPoint>) {
+                        wp = v.point;
+                    } else if constexpr (std::is_same_v<T, OrderCastPoint>) {
+                        wp = v.point;
+                    } else if constexpr (std::is_same_v<T, OrderCastTarget>) {
+                        if (Unit* u = scene.world()->find(v.target)) wp = u->position();
+                    } else if constexpr (std::is_same_v<T, OrderAttackTarget>) {
+                        if (Unit* u = scene.world()->find(v.target)) wp = u->position();
+                    } else if constexpr (std::is_same_v<T, OrderMoveToUnit>) {
+                        if (Unit* u = scene.world()->find(v.target)) wp = u->position();
+                    }
+                    // OrderCastNoTarget / OrderStop: 没有空间位置, 跳过.
+                }, o);
+                if (wp) waypoints.push_back(*wp);
+            }
+            if (!waypoints.empty()) {
+                const Color line_c{200, 200, 120, 200};
+                Vec2 prev = caster_pos;
+                for (std::size_t i = 0; i < waypoints.size(); ++i) {
+                    const Vec2 cur = waypoints[i];
+                    const Vector2 a = cam.to_screen(prev);
+                    const Vector2 b = cam.to_screen(cur);
+                    // 虚线: 沿 a->b 切成 ~10px 段, 隔段画.
+                    const float dx = b.x - a.x, dy = b.y - a.y;
+                    const float len = std::sqrt(dx*dx + dy*dy);
+                    if (len > 1e-3f) {
+                        const float dash = 8.0f, gap = 6.0f, step = dash + gap;
+                        const float ux = dx / len, uy = dy / len;
+                        for (float s = 0.0f; s < len; s += step) {
+                            const float e = std::min(s + dash, len);
+                            DrawLineEx({a.x + ux * s, a.y + uy * s},
+                                       {a.x + ux * e, a.y + uy * e}, 1.5f, line_c);
+                        }
+                    }
+                    // 序号标签 (1-based)
+                    const Vector2 lbl = cam.to_screen(cur);
+                    DrawText(TextFormat("%zu", i + 1),
+                             static_cast<int>(lbl.x) + 10,
+                             static_cast<int>(lbl.y) - 10,
+                             14, line_c);
+                    prev = cur;
+                }
             }
         }
         EndScissorMode();
@@ -1737,7 +1801,7 @@ int main() {
         }
         DrawText(TextFormat(
                      "1-4 / click to select   LMB cast   RMB move / cancel   "
-                     "S stop   ESC cancel   R reset   SPACE pause%s",
+                     "Shift queue   S stop   ESC cancel   R reset   SPACE pause%s",
                      aim_hint),
                  kSidePanelW + 12, kWindowH - kAbilityBarH - 22,
                  14, Color{160, 160, 160, 255});

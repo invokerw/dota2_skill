@@ -185,18 +185,23 @@ const Order* current_order() const;              // 队首; 空队 nullptr
 - 战场上画一条虚线把 caster 当前位置 → 队列里所有航点串起来 (debug overlay), 让玩家看到队列状态.
 - 帮助文字: `LMB cast   RMB move   S stop   Shift queue`.
 
-**Status**: Not Started
+**Status**: Complete
 
 ### Stage 5 改动
 
 - [examples/skill_tester.cpp](examples/skill_tester.cpp):
-  - 检测 `IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)` -> queue 标志.
-  - RMB / LMB 分支根据 queue 标志选 issue_order 第二参数.
-  - 新增渲染: 遍历 `caster->orders()`, 取每条 Order 的"目的点" (Move 用 point, MoveToUnit/AttackTarget/CastTarget 用 target 当前位置, CastPoint 用 point), 画虚线段 + 序号标签.
+  - 新增 `queue_mod = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)`.
+  - `try_cast` 加 `bool queue` 形参; queue 模式跳过 `can_cast` 的 mana / cooldown 检查 (排到队尾时这些资源还可能恢复); `OrderCast*` 入队时第二参数传 `queue`.
+  - LMB cast / 数字键确认 / SPACE 确认三处 try_cast 调用统一传 `queue_mod`.
+  - RMB 移动: `issue_order(OrderMoveToPoint{mouse_world}, queue_mod)`.
+  - 帮助文字加上 `Shift queue`.
+  - 新增渲染: 遍历 `caster->orders()`, 取每条 Order 的"目的点" (Move 用 point, MoveToUnit/AttackTarget/CastTarget 用 target 当前位置, CastPoint 用 point, CastNoTarget/Stop 跳过). 用 `std::visit` 提取目标点, 沿 caster 当前位置 -> 各航点 串成虚线 (8px dash + 6px gap), 序号 1..N 标在每段终点. 仅当队列长度 > 1 时绘制 (单条指令的 marker 由 move_target 已经画了).
 
 ### Stage 5 测试
 
-[tests/test_skill_tester_smoke.cpp](tests/test_skill_tester_smoke.cpp) 增加: 模拟 shift+RMB 序列, 断言 orders().size() == 期望值.
+新增 ([tests/test_order_queue.cpp](tests/test_order_queue.cpp)):
+
+- `ShiftAppendsMixedOrders`: 模拟 Shift 追加 4 条混合指令 (Move/Move/CastTarget/Move). 断言 `orders().size() == 4`, 当前指令仍是第一条 Move 不被打断, `move_target` 仍指向第一条 Move 的终点.
 
 ## 提交节奏
 

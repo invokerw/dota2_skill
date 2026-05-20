@@ -357,6 +357,33 @@ TEST(OrderQueue, AttackTargetStopOverridesQueue) {
     EXPECT_EQ(hits_after_stop, 0);
 }
 
+// --- Stage 5: Shift 追加 ---
+
+TEST(OrderQueue, ShiftAppendsMixedOrders) {
+    // 模拟玩家 Shift+RMB / Shift+LMB 追加: 第一条 issue (queue=false) 发起当前
+    // 行为, 后续 issue (queue=true) 排到队尾, 当前行为不被打断.
+    AbilityRegistry reg;
+    World w;
+    auto* lion = w.spawn("Lion", Team::Radiant, hero_stats(400.0), {0.0, 0.0});
+    auto* foe  = w.spawn("Foe",  Team::Dire,    hero_stats(),      {2000.0, 0.0});
+    auto* spike = attach_earth_spike(reg, *lion);
+    ASSERT_NE(spike, nullptr);
+    const int idx = index_of(*lion, spike);
+
+    lion->issue_order(OrderMoveToPoint{Vec2{500.0, 0.0}});
+    lion->issue_order(OrderMoveToPoint{Vec2{500.0, 500.0}}, /*queue=*/true);
+    lion->issue_order(OrderCastTarget{idx, foe->id()},      /*queue=*/true);
+    lion->issue_order(OrderMoveToPoint{Vec2{0.0, 0.0}},     /*queue=*/true);
+
+    ASSERT_EQ(lion->orders().size(), 4u);
+    // 当前指令仍是第一条 Move (没被追加打断).
+    ASSERT_TRUE(lion->current_order());
+    EXPECT_TRUE(std::holds_alternative<OrderMoveToPoint>(*lion->current_order()));
+    ASSERT_TRUE(lion->move_target().has_value());
+    EXPECT_NEAR(lion->move_target()->x, 500.0, 1e-9);
+    EXPECT_NEAR(lion->move_target()->y, 0.0,   1e-9);
+}
+
 TEST(OrderQueue, CastTargetDeadPopsAndContinues) {
     // 跟随期间 target 死亡, 该 cast 项应被 pop, 队列里下一条衔接.
     AbilityRegistry reg;
