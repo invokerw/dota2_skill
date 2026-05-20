@@ -110,28 +110,30 @@ const Order* current_order() const;              // 队首; 空队 nullptr
 - skill_tester 越界点击不再返回 `CastError::OutOfRange` toast: `try_cast` 改为 `issue_order(OrderCast...)` -> 单位自动走过去.
 - target cast 跟随: target 移动则 OrderQueue 持续刷新派生 move 到新位置.
 
-**Status**: Not Started
+**Status**: Complete
 
 ### Stage 3 改动
 
-- [include/dota/core/order.hpp](include/dota/core/order.hpp): 已含 OrderCast{NoTarget,Point,Target}, Stage 1 占位即可.
-- [src/core/world.cpp](src/core/world.cpp) `tick_orders`: 加 cast 派发分支. 内部 helper:
-  - `dispatch_cast_point(Unit&, Ability*, Vec2 pt)`
-  - `dispatch_cast_target(Unit&, Ability*, Unit* tgt)`
-  - `dispatch_cast_no_target(Unit&, Ability*)`
-  - 复用 `Unit::issue_move` 派生 move (注意要避免 issue_move 反过来覆盖 OrderQueue -- Stage 1 已让 issue_move 调 issue_order, 这里需要一条**内部** move 路径不入队. 实现方式: 直接通过 `World::fill_move_path(u, target, u.move_path_mut())` 写 move_path, 不走 issue_order. Unit 加一个友元/受保护接口 `set_internal_move_path(Vec2)` 给 World 用).
-- [src/ability/ability.cpp](src/ability/ability.cpp) `advance` interrupt 分支: 在 publish_cast_finished 后调 `caster_.clear_orders()`.
-- [examples/skill_tester.cpp](examples/skill_tester.cpp) `try_cast`: 改为构造对应 OrderCast* + 调 `caster->issue_order(...)`. 删除 `OutOfRange` toast 路径 (越界改成自动靠近, 不弹错).
-- ability.cpp 在进入 Casting (cast_point > 0) 或立即 on_spell_start 之后, 调 `caster_.clear_move_path()` (打断派生移动). cast_point=0 时也要打 -- 仍要让 tick_movement 那一帧不走.
+- [include/dota/core/order.hpp](include/dota/core/order.hpp): 给 `OrderCastNoTarget` / `OrderCastPoint` / `OrderCastTarget` 各加一个 `bool dispatched = false` 标志, 防止 `dispatch_front` 重复调 `ability.order_cast`.
+- [src/core/unit.cpp](src/core/unit.cpp): 引入三个内部静态函数, 取代了原计划放在 `World::tick_orders` 的派发逻辑:
+  - `activate_front`: 队首"刚入队那帧"的初始动作 (MoveToPoint 派生 move_path; OrderStop 立即 pop 然后继续推).
+  - `dispatch_front`: 每 tick 派发当前队首. Cast 三型按 `in_cast_range_*` 检距; 在范围内调 `ab->order_cast`, 设 `dispatched=true`, **同时清掉 move_path** (打断走位); 否则 `set_internal_move_path` 派生跟随 move (不入 OrderQueue, 防递归).
+  - `front_complete`: 队首是否已完成 (MoveTo 看 path 空; Cast 看 phase 离开 Casting/Channelling).
+  - `Unit::pump_orders` 替代了 `World::tick_orders`: 8-iter 循环 dispatch + 完成检测, pop 后衔接下一条.
+  - `issue_order`: 队空时立即 `activate_front` + 一次 `dispatch_front`, 让无目标 / 范围内 cast 在同 tick 进入 Casting (与原 `ability::order_cast` 行为对齐).
+- [src/core/world.cpp](src/core/world.cpp) `tick_once`: 在 `tick_movement` 之后调 `tick_units([&](Unit& u) { u.pump_orders(); })`.
+- [src/ability/ability.cpp](src/ability/ability.cpp) `advance` interrupt lambda: 在 `publish_cast_finished` 之后调 `caster_.clear_orders()` -- Dota 默认: cast 被中断 -> 清整队.
+- [examples/skill_tester.cpp](examples/skill_tester.cpp) `try_cast`: 改为先调 `can_cast` 拦"魔不够 / 已死 / silence"等本地失败 (这些不该派生跟随 move), 距离不够 (`OutOfRange`) 走 OrderQueue 自动靠近. 取得 ability 在 `caster->abilities().all()` 中的 index 并构造对应 `OrderCast*` 入队.
 
 ### Stage 3 测试
 
-新增用例 (test_order_queue.cpp):
+新增 ([tests/test_order_queue.cpp](tests/test_order_queue.cpp)):
 
-- `CastPointAutoApproach`: caster (0,0), cast_range=400, OrderCastPoint(point=(800,0)). 推 N tick -> 单位走到约 400 距离时进入 Casting (`ability.phase()==Casting`), move_path 被清.
-- `CastTargetFollowsMovingTarget`: target 边走边被追, 跟随到攻击范围才施法.
-- `CastInterruptedClearsQueue`: 队列 [Cast, Move]. cast 进入 Casting 后被 stunned -> queue 清空, 不走第二条 Move.
-- `CastNoTargetImmediate`: 立即施放, 不需移动.
+- `CastTargetAutoApproachAndFires`: caster (0,0) 移速 600 -> target (1200,0); cast_range=625. issue_order 后单位自动跟随, 进入范围才进入 Casting, 进入 Casting 那刻 move_path 被清, 推完 cast_point 后 target 实际掉血.
+- `CastInRangeFiresImmediately`: caster 与 target 距离 100 (<<625), `issue_order` 入队即派发, 同 tick 进入 Casting.
+- `CastInterruptedClearsQueue`: 队列 [Cast, Move]. Casting 期间上 stun -> ability interrupt -> queue 整队清空, 不衔接第二条 Move.
+- `CastTargetFollowsMovingTarget`: target 边跑边被追, lion 派生 move 每 tick 刷新到 target 当前位置, 最终位置 y 偏离 0 证明跟随生效.
+- `CastTargetDeadPopsAndContinues`: 跟随期间 target 死亡 -> cast 项 pop, 队列衔接到下一条 MoveToPoint.
 
 ## Stage 4: AttackTarget 迁移
 

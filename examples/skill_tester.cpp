@@ -917,15 +917,42 @@ int main() {
 
     auto reset_aim = [&] { aim = AimMode::None; };
 
-    auto try_cast = [&](Ability* ab, const CastTarget& tgt) {
-        const CastError e = ab->order_cast(tgt, *scene.world());
-        if (e != CastError::None) {
-            show_toast(std::string(cast_error_text(e)),
-                       Color{220, 100, 100, 255});
-        } else {
-            show_toast("Cast: " + ab->name(),
-                       Color{120, 230, 120, 255});
+    // 把 caster_abilities_ 里的 Ability* 反查为 caster->abilities().all() 中的下标 --
+    // OrderCast* variant 用的是后者的 index (含 passive 槽).
+    auto ability_index_of = [&](Ability* ab) -> int {
+        if (!scene.caster() || !ab) return -1;
+        const auto& all = scene.caster()->abilities().all();
+        for (std::size_t i = 0; i < all.size(); ++i) {
+            if (all[i].get() == ab) return static_cast<int>(i);
         }
+        return -1;
+    };
+
+    // 通过指令队列发起施法. 距离不够时单位会自动靠近, 而非弹 OutOfRange toast.
+    // 仍然先调 can_cast 一次, 把"魔不够 / 已死 / cooldown / silence"等本地可判
+    // 定的失败抛 toast -- 这些不该派生跟随移动.
+    auto try_cast = [&](Ability* ab, const CastTarget& tgt) {
+        const CastError pre = ab->can_cast(tgt);
+        // OutOfRange / InvalidTarget(纯距离派生上来的) 留给 OrderQueue 处理.
+        if (pre != CastError::None && pre != CastError::OutOfRange) {
+            show_toast(std::string(cast_error_text(pre)),
+                       Color{220, 100, 100, 255});
+            reset_aim();
+            return;
+        }
+        const int idx = ability_index_of(ab);
+        if (idx < 0) { reset_aim(); return; }
+        Unit* caster = scene.caster();
+        if (!caster) { reset_aim(); return; }
+        if (tgt.unit) {
+            caster->issue_order(OrderCastTarget{idx, tgt.unit->id()});
+        } else if (tgt.has_point) {
+            caster->issue_order(OrderCastPoint{idx, tgt.point});
+        } else {
+            caster->issue_order(OrderCastNoTarget{idx});
+        }
+        show_toast("Cast: " + ab->name(),
+                   Color{120, 230, 120, 255});
         reset_aim();
     };
 

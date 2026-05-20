@@ -210,35 +210,159 @@ void Unit::tick_abilities(double dt) {
     abilities_->advance(dt);
 }
 
-// 激活队首 Order: 对 OrderMoveToPoint 派生 move_path; OrderStop 直接 pop;
-// 其他类型 Stage 3/4 接入. 入参为引用以便递归 pop. 入队首激活后即返回.
+namespace {
+
+// 解析 ability_index -> Ability*; 越界返回 nullptr.
+Ability* lookup_ability(Unit& self, int idx) {
+    const auto& abs = self.abilities().all();
+    if (idx < 0 || static_cast<std::size_t>(idx) >= abs.size()) return nullptr;
+    return abs[static_cast<std::size_t>(idx)].get();
+}
+
+// 派生内部跟随 move_path. 走 fill_move_path 但不入 OrderQueue, 用于 Cast/Attack
+// 派发时的"自动靠近". 调用前可能 path 已存在 -- 我们直接覆盖.
+void set_internal_move_path(Unit& self, MovePath& path, World* world, Vec2 target) {
+    path.waypoints.clear();
+    path.index = 0;
+    if (world) {
+        world->fill_move_path(self, target, path);
+    } else {
+        path.waypoints.push_back(target);
+    }
+}
+
+// cast 范围合法判定. point cast: distance <= range. unit cast: 加上目标 hull,
+// 与 ability::validate_target 行为一致 (commit 4e62fd3).
+bool in_cast_range_point(const Unit& caster, const Ability& ab, Vec2 pt) {
+    const double r = ab.cast_range();
+    if (r <= 0.0) return true;  // 无限程
+    return distance_sq(caster.position(), pt) <= r * r;
+}
+bool in_cast_range_unit(const Unit& caster, const Ability& ab, const Unit& tgt) {
+    const double r = ab.cast_range();
+    if (r <= 0.0) return true;
+    const double eff = r + tgt.hull_radius();
+    return distance_sq(caster.position(), tgt.position()) <= eff * eff;
+}
+
+} // namespace
+
+// 激活队首 Order: 派生 move_path / 立即施放无目标 cast / 立即清队等. 不需要每
+// tick 调度的纯计算项立刻 pop. 需要等待 (move 走完, cast 完成, target 跟随) 的
+// 项停在队首.
+//
+// 注意: 此处不调用 ability.order_cast -- 把派发统一交给 dispatch_front, 因为
+// 距离判定 + 派生 move 与 issue_order 路径都需要. activate_front 只负责
+// "刚入队那一刻的初始动作".
 static void activate_front(Unit& self, std::deque<Order>& orders,
                             MovePath& move_path, World* world) {
     while (!orders.empty()) {
-        const Order& front = orders.front();
+        Order& front = orders.front();
         bool consumed = false;
         std::visit([&](auto&& v) {
             using T = std::decay_t<decltype(v)>;
             if constexpr (std::is_same_v<T, OrderMoveToPoint>) {
-                move_path.waypoints.clear();
-                move_path.index = 0;
-                if (world) {
-                    world->fill_move_path(self, v.point, move_path);
-                } else {
-                    move_path.waypoints.push_back(v.point);
-                }
+                set_internal_move_path(self, move_path, world, v.point);
                 // fill 后仍空 (target 与起点重合且 fill 没生成航点) -- 视作完成.
                 if (move_path.empty()) consumed = true;
             } else if constexpr (std::is_same_v<T, OrderStop>) {
                 move_path = {};
                 consumed = true;
             } else {
-                (void)v;  // Stage 3/4: 暂不消费, 留待后续 stage 派发
+                (void)v;  // Cast/Attack/MoveToUnit: 留给 dispatch_front 处理
             }
         }, front);
-        if (!consumed) return;  // 已激活但未立即完成 -> 等待 tick 推进
+        if (!consumed) return;
         orders.pop_front();
     }
+}
+
+// 派发当前队首 (Cast / Attack / MoveToUnit): 距离够 -> 触发 ability.order_cast
+// 并清掉 move_path; 否则派生 move_path 跟随目标. dispatched 标志保证 order_cast
+// 只调一次 -- 之后等 ability.phase() 离开 Casting/Channelling -> 视为完成.
+//
+// 返回 true 表示队首应该被 pop (异常路径, 例如 ability_index 越界 / target 死亡).
+static bool dispatch_front(Unit& self, std::deque<Order>& orders,
+                            MovePath& move_path, World* world) {
+    if (orders.empty() || world == nullptr) return false;
+    Order& front = orders.front();
+    bool pop = false;
+    std::visit([&](auto&& v) {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (std::is_same_v<T, OrderCastNoTarget>) {
+            if (v.dispatched) return;
+            Ability* ab = lookup_ability(self, v.ability_index);
+            if (!ab) { pop = true; return; }
+            CastTarget tgt;
+            const CastError err = ab->order_cast(tgt, *world);
+            if (err != CastError::None) { pop = true; return; }
+            v.dispatched = true;
+            move_path = {};  // 进入施法 -> 打断走位
+        } else if constexpr (std::is_same_v<T, OrderCastPoint>) {
+            if (v.dispatched) return;
+            Ability* ab = lookup_ability(self, v.ability_index);
+            if (!ab) { pop = true; return; }
+            if (in_cast_range_point(self, *ab, v.point)) {
+                CastTarget tgt;
+                tgt.point = v.point;
+                tgt.has_point = true;
+                const CastError err = ab->order_cast(tgt, *world);
+                if (err != CastError::None) { pop = true; return; }
+                v.dispatched = true;
+                move_path = {};
+            } else {
+                set_internal_move_path(self, move_path, world, v.point);
+            }
+        } else if constexpr (std::is_same_v<T, OrderCastTarget>) {
+            if (v.dispatched) return;
+            Ability* ab = lookup_ability(self, v.ability_index);
+            if (!ab) { pop = true; return; }
+            Unit* target = world->find(v.target);
+            if (!target || !target->alive()) { pop = true; return; }
+            if (in_cast_range_unit(self, *ab, *target)) {
+                CastTarget tgt;
+                tgt.unit = target;
+                const CastError err = ab->order_cast(tgt, *world);
+                if (err != CastError::None) { pop = true; return; }
+                v.dispatched = true;
+                move_path = {};
+            } else {
+                // 跟随移动: 每 tick 重新设置目标位置, 应对 target 移动.
+                set_internal_move_path(self, move_path, world, target->position());
+            }
+        }
+        // 其他类型: MoveToPoint/Stop 在 activate_front; AttackTarget Stage 4;
+        // MoveToUnit 暂未启用.
+    }, front);
+    return pop;
+}
+
+// 检测当前队首是否已完成. MoveTo 看 path 走完; Cast 看 dispatched 后 phase
+// 是否离开 Casting/Channelling.
+static bool front_complete(Unit& self, std::deque<Order>& orders,
+                            MovePath& move_path) {
+    if (orders.empty()) return false;
+    Order& front = orders.front();
+    bool done = false;
+    std::visit([&](auto&& v) {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (std::is_same_v<T, OrderMoveToPoint>) {
+            done = move_path.empty();
+        } else if constexpr (std::is_same_v<T, OrderCastNoTarget> ||
+                             std::is_same_v<T, OrderCastPoint> ||
+                             std::is_same_v<T, OrderCastTarget>) {
+            if (!v.dispatched) return;
+            Ability* ab = lookup_ability(self, v.ability_index);
+            if (!ab) { done = true; return; }
+            const CastPhase p = ab->phase();
+            // ability advance() 在 cast point / channel 完成后会进 Backswing /
+            // OnCooldown / Ready. 这些都视为本 cast 项完成 -- 后摇期间允许新指令
+            // 入队 (Dota: 后摇可被打断).
+            done = (p != CastPhase::Casting && p != CastPhase::Channelling);
+        }
+        // OrderStop: 在 activate_front 已 pop, 不会到这.
+    }, front);
+    return done;
 }
 
 void Unit::issue_order(Order o, bool queue) {
@@ -251,7 +375,19 @@ void Unit::issue_order(Order o, bool queue) {
     const bool was_empty = orders_.empty();
     orders_.push_back(std::move(o));
     // 队列原本为空 (或刚被覆盖清掉) -> 立即激活新队首; 否则等队首走完后衔接.
-    if (was_empty) activate_front(*this, orders_, move_path_, world_);
+    if (was_empty) {
+        activate_front(*this, orders_, move_path_, world_);
+        // 入队即派发一次, 让 NoTarget cast 在同一 tick 内立刻施放 (与现有
+        // ability::order_cast 行为对齐). 距离不够的 Cast/Target 会派生 move,
+        // 等待下个 tick 的 pump_orders.
+        if (!orders_.empty()) {
+            const bool pop = dispatch_front(*this, orders_, move_path_, world_);
+            if (pop) {
+                orders_.pop_front();
+                activate_front(*this, orders_, move_path_, world_);
+            }
+        }
+    }
 }
 
 void Unit::clear_orders() {
@@ -260,25 +396,25 @@ void Unit::clear_orders() {
 }
 
 void Unit::pump_orders() {
-    // World 每 tick 在 tick_movement 之后调用. 检测当前队首是否已完成
-    // (MoveTo 看 move_path 是否走完), 完成则 pop + 激活下一条.
-    while (!orders_.empty()) {
-        const Order& front = orders_.front();
-        bool done = false;
-        std::visit([&](auto&& v) {
-            using T = std::decay_t<decltype(v)>;
-            if constexpr (std::is_same_v<T, OrderMoveToPoint>) {
-                done = move_path_.empty();
-            }
-            // 其他类型 Stage 3/4 接入完成判定.
-            (void)v;
-        }, front);
-        if (!done) break;
-        orders_.pop_front();
-        activate_front(*this, orders_, move_path_, world_);
-        // activate_front 已经把"立即完成"的 Order 全部 pop 干净并激活了下一个,
-        // 故下一轮 while 检查的就是新的活动队首.
-        return;
+    // World 每 tick 在 motion controller 之后, tick_movement 之前调用.
+    // 三个职责:
+    //   1. 派发当前队首 (Cast 距离判定 / 派生跟随 move / 触发 order_cast)
+    //   2. 检测队首是否已完成 -> pop + 激活下一条
+    //   3. 异常 pop (ability_index 越界, target 死亡) 后衔接下一条
+    constexpr int kMaxIters = 8;
+    for (int i = 0; i < kMaxIters && !orders_.empty(); ++i) {
+        const bool pop_dispatch = dispatch_front(*this, orders_, move_path_, world_);
+        if (pop_dispatch) {
+            orders_.pop_front();
+            activate_front(*this, orders_, move_path_, world_);
+            continue;
+        }
+        if (front_complete(*this, orders_, move_path_)) {
+            orders_.pop_front();
+            activate_front(*this, orders_, move_path_, world_);
+            continue;
+        }
+        break;  // 队首仍在推进
     }
 }
 

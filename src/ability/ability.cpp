@@ -249,6 +249,8 @@ void Ability::advance(double dt) {
         phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
         phase_timer_ = 0.0;
         world_ = nullptr;
+        // Dota 默认: cast 被中断 -> 清掉指令队列, 包括队列里待执行的后续 cast / move.
+        caster_.clear_orders();
     };
 
     if (dead || stunned || silenced || hexed || target_lost) {

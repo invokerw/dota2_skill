@@ -23,14 +23,15 @@ struct OrderMoveToUnit   { EntityId target; };
 // 走到 attack_range 再 a (Stage 4)
 struct OrderAttackTarget { EntityId target; };
 
-// 立即施放无目标技能 (Stage 3)
-struct OrderCastNoTarget { int ability_index; };
+// 立即施放无目标技能 (Stage 3). dispatched=true 表示已调过 ability.order_cast,
+// 在等待 ability.phase() 离开 Casting/Channelling 后 pop.
+struct OrderCastNoTarget { int ability_index; bool dispatched = false; };
 
 // 走到 cast_range 再向 point 施放 (Stage 3)
-struct OrderCastPoint    { int ability_index; Vec2 point; };
+struct OrderCastPoint    { int ability_index; Vec2 point; bool dispatched = false; };
 
 // 走到 cast_range 再向 unit 施放 (Stage 3)
-struct OrderCastTarget   { int ability_index; EntityId target; };
+struct OrderCastTarget   { int ability_index; EntityId target; bool dispatched = false; };
 
 // 立即清空队列, 停在原地
 struct OrderStop         {};
