@@ -83,7 +83,7 @@ const Order* current_order() const;              // 队首; 空队 nullptr
 - 帮助文字加上 `S stop`.
 - 单位施法的 cast point 期间按 S **不打断**当前 ability (Dota 行为: stop 不打断已开始施法的 ability), 仅清掉 OrderQueue 后续待处理项. 这条留作 Stage 3 的施法落地后验证.
 
-**Status**: Not Started
+**Status**: Complete
 
 ### Stage 2 改动
 

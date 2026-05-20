@@ -955,6 +955,13 @@ int main() {
             reset_aim();
             paused = false;
         }
+        // S: 全停 -- 清空 caster 的指令队列(Dota 风格 stop). 不打断当前已经
+        // 进入 cast point 的 ability(Stage 3 验证); 仅清掉队列里待派发项.
+        if (!gui_wants_keyboard && IsKeyPressed(KEY_S) &&
+            scene.caster() && scene.caster()->alive()) {
+            scene.caster()->issue_order(OrderStop{});
+            reset_aim();
+        }
 
         // 数字键 1-4 选中技能槽: 第一次按 = 选并进入瞄准; 已在该槽瞄准时, 对
         // NoTarget 触发释放, 其他类型切回选择 (无变化).
@@ -1688,7 +1695,7 @@ int main() {
         }
         DrawText(TextFormat(
                      "1-4 / click to select   LMB cast   RMB move / cancel   "
-                     "ESC cancel   R reset   SPACE pause%s",
+                     "S stop   ESC cancel   R reset   SPACE pause%s",
                      aim_hint),
                  kSidePanelW + 12, kWindowH - kAbilityBarH - 22,
                  14, Color{160, 160, 160, 255});
