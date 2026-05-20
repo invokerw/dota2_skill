@@ -102,6 +102,21 @@ TEST(AbilityLifecycle, UnitTargetRangeUsesTargetHullOverlap) {
     EXPECT_EQ(spike->can_cast(t), CastError::OutOfRange);
 }
 
+TEST(AbilityLifecycle, AbilityManagerRemoveAtRemovesIndexedAbility) {
+    AbilityRegistry reg;
+    reg.load_file(std::string(kDataDir) + "/heroes/lion.yaml");
+    World w;
+    auto* lion = w.spawn("Lion", Team::Radiant, hero_stats(), {0.0, 0.0});
+
+    ASSERT_NE(reg.instantiate("lion_earth_spike", *lion), nullptr);
+    ASSERT_NE(reg.instantiate("lion_hex", *lion), nullptr);
+
+    EXPECT_TRUE(lion->abilities().remove_at(1));
+    EXPECT_NE(lion->abilities().find("lion_earth_spike"), nullptr);
+    EXPECT_EQ(lion->abilities().find("lion_hex"), nullptr);
+    EXPECT_FALSE(lion->abilities().remove_at(10));
+}
+
 TEST(AbilityLifecycle, CastPointResolveTriggersOnSpellStart) {
     AbilityRegistry reg;
     World w;

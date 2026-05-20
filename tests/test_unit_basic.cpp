@@ -55,6 +55,31 @@ TEST(Unit, HealDoesNotExceedMaxHealth) {
     EXPECT_DOUBLE_EQ(u.health(), 500.0);
 }
 
+TEST(Unit, SetStatsClampsCurrentHealthAndMana) {
+    UnitStats s = basic_stats(500.0);
+    s.max_mana = 300.0;
+    Unit u(1, "test", Team::Radiant, s);
+
+    UnitStats reduced = s;
+    reduced.max_health = 200.0;
+    reduced.max_mana = 100.0;
+    u.set_stats(reduced);
+
+    EXPECT_DOUBLE_EQ(u.health(), 200.0);
+    EXPECT_DOUBLE_EQ(u.mana(), 100.0);
+}
+
+TEST(Unit, SetManaClampsToCurrentMaxMana) {
+    UnitStats s = basic_stats(500.0);
+    s.max_mana = 150.0;
+    Unit u(1, "test", Team::Radiant, s);
+
+    u.set_mana(500.0);
+    EXPECT_DOUBLE_EQ(u.mana(), 150.0);
+    u.set_mana(-10.0);
+    EXPECT_DOUBLE_EQ(u.mana(), 0.0);
+}
+
 TEST(World, AttackOrderDealsDamageAtExpectedCadence) {
     World w;
     auto* a = w.spawn("A", Team::Radiant, basic_stats(1000.0, 50.0));

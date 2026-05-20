@@ -154,7 +154,17 @@ void Unit::spend_mana(double amount) {
 }
 
 void Unit::set_health(double hp) {
-    health_ = std::clamp(hp, 0.0, max_health());
+    health_ = std::clamp(hp, 0.0, std::max(0.0, max_health()));
+}
+
+void Unit::set_mana(double mana) {
+    mana_ = std::clamp(mana, 0.0, std::max(0.0, max_mana()));
+}
+
+void Unit::set_stats(UnitStats stats) {
+    stats_ = stats;
+    health_ = std::clamp(health_, 0.0, std::max(0.0, max_health()));
+    mana_ = std::clamp(mana_, 0.0, std::max(0.0, max_mana()));
 }
 
 double Unit::apply_raw_damage(double amount) {

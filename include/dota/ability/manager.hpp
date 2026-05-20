@@ -2,6 +2,7 @@
 
 #include "dota/ability/ability.hpp"
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -31,6 +32,7 @@ public:
     const Ability* find(const std::string& name) const;
 
     const std::vector<std::unique_ptr<Ability>>& all() const { return abilities_; }
+    bool remove_at(std::size_t index);
 
     void advance(double dt);
 

@@ -1,5 +1,7 @@
 #include "dota/modifier/registry.hpp"
 
+#include <algorithm>
+
 namespace dota {
 
 namespace {
@@ -51,6 +53,14 @@ LuaModifierRegistry::find(const std::string& name) const {
     auto it = compiled_.find(name);
     if (it == compiled_.end()) return nullptr;
     return &it->second;
+}
+
+std::vector<std::string> LuaModifierRegistry::names() const {
+    std::vector<std::string> out;
+    out.reserve(compiled_.size());
+    for (const auto& kv : compiled_) out.push_back(kv.first);
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 void LuaModifierRegistry::compile(CompiledSpec& out, const std::string& name, sol::table spec) {

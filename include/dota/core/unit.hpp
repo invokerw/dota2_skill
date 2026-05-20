@@ -140,6 +140,8 @@ public:
     void heal(double amount);
     void spend_mana(double amount);
     void set_health(double hp);
+    void set_mana(double mana);
+    void set_stats(UnitStats stats);
 
     // 应用原始伤害并限制到零. 返回实际应用的数值.
     // 不发布事件; 调用 apply_damage() 以使用完整管线.

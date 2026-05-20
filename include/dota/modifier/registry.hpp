@@ -51,6 +51,9 @@ public:
     // 返回 nullptr 当未注册或编译失败.
     const CompiledSpec* find(const std::string& name) const;
 
+    // 返回当前已注册 modifier 名称, 按字典序排序, 便于调试 UI 枚举.
+    std::vector<std::string> names() const;
+
 private:
     void compile(CompiledSpec& out, const std::string& name, sol::table spec);
 

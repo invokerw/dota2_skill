@@ -95,6 +95,15 @@ bool ModifierManager::remove(const std::string& name) {
     return true;
 }
 
+bool ModifierManager::remove_at(std::size_t index) {
+    if (index >= modifiers_.size()) return false;
+    const std::string name = modifiers_[index]->name();
+    modifiers_[index]->on_destroyed();
+    modifiers_.erase(modifiers_.begin() + static_cast<std::ptrdiff_t>(index));
+    publish_modifier_removed(owner_, name);
+    return true;
+}
+
 void ModifierManager::remove_all() {
     std::vector<std::string> removed;
     removed.reserve(modifiers_.size());

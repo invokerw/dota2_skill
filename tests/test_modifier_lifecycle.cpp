@@ -57,6 +57,18 @@ TEST(ModifierLifecycle, ExplicitRemoveFiresDestroyed) {
     EXPECT_EQ(u->modifiers().find("tracker"), nullptr);
 }
 
+TEST(ModifierLifecycle, RemoveAtRemovesIndexedModifier) {
+    World w;
+    auto* u = w.spawn("u", Team::Radiant, basic_stats());
+    u->modifiers().attach(modifiers::make_stunned(*u, -1.0));
+    u->modifiers().attach(modifiers::make_silenced(*u, -1.0));
+
+    EXPECT_TRUE(u->modifiers().remove_at(1));
+    EXPECT_NE(u->modifiers().find("modifier_stunned"), nullptr);
+    EXPECT_EQ(u->modifiers().find("modifier_silenced"), nullptr);
+    EXPECT_FALSE(u->modifiers().remove_at(10));
+}
+
 TEST(ModifierLifecycle, ThinkIntervalFiresAtCadence) {
     World w;
     auto* u = w.spawn("u", Team::Radiant, basic_stats());

@@ -6,6 +6,8 @@
 #include "dota/modifier/scripted.hpp"
 #include "dota/script/lua_state.hpp"
 
+#include <algorithm>
+
 #include <gtest/gtest.h>
 
 using namespace dota;
@@ -40,6 +42,16 @@ TEST(LuaRegistry, RegisterAndAddModifierProvidesEvasion) {
         *hero, "modifier_test_evasion", -1.0, *spec, lua));
 
     EXPECT_NEAR(hero->evasion(), 0.25, 1e-9);
+}
+
+TEST(LuaRegistry, NamesEnumeratesAutoLoadedModifiers) {
+    LuaState lua;
+    const auto names = lua.modifier_registry().names();
+
+    EXPECT_TRUE(std::binary_search(
+        names.begin(), names.end(), "modifier_test_evasion"));
+    EXPECT_TRUE(std::binary_search(
+        names.begin(), names.end(), "modifier_test_shield"));
 }
 
 TEST(LuaRegistry, OnIntervalThinkFiresPeriodically) {

@@ -3,6 +3,7 @@
 #include "dota/modifier/enums.hpp"
 #include "dota/modifier/modifier.hpp"
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -41,6 +42,7 @@ public:
 
     // 移除具有此名称的第一个修饰器. 如果移除则返回 true.
     bool remove(const std::string& name);
+    bool remove_at(std::size_t index);
     void remove_all();
 
     Modifier*       find(const std::string& name);

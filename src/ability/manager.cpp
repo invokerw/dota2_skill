@@ -22,6 +22,12 @@ const Ability* AbilityManager::find(const std::string& name) const {
     return it == abilities_.end() ? nullptr : it->get();
 }
 
+bool AbilityManager::remove_at(std::size_t index) {
+    if (index >= abilities_.size()) return false;
+    abilities_.erase(abilities_.begin() + static_cast<std::ptrdiff_t>(index));
+    return true;
+}
+
 void AbilityManager::advance(double dt) {
     for (auto& a : abilities_) a->advance(dt);
 }

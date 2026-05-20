@@ -14,7 +14,9 @@
 #include "dota/ability/registry.hpp"
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
+#include "dota/modifier/library.hpp"
 #include "dota/modifier/manager.hpp"
+#include "dota/modifier/scripted.hpp"
 #include "dota/projectile/manager.hpp"
 #include "dota/projectile/projectile.hpp"
 #include "dota/script/lua_state.hpp"
@@ -26,12 +28,17 @@
 #include "visual_common.hpp"
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
+#include <initializer_list>
 #include <limits>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 using namespace dota;
@@ -50,7 +57,7 @@ constexpr int kWindowH = 720;
 // UI 布局参数. 战场区在 [kSidePanelW, kWindowW - kTunePanelW] x
 // [0, kWindowH - kAbilityBarH].
 constexpr int kSidePanelW = 220;   // 左侧英雄列表面板宽
-constexpr int kTunePanelW = 240;   // 右侧调参面板宽
+constexpr int kTunePanelW = 340;   // 右侧 Inspector 面板宽
 constexpr int kAbilityBarH = 96;   // 底部技能栏高度
 constexpr int kAbilitySlotMax = 4; // 技能槽最大数量, 多余的不显示
 
@@ -84,10 +91,17 @@ struct DummyOverride {
     double base_armor_bonus   = 0.0;
 };
 
+struct AbilityChoice {
+    std::string label;
+    std::string name;
+    bool        is_passive{false};
+};
+
 // 主场景: 一个 caster + 3 dummy. 切英雄 / R 都走 rebuild_with_hero().
 class Scene {
 public:
     explicit Scene(const HeroCatalog& cat) : catalog_(cat) {
+        build_ability_choices();
         rebuild_with_hero(0);
     }
 
@@ -105,8 +119,10 @@ public:
         lua_   = std::make_unique<LuaState>();
         reg_   = std::make_unique<AbilityRegistry>();
         reg_->set_lua(lua_.get());
-        // 加载所选英雄的 yaml -- 否则技能 def 找不到
-        reg_->load_file(catalog_.heroes()[hero_index_].yaml_path);
+        // Inspector 允许给任意单位添加任意已注册技能, 因此每次重建都加载全部 hero YAML.
+        for (const auto& hero : catalog_.heroes()) {
+            reg_->load_file(hero.yaml_path);
+        }
 
         world_  = std::make_unique<World>();
         texts_.clear();
@@ -130,6 +146,7 @@ public:
             Ability* inst = reg_->instantiate(a.name, *caster_);
             if (inst) caster_abilities_.push_back(inst);
         }
+        sync_caster_abilities();
 
         // 3 个 dummy. 若 dummy_override_.active, 用调参面板的 stats.
         dummies_.clear();
@@ -192,6 +209,44 @@ public:
 
     void set_dummy_override(const DummyOverride& o) { dummy_override_ = o; }
     const DummyOverride& dummy_override() const     { return dummy_override_; }
+    const std::vector<AbilityChoice>& ability_choices() const { return ability_choices_; }
+    LuaState* lua_state() const { return lua_.get(); }
+
+    Unit* find_unit(EntityId id) const {
+        return world_ ? world_->find(id) : nullptr;
+    }
+
+    std::vector<Unit*> units() const {
+        std::vector<Unit*> out;
+        if (!world_) return out;
+        for (Team t : {Team::Radiant, Team::Dire, Team::Neutral}) {
+            for (Unit* u : world_->units_on_team(t)) {
+                if (u) out.push_back(u);
+            }
+        }
+        return out;
+    }
+
+    void sync_caster_abilities() {
+        caster_abilities_.clear();
+        if (!caster_) return;
+        for (const auto& a : caster_->abilities().all()) {
+            if (a && !a->is_passive()) caster_abilities_.push_back(a.get());
+        }
+    }
+
+    Ability* add_ability_to(Unit& unit, const std::string& name) {
+        if (!reg_) return nullptr;
+        Ability* ab = reg_->instantiate(name, unit);
+        if (ab && &unit == caster_) sync_caster_abilities();
+        return ab;
+    }
+
+    bool remove_ability_at(Unit& unit, std::size_t index) {
+        const bool ok = unit.abilities().remove_at(index);
+        if (ok && &unit == caster_) sync_caster_abilities();
+        return ok;
+    }
 
     // 收集当前所有要绘制的 RenderUnit / RenderProjectile (复用 visual_common)
     std::vector<RenderUnit> render_units() const {
@@ -241,6 +296,20 @@ public:
     }
 
 private:
+    void build_ability_choices() {
+        ability_choices_.clear();
+        for (const auto& hero : catalog_.heroes()) {
+            for (const auto& ability : hero.abilities) {
+                AbilityChoice choice;
+                choice.name = ability.name;
+                choice.is_passive = ability.is_passive;
+                choice.label = hero.yaml_name + " / " + ability.name;
+                if (ability.is_passive) choice.label += " (passive)";
+                ability_choices_.push_back(std::move(choice));
+            }
+        }
+    }
+
     const HeroCatalog&              catalog_;
     std::size_t                     hero_index_{0};
     std::unique_ptr<LuaState>       lua_;
@@ -249,6 +318,7 @@ private:
     Unit*                           caster_{nullptr};
     std::vector<Unit*>              dummies_;
     std::vector<Ability*>           caster_abilities_;
+    std::vector<AbilityChoice>      ability_choices_;
     std::vector<FloatingText>       texts_;
     DummyOverride                   dummy_override_{};
 };
@@ -327,6 +397,445 @@ double dist2(Vec2 a, Vec2 b) {
     return dx * dx + dy * dy;
 }
 
+const char* team_label(Team t) {
+    switch (t) {
+        case Team::Radiant: return "Radiant";
+        case Team::Dire:    return "Dire";
+        case Team::Neutral: return "Neutral";
+    }
+    return "?";
+}
+
+const char* state_label(ModifierState s) {
+    switch (s) {
+        case ModifierState::Stunned:         return "Stunned";
+        case ModifierState::Silenced:        return "Silenced";
+        case ModifierState::Rooted:          return "Rooted";
+        case ModifierState::Disarmed:        return "Disarmed";
+        case ModifierState::Hexed:           return "Hexed";
+        case ModifierState::Invisible:       return "Invisible";
+        case ModifierState::Invulnerable:    return "Invulnerable";
+        case ModifierState::OutOfGame:       return "OutOfGame";
+        case ModifierState::MagicImmune:     return "MagicImmune";
+        case ModifierState::Untargetable:    return "Untargetable";
+        case ModifierState::NoUnitCollision: return "NoUnitCollision";
+        case ModifierState::NoHealthBar:     return "NoHealthBar";
+        case ModifierState::Frozen:          return "Frozen";
+        case ModifierState::Count_:          break;
+    }
+    return "?";
+}
+
+const char* property_label(ModifierProperty p) {
+    switch (p) {
+        case ModifierProperty::ArmorBonus:               return "ArmorBonus";
+        case ModifierProperty::ArmorBonusPct:            return "ArmorBonusPct";
+        case ModifierProperty::HealthBonus:              return "HealthBonus";
+        case ModifierProperty::ManaBonus:                return "ManaBonus";
+        case ModifierProperty::AttackDamageBonus:        return "AttackDamageBonus";
+        case ModifierProperty::AttackDamageBonusPct:     return "AttackDamageBonusPct";
+        case ModifierProperty::AttackSpeedBonusConstant: return "AttackSpeedBonus";
+        case ModifierProperty::MagicResistBonus:         return "MagicResistBonus";
+        case ModifierProperty::IncomingDamagePct:        return "IncomingDamagePct";
+        case ModifierProperty::OutgoingDamagePct:        return "OutgoingDamagePct";
+        case ModifierProperty::MoveSpeedBonusConstant:   return "MoveSpeedBonus";
+        case ModifierProperty::MoveSpeedBonusPct:        return "MoveSpeedBonusPct";
+        case ModifierProperty::HealAmpPct:               return "HealAmpPct";
+        case ModifierProperty::Evasion:                  return "Evasion";
+        case ModifierProperty::LifestealPct:             return "LifestealPct";
+        case ModifierProperty::HealthRegen:              return "HealthRegen";
+        case ModifierProperty::ManaRegen:                return "ManaRegen";
+        case ModifierProperty::SpellAmplifyPct:          return "SpellAmplifyPct";
+        case ModifierProperty::StatusResistancePct:      return "StatusResistancePct";
+        case ModifierProperty::CooldownReductionPct:     return "CooldownReductionPct";
+        case ModifierProperty::CastRangeBonus:           return "CastRangeBonus";
+        case ModifierProperty::Count_:                   break;
+    }
+    return "?";
+}
+
+const char* phase_label(CastPhase p) {
+    switch (p) {
+        case CastPhase::Ready:       return "Ready";
+        case CastPhase::Casting:     return "Casting";
+        case CastPhase::Backswing:   return "Backswing";
+        case CastPhase::Channelling: return "Channelling";
+        case CastPhase::OnCooldown:  return "OnCooldown";
+    }
+    return "?";
+}
+
+bool drag_double(const char* label, double& value, float speed,
+                 double min_v, double max_v, const char* fmt) {
+    float f = static_cast<float>(value);
+    if (!ImGui::DragFloat(label, &f, speed,
+                          static_cast<float>(min_v),
+                          static_cast<float>(max_v), fmt)) {
+        return false;
+    }
+    value = static_cast<double>(f);
+    return true;
+}
+
+void draw_state_mask(std::uint32_t mask) {
+    bool any = false;
+    for (int i = 0; i < static_cast<int>(ModifierState::Count_); ++i) {
+        const auto state = static_cast<ModifierState>(i);
+        if ((mask & state_bit(state)) == 0) continue;
+        if (any) ImGui::SameLine();
+        ImGui::TextUnformatted(state_label(state));
+        any = true;
+    }
+    if (!any) ImGui::TextDisabled("(none)");
+}
+
+enum class ModifierParamKind {
+    Number,
+    Int,
+    Property,
+    Vec2,
+};
+
+struct ModifierParamSpec {
+    std::string       key;
+    std::string       label;
+    ModifierParamKind kind{ModifierParamKind::Number};
+    double            number_default{0.0};
+    double            min{0.0};
+    double            max{0.0};
+    float             speed{0.1f};
+    const char*       format{"%.2f"};
+    int               int_default{0};
+    int               int_min{0};
+    int               int_max{0};
+    Vec2              vec_default{0.0, 0.0};
+};
+
+struct ModifierParamValue {
+    double number{0.0};
+    int    integer{0};
+    int    property_index{0};
+    Vec2   vec{0.0, 0.0};
+};
+
+using ModifierParamBag = std::unordered_map<std::string, ModifierParamValue>;
+using ModifierAddFactory =
+    std::function<std::unique_ptr<Modifier>(Unit&, const ModifierParamBag&)>;
+
+struct ModifierAddSpec {
+    std::string               name;
+    std::string               label;
+    std::vector<ModifierParamSpec> params;
+    ModifierAddFactory        create;
+};
+
+ModifierParamSpec number_param(std::string key, std::string label,
+                               double def, double min_v, double max_v,
+                               float speed, const char* format) {
+    ModifierParamSpec out;
+    out.key = std::move(key);
+    out.label = std::move(label);
+    out.kind = ModifierParamKind::Number;
+    out.number_default = def;
+    out.min = min_v;
+    out.max = max_v;
+    out.speed = speed;
+    out.format = format;
+    return out;
+}
+
+ModifierParamSpec int_param(std::string key, std::string label,
+                            int def, int min_v, int max_v, float speed) {
+    ModifierParamSpec out;
+    out.key = std::move(key);
+    out.label = std::move(label);
+    out.kind = ModifierParamKind::Int;
+    out.int_default = def;
+    out.int_min = min_v;
+    out.int_max = max_v;
+    out.speed = speed;
+    return out;
+}
+
+ModifierParamSpec property_param(std::string key, std::string label,
+                                 ModifierProperty def) {
+    ModifierParamSpec out;
+    out.key = std::move(key);
+    out.label = std::move(label);
+    out.kind = ModifierParamKind::Property;
+    out.int_default = static_cast<int>(def);
+    return out;
+}
+
+ModifierParamSpec vec2_param(std::string key, std::string label,
+                             Vec2 def, double min_v, double max_v,
+                             float speed, const char* format) {
+    ModifierParamSpec out;
+    out.key = std::move(key);
+    out.label = std::move(label);
+    out.kind = ModifierParamKind::Vec2;
+    out.vec_default = def;
+    out.min = min_v;
+    out.max = max_v;
+    out.speed = speed;
+    out.format = format;
+    return out;
+}
+
+std::vector<ModifierParamSpec> common_modifier_params() {
+    return {
+        number_param("duration", "Duration", 3.0, -1.0, 600.0, 0.05f, "%.1f"),
+        int_param("stacks", "Stacks", 1, 1, 999, 0.1f),
+    };
+}
+
+std::vector<ModifierParamSpec>
+with_common_params(std::initializer_list<ModifierParamSpec> extra) {
+    auto out = common_modifier_params();
+    out.insert(out.end(), extra.begin(), extra.end());
+    return out;
+}
+
+void reset_modifier_param_values(const ModifierAddSpec& spec, ModifierParamBag& values) {
+    values.clear();
+    for (const auto& param : spec.params) {
+        ModifierParamValue value;
+        value.number = param.number_default;
+        value.integer = param.int_default;
+        value.property_index = param.int_default;
+        value.vec = param.vec_default;
+        values.emplace(param.key, value);
+    }
+}
+
+double param_number(const ModifierParamBag& params, const std::string& key, double fallback) {
+    const auto it = params.find(key);
+    return it == params.end() ? fallback : it->second.number;
+}
+
+int param_int(const ModifierParamBag& params, const std::string& key, int fallback) {
+    const auto it = params.find(key);
+    return it == params.end() ? fallback : it->second.integer;
+}
+
+ModifierProperty param_property(const ModifierParamBag& params, const std::string& key,
+                                ModifierProperty fallback) {
+    const auto it = params.find(key);
+    const int idx = it == params.end()
+        ? static_cast<int>(fallback)
+        : it->second.property_index;
+    return static_cast<ModifierProperty>(
+        std::clamp(idx, 0, static_cast<int>(ModifierProperty::Count_) - 1));
+}
+
+Vec2 param_vec2(const ModifierParamBag& params, const std::string& key, Vec2 fallback) {
+    const auto it = params.find(key);
+    return it == params.end() ? fallback : it->second.vec;
+}
+
+std::unique_ptr<Modifier>
+finish_modifier(std::unique_ptr<Modifier> mod, const ModifierParamBag& params) {
+    if (!mod) return nullptr;
+    const int stacks = std::max(1, param_int(params, "stacks", 1));
+    if (stacks > 1) mod->set_stack_count(stacks);
+    return mod;
+}
+
+void draw_modifier_param_controls(const ModifierAddSpec& spec, ModifierParamBag& values) {
+    for (const auto& param : spec.params) {
+        ModifierParamValue& value = values[param.key];
+        switch (param.kind) {
+            case ModifierParamKind::Number:
+                drag_double(param.label.c_str(), value.number,
+                            param.speed, param.min, param.max, param.format);
+                break;
+            case ModifierParamKind::Int:
+                ImGui::DragInt(param.label.c_str(), &value.integer,
+                               param.speed, param.int_min, param.int_max);
+                value.integer = std::clamp(value.integer, param.int_min, param.int_max);
+                break;
+            case ModifierParamKind::Property: {
+                value.property_index = std::clamp(
+                    value.property_index, 0,
+                    static_cast<int>(ModifierProperty::Count_) - 1);
+                const auto current = static_cast<ModifierProperty>(value.property_index);
+                if (ImGui::BeginCombo(param.label.c_str(), property_label(current))) {
+                    for (int i = 0; i < static_cast<int>(ModifierProperty::Count_); ++i) {
+                        const bool selected_prop = value.property_index == i;
+                        const auto prop = static_cast<ModifierProperty>(i);
+                        if (ImGui::Selectable(property_label(prop), selected_prop)) {
+                            value.property_index = i;
+                        }
+                        if (selected_prop) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                break;
+            }
+            case ModifierParamKind::Vec2:
+                ImGui::PushID(param.key.c_str());
+                ImGui::TextUnformatted(param.label.c_str());
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f - 4.0f);
+                drag_double("X", value.vec.x, param.speed, param.min, param.max, param.format);
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                drag_double("Y", value.vec.y, param.speed, param.min, param.max, param.format);
+                ImGui::PopID();
+                break;
+        }
+    }
+}
+
+std::vector<ModifierAddSpec> build_builtin_modifier_specs() {
+    std::vector<ModifierAddSpec> out;
+    auto push = [&](std::string name,
+                    std::vector<ModifierParamSpec> params,
+                    ModifierAddFactory create) {
+        out.push_back({name, "c++ / " + name, std::move(params), std::move(create)});
+    };
+
+    push("modifier_stunned", common_modifier_params(),
+         [](Unit& unit, const ModifierParamBag& params) {
+             return finish_modifier(
+                 modifiers::make_stunned(unit, param_number(params, "duration", 3.0)),
+                 params);
+         });
+    push("modifier_silenced", common_modifier_params(),
+         [](Unit& unit, const ModifierParamBag& params) {
+             return finish_modifier(
+                 modifiers::make_silenced(unit, param_number(params, "duration", 3.0)),
+                 params);
+         });
+    push("modifier_rooted", common_modifier_params(),
+         [](Unit& unit, const ModifierParamBag& params) {
+             return finish_modifier(
+                 modifiers::make_rooted(unit, param_number(params, "duration", 3.0)),
+                 params);
+         });
+    push("modifier_hexed", common_modifier_params(),
+         [](Unit& unit, const ModifierParamBag& params) {
+             return finish_modifier(
+                 modifiers::make_hexed(unit, param_number(params, "duration", 3.0)),
+                 params);
+         });
+    push("modifier_invisible", common_modifier_params(),
+         [](Unit& unit, const ModifierParamBag& params) {
+             return finish_modifier(
+                 modifiers::make_invisible(unit, param_number(params, "duration", 3.0)),
+                 params);
+         });
+    push("modifier_magic_immune", common_modifier_params(),
+         [](Unit& unit, const ModifierParamBag& params) {
+             return finish_modifier(
+                 modifiers::make_magic_immune(unit, param_number(params, "duration", 3.0)),
+                 params);
+         });
+    push("modifier_debug_stats",
+         with_common_params({
+             property_param("property", "Property", ModifierProperty::AttackDamageBonus),
+             number_param("value", "Value", 25.0, -10000.0, 10000.0, 0.1f, "%.2f"),
+         }),
+         [](Unit& unit, const ModifierParamBag& params) {
+             const auto prop = param_property(
+                 params, "property", ModifierProperty::AttackDamageBonus);
+             return finish_modifier(
+                 std::make_unique<modifiers::GenericStats>(
+                     unit, "modifier_debug_stats",
+                     param_number(params, "duration", 3.0),
+                     std::initializer_list<ModifierProvidedProperty>{
+                         {prop, param_number(params, "value", 25.0)}}),
+                 params);
+         });
+    push("modifier_shield_absorb",
+         with_common_params({
+             number_param("capacity", "Capacity", 300.0, 1.0, 100000.0, 5.0f, "%.0f"),
+         }),
+         [](Unit& unit, const ModifierParamBag& params) {
+             return finish_modifier(
+                 std::make_unique<modifiers::ShieldAbsorb>(
+                     unit, param_number(params, "capacity", 300.0),
+                     param_number(params, "duration", 3.0)),
+                 params);
+         });
+    push("modifier_periodic_heal",
+         with_common_params({
+             number_param("heal_per_tick", "Heal/Tick", 50.0,
+                          -10000.0, 10000.0, 1.0f, "%.0f"),
+             number_param("interval", "Interval", 1.0, 0.01, 60.0, 0.05f, "%.2f"),
+         }),
+         [](Unit& unit, const ModifierParamBag& params) {
+             return finish_modifier(
+                 modifiers::make_periodic_heal(
+                     unit, param_number(params, "heal_per_tick", 50.0),
+                     std::max(0.01, param_number(params, "interval", 1.0)),
+                     param_number(params, "duration", 3.0)),
+                 params);
+         });
+    push("modifier_reflect_damage",
+         with_common_params({
+             number_param("fraction", "Reflect", 0.5, 0.0, 10.0, 0.01f, "%.2f"),
+         }),
+         [](Unit& unit, const ModifierParamBag& params) {
+             return finish_modifier(
+                 modifiers::make_blade_mail(
+                     unit, param_number(params, "fraction", 0.5),
+                     param_number(params, "duration", 3.0)),
+                 params);
+         });
+    push("modifier_motion_knockback",
+         with_common_params({
+             vec2_param("direction", "Direction", {1.0, 0.0}, -1.0, 1.0, 0.05f, "%.2f"),
+             number_param("distance", "Distance", 300.0, 0.0, 5000.0, 5.0f, "%.0f"),
+             int_param("priority", "Priority", 1, -100, 100, 0.1f),
+         }),
+         [](Unit& unit, const ModifierParamBag& params) {
+             return finish_modifier(
+                 modifiers::make_knockback(
+                     unit, param_vec2(params, "direction", {1.0, 0.0}),
+                     param_number(params, "distance", 300.0),
+                     param_number(params, "duration", 3.0),
+                     param_int(params, "priority", 1)),
+                 params);
+         });
+    push("modifier_break_healing",
+         with_common_params({
+             number_param("fraction", "Heal Break", 0.4, 0.0, 1.0, 0.01f, "%.2f"),
+         }),
+         [](Unit& unit, const ModifierParamBag& params) {
+             return finish_modifier(
+                 modifiers::make_break_healing(
+                     unit, param_number(params, "fraction", 0.4),
+                     param_number(params, "duration", 3.0)),
+                 params);
+         });
+
+    return out;
+}
+
+std::vector<ModifierAddSpec> build_modifier_catalog(Scene& scene) {
+    std::vector<ModifierAddSpec> out = build_builtin_modifier_specs();
+    LuaState* lua = scene.lua_state();
+    if (!lua) return out;
+
+    for (const std::string& name : lua->modifier_registry().names()) {
+        out.push_back({
+            name,
+            "lua / " + name,
+            common_modifier_params(),
+            [lua, name](Unit& unit, const ModifierParamBag& params) {
+                const auto* spec = lua->modifier_registry().find(name);
+                if (!spec) return std::unique_ptr<Modifier>{};
+                return finish_modifier(
+                    std::make_unique<ScriptedModifier>(
+                        unit, name, param_number(params, "duration", 3.0),
+                        *spec, *lua),
+                    params);
+            },
+        });
+    }
+    return out;
+}
+
 int main() {
     HeroCatalog catalog;
     try {
@@ -348,6 +857,10 @@ int main() {
     rlImGuiSetup(/*dark theme=*/true);
 
     Scene scene(catalog);
+    EntityId selected_unit_id = scene.caster() ? scene.caster()->id() : kInvalidEntityId;
+    auto select_caster = [&] {
+        selected_unit_id = scene.caster() ? scene.caster()->id() : kInvalidEntityId;
+    };
 
     // 战场视图: 居中到 [kSidePanelW, kWindowW - kTunePanelW] x
     // [0, kWindowH - kAbilityBarH].
@@ -388,6 +901,7 @@ int main() {
         scene.set_dummy_override(o);
         if (also_rebuild) {
             scene.rebuild_with_hero(scene.hero_index());
+            select_caster();
             selected_ability = -1;
             aim = AimMode::None;
         }
@@ -436,6 +950,7 @@ int main() {
         if (!gui_wants_keyboard && aim == AimMode::None && IsKeyPressed(KEY_SPACE)) paused = !paused;
         if (!gui_wants_keyboard && IsKeyPressed(KEY_R)) {
             scene.rebuild_with_hero(scene.hero_index());
+            select_caster();
             selected_ability = -1;
             reset_aim();
             paused = false;
@@ -482,6 +997,7 @@ int main() {
         // 拾取最近的活着的 dummy. 拾取半径 = 单位 hull_radius, 但保证最小屏幕半径
         // 不低于 kMinUnitRadiusPx 等价的世界距离, 避免 zoom 过大时点不到.
         Unit* hover_unit = nullptr;
+        Unit* inspect_hover_unit = nullptr;
         if (mouse_in_field) {
             const double min_world_r = dota::visual::kMinUnitRadiusPx / cam.zoom;
             for (Unit* u : scene.dummies()) {
@@ -490,6 +1006,16 @@ int main() {
                 if (dist2(u->position(), mouse_world) <= pick_r * pick_r) {
                     hover_unit = u;
                     break;
+                }
+            }
+            double best_d2 = std::numeric_limits<double>::max();
+            for (Unit* u : scene.units()) {
+                if (!u) continue;
+                const double pick_r = std::max(u->hull_radius(), min_world_r);
+                const double d2 = dist2(u->position(), mouse_world);
+                if (d2 <= pick_r * pick_r && d2 < best_d2) {
+                    best_d2 = d2;
+                    inspect_hover_unit = u;
                 }
             }
         }
@@ -505,6 +1031,12 @@ int main() {
             IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) &&
             scene.caster() && scene.caster()->alive()) {
             scene.caster()->issue_move(mouse_world);
+        }
+
+        // 非 aim 模式下 LMB 选中任意单位, 右侧 Inspector 显示其状态.
+        if (mouse_in_field && aim == AimMode::None &&
+            IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && inspect_hover_unit) {
+            selected_unit_id = inspect_hover_unit->id();
         }
 
         // 左键 -- 仅在战场内有效
@@ -566,6 +1098,15 @@ int main() {
         dota::visual::draw_grid(cam, -1200, 1200, -800, 800, 200);
         for (const auto& p : scene.render_projectiles()) dota::visual::draw_projectile(cam, p);
         for (const auto& u : scene.render_units())       dota::visual::draw_unit(cam, u);
+        if (Unit* selected = scene.find_unit(selected_unit_id)) {
+            const Vector2 ss = cam.to_screen(selected->position());
+            const float sr = std::max(dota::visual::kMinUnitRadiusPx,
+                                      cam.scalar(selected->hull_radius()));
+            DrawCircleLines(static_cast<int>(ss.x), static_cast<int>(ss.y),
+                            sr + 5.0f, Color{120, 210, 255, 255});
+            DrawCircleLines(static_cast<int>(ss.x), static_cast<int>(ss.y),
+                            sr + 7.0f, Color{120, 210, 255, 180});
+        }
         for (auto& f : scene.texts())
             dota::visual::draw_floating_text(cam, f, scene.world()->time());
 
@@ -685,6 +1226,7 @@ int main() {
             if (hero_active >= 0 && hero_active != prev_active &&
                 static_cast<std::size_t>(hero_active) != scene.hero_index()) {
                 scene.rebuild_with_hero(static_cast<std::size_t>(hero_active));
+                select_caster();
                 selected_ability = -1;
                 paused = false;
             }
@@ -706,7 +1248,11 @@ int main() {
             if (slots == 0) {
                 ImGui::TextDisabled("(no active abilities)");
             }
-            const ImVec2 slot_sz(200.0f, 64.0f);
+            const float slot_gap = ImGui::GetStyle().ItemSpacing.x;
+            const float slot_w = slots > 0
+                ? (ImGui::GetContentRegionAvail().x - slot_gap * (slots - 1)) / slots
+                : 200.0f;
+            const ImVec2 slot_sz(std::max(120.0f, slot_w), 64.0f);
             for (int i = 0; i < slots; ++i) {
                 if (i > 0) ImGui::SameLine();
                 Ability* ab = scene.caster_abilities()[i];
@@ -736,48 +1282,398 @@ int main() {
         }
         ImGui::End();
 
-        // Dummy Tuning 面板 (右侧).
+        // Inspector 面板 (右侧).
         ImGui::SetNextWindowPos(ImVec2(static_cast<float>(kWindowW - kTunePanelW), 0.0f));
         ImGui::SetNextWindowSize(ImVec2(static_cast<float>(kTunePanelW),
                                         static_cast<float>(kWindowH)));
-        if (ImGui::Begin("Dummy Tuning", nullptr, kFixedFlags)) {
-            ImGui::SliderFloat("HP",   &tune_max_health,  100.0f, 10000.0f, "%.0f");
-            ImGui::SliderFloat("MR+",  &tune_mr_bonus,     -1.0f,    1.0f,  "%+.2f");
-            ImGui::SliderFloat("Arm+", &tune_armor_bonus, -10.0f,   30.0f,  "%+.1f");
-            ImGui::SliderFloat("AD",   &tune_attack_dmg,    0.0f,  200.0f,  "%.0f");
-            ImGui::Spacing();
-            const float btn_w = (ImGui::GetContentRegionAvail().x - 8.0f) * 0.5f;
-            if (ImGui::Button("Apply", ImVec2(btn_w, 28.0f))) {
-                apply_dummy_tune(true);
-                show_toast("Dummy stats applied", Color{120, 230, 120, 255});
+        if (ImGui::Begin("Inspector", nullptr, kFixedFlags)) {
+            Unit* selected = scene.find_unit(selected_unit_id);
+            if (!selected && scene.caster()) {
+                select_caster();
+                selected = scene.caster();
             }
-            ImGui::SameLine();
-            if (ImGui::Button("Reset", ImVec2(btn_w, 28.0f))) {
-                tune_max_health  = 6000.0f;
-                tune_attack_dmg  = 0.0f;
-                tune_mr_bonus    = 0.0f;
-                tune_armor_bonus = 0.0f;
-                scene.set_dummy_override({});
-                scene.rebuild_with_hero(scene.hero_index());
-                selected_ability = -1;
-                aim = AimMode::None;
-                show_toast("Dummies reset", Color{200, 200, 80, 255});
-            }
-            ImGui::Spacing();
-            ImGui::TextWrapped("Apply rebuilds dummies (caster persists, mid-cast aborts).");
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::TextDisabled("Dummy AI");
-            const char* ai_items[] = {"Idle", "Strafe", "Charge"};
-            const int prev_ai = dummy_ai_idx;
-            ImGui::Combo("##dummy_ai", &dummy_ai_idx, ai_items, IM_ARRAYSIZE(ai_items));
-            if (prev_ai != dummy_ai_idx) {
-                // 切到 Idle 时清掉所有 dummy 的 move 指令
-                if (dummy_ai_idx == static_cast<int>(DummyAI::Idle)) {
-                    for (Unit* d : scene.dummies()) {
-                        if (d) d->stop_move();
+
+            if (ImGui::BeginTabBar("##inspector_tabs")) {
+                if (ImGui::BeginTabItem("Unit")) {
+                    if (!selected) {
+                        ImGui::TextDisabled("(no unit selected)");
+                    } else {
+                        ImGui::TextUnformatted(selected->name().c_str());
+                        ImGui::Text("id %u  %s  %s",
+                                    selected->id(), team_label(selected->team()),
+                                    selected->alive() ? "alive" : "dead");
+                        ImGui::Spacing();
+                        if (ImGui::BeginTabBar("##unit_modules")) {
+                            if (ImGui::BeginTabItem("Base")) {
+                                const float half_w =
+                                    (ImGui::GetContentRegionAvail().x - 8.0f) * 0.5f;
+                                if (ImGui::Button("Caster", ImVec2(half_w, 26.0f))) {
+                                    select_caster();
+                                }
+                                ImGui::SameLine();
+                                if (ImGui::Button("Full", ImVec2(half_w, 26.0f))) {
+                                    selected->set_health(selected->max_health());
+                                    selected->set_mana(selected->max_mana());
+                                }
+                                if (ImGui::Button("Kill", ImVec2(half_w, 26.0f))) {
+                                    selected->set_health(0.0);
+                                }
+                                ImGui::SameLine();
+                                if (ImGui::Button("Revive", ImVec2(half_w, 26.0f))) {
+                                    selected->set_health(selected->max_health());
+                                    selected->set_mana(selected->max_mana());
+                                }
+
+                                ImGui::SeparatorText("Vitals");
+                                double hp = selected->health();
+                                if (drag_double("HP", hp, 5.0f, 0.0,
+                                                std::max(1.0, selected->max_health()), "%.0f")) {
+                                    selected->set_health(hp);
+                                }
+                                double mana = selected->mana();
+                                if (drag_double("Mana", mana, 5.0f, 0.0,
+                                                std::max(1.0, selected->max_mana()), "%.0f")) {
+                                    selected->set_mana(mana);
+                                }
+
+                                Vec2 pos = selected->position();
+                                bool pos_changed = false;
+                                pos_changed |= drag_double("Pos X", pos.x, 5.0f, -5000.0, 5000.0, "%.0f");
+                                pos_changed |= drag_double("Pos Y", pos.y, 5.0f, -5000.0, 5000.0, "%.0f");
+                                if (pos_changed) selected->set_position(pos);
+
+                                ImGui::SeparatorText("Base Stats");
+                                UnitStats stats = selected->stats();
+                                bool stats_changed = false;
+                                stats_changed |= drag_double("Max HP", stats.max_health,
+                                                             10.0f, 1.0, 50000.0, "%.0f");
+                                stats_changed |= drag_double("Max Mana", stats.max_mana,
+                                                             10.0f, 0.0, 10000.0, "%.0f");
+                                stats_changed |= drag_double("Attack", stats.attack_damage,
+                                                             1.0f, 0.0, 1000.0, "%.0f");
+                                stats_changed |= drag_double("Armor", stats.base_armor,
+                                                             0.2f, -50.0, 200.0, "%.1f");
+                                stats_changed |= drag_double("MR", stats.magic_resist,
+                                                             0.01f, 0.0, 1.0, "%.2f");
+                                stats_changed |= drag_double("Move Speed", stats.move_speed,
+                                                             5.0f, 0.0, 2000.0, "%.0f");
+                                stats_changed |= drag_double("Attack Range", stats.attack_range,
+                                                             5.0f, 0.0, 2000.0, "%.0f");
+                                stats_changed |= drag_double("Hull", stats.hull_radius,
+                                                             1.0f, 0.0, 200.0, "%.0f");
+                                if (stats_changed) selected->set_stats(stats);
+
+                                ImGui::SeparatorText("Effective");
+                                ImGui::Text("HP %.0f / %.0f", selected->health(), selected->max_health());
+                                ImGui::Text("Mana %.0f / %.0f", selected->mana(), selected->max_mana());
+                                ImGui::Text("Attack %.1f", selected->attack_damage());
+                                ImGui::Text("Armor %.1f", selected->armor());
+                                ImGui::Text("MR %.2f", selected->magic_resist());
+                                ImGui::Text("Move Speed %.0f", selected->move_speed());
+                                ImGui::Text("Regen %.1f / %.1f",
+                                            selected->health_regen(), selected->mana_regen());
+                                ImGui::Text("Amp %.2f  Status Res %.2f",
+                                            selected->spell_amp_pct(), selected->status_resist());
+                                ImGui::Text("Cast Range +%.0f", selected->cast_range_bonus());
+                                ImGui::TextUnformatted("States");
+                                draw_state_mask(selected->modifiers().aggregated_states());
+                                ImGui::EndTabItem();
+                            }
+
+                            if (ImGui::BeginTabItem("Modifiers")) {
+                                const auto& mods = selected->modifiers().all();
+                                std::size_t remove_index = mods.size();
+                                if (ImGui::BeginTable(
+                                        "##mod_table", 4,
+                                        ImGuiTableFlags_BordersInnerV |
+                                        ImGuiTableFlags_RowBg |
+                                        ImGuiTableFlags_Resizable)) {
+                                    ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+                                    ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_WidthFixed, 74.0f);
+                                    ImGui::TableSetupColumn("Stacks", ImGuiTableColumnFlags_WidthFixed, 58.0f);
+                                    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 54.0f);
+                                    ImGui::TableHeadersRow();
+                                    for (std::size_t i = 0; i < mods.size(); ++i) {
+                                        Modifier* mod = mods[i].get();
+                                        if (!mod) continue;
+                                        ImGui::TableNextRow();
+                                        ImGui::PushID(static_cast<int>(i));
+
+                                        ImGui::TableSetColumnIndex(0);
+                                        if (ImGui::TreeNode("##mod_details", "%s", mod->name().c_str())) {
+                                            ImGui::Text("Purgable %s  Dispellable %s  %s",
+                                                        mod->is_purgable() ? "yes" : "no",
+                                                        mod->is_dispellable() ? "yes" : "no",
+                                                        mod->is_debuff() ? "debuff" : "buff");
+                                            ImGui::TextUnformatted("States");
+                                            draw_state_mask(mod->declared_states());
+                                            const auto props = mod->declared_properties();
+                                            ImGui::TextUnformatted("Properties");
+                                            if (props.empty()) {
+                                                ImGui::TextDisabled("(none)");
+                                            } else {
+                                                for (const auto& p : props) {
+                                                    ImGui::BulletText("%s %+0.2f",
+                                                                      property_label(p.property), p.value);
+                                                }
+                                            }
+                                            ImGui::TreePop();
+                                        }
+
+                                        ImGui::TableSetColumnIndex(1);
+                                        double duration = mod->permanent()
+                                            ? -1.0 : mod->duration_remaining();
+                                        ImGui::SetNextItemWidth(-FLT_MIN);
+                                        if (drag_double("##duration", duration,
+                                                        0.05f, -1.0, 600.0, "%.1f")) {
+                                            mod->refresh(duration < 0.0 ? -1.0 : duration);
+                                        }
+
+                                        ImGui::TableSetColumnIndex(2);
+                                        int stacks = mod->stack_count();
+                                        ImGui::SetNextItemWidth(-FLT_MIN);
+                                        if (ImGui::DragInt("##stacks", &stacks, 0.1f, 1, 999)) {
+                                            mod->set_stack_count(std::max(1, stacks));
+                                        }
+
+                                        ImGui::TableSetColumnIndex(3);
+                                        if (ImGui::SmallButton("Del")) remove_index = i;
+                                        ImGui::PopID();
+                                    }
+                                    ImGui::EndTable();
+                                }
+                                if (remove_index < mods.size()) {
+                                    selected->modifiers().remove_at(remove_index);
+                                }
+
+                                ImGui::SeparatorText("Add");
+                                static int add_mod_idx = 0;
+                                static int last_add_mod_idx = -1;
+                                static ModifierParamBag add_mod_params;
+                                const auto modifier_catalog = build_modifier_catalog(scene);
+                                if (add_mod_idx >= static_cast<int>(modifier_catalog.size())) {
+                                    add_mod_idx = 0;
+                                    last_add_mod_idx = -1;
+                                }
+
+                                if (modifier_catalog.empty()) {
+                                    ImGui::TextDisabled("(no registered modifiers)");
+                                } else {
+                                    if (ImGui::BeginCombo(
+                                            "Name", modifier_catalog[add_mod_idx].label.c_str())) {
+                                        for (std::size_t i = 0; i < modifier_catalog.size(); ++i) {
+                                            const bool is_selected =
+                                                add_mod_idx == static_cast<int>(i);
+                                            if (ImGui::Selectable(
+                                                    modifier_catalog[i].label.c_str(), is_selected)) {
+                                                add_mod_idx = static_cast<int>(i);
+                                            }
+                                            if (is_selected) ImGui::SetItemDefaultFocus();
+                                        }
+                                        ImGui::EndCombo();
+                                    }
+
+                                    const ModifierAddSpec& spec = modifier_catalog[add_mod_idx];
+                                    if (last_add_mod_idx != add_mod_idx || add_mod_params.empty()) {
+                                        reset_modifier_param_values(spec, add_mod_params);
+                                        last_add_mod_idx = add_mod_idx;
+                                    }
+                                    draw_modifier_param_controls(spec, add_mod_params);
+
+                                    if (ImGui::Button("Add Modifier", ImVec2(-FLT_MIN, 28.0f))) {
+                                        std::unique_ptr<Modifier> mod =
+                                            spec.create(*selected, add_mod_params);
+                                        if (mod) {
+                                            selected->modifiers().attach(std::move(mod));
+                                            show_toast("Modifier added", Color{120, 230, 120, 255});
+                                        } else {
+                                            show_toast("Modifier unavailable",
+                                                       Color{220, 100, 100, 255});
+                                        }
+                                    }
+                                }
+                                ImGui::EndTabItem();
+                            }
+
+                            if (ImGui::BeginTabItem("Ability")) {
+                                const auto& abilities = selected->abilities().all();
+                                std::size_t remove_ability_index = abilities.size();
+                                if (abilities.empty()) {
+                                    ImGui::TextDisabled("(no abilities)");
+                                }
+                                for (std::size_t i = 0; i < abilities.size(); ++i) {
+                                    Ability* ab = abilities[i].get();
+                                    if (!ab) continue;
+                                    ImGui::PushID(static_cast<int>(i));
+                                    if (ImGui::TreeNode("##ability_details", "%s", ab->name().c_str())) {
+                                        ImGui::Text("Behavior %s  Phase %s",
+                                                    behavior_label(ab->behavior()),
+                                                    phase_label(ab->phase()));
+                                        ImGui::Text("CD remaining %.1f", ab->cooldown_remaining());
+
+                                        int level = ab->level();
+                                        if (ImGui::DragInt("Level", &level, 0.1f, 1, 30)) {
+                                            ab->set_level(level);
+                                        }
+                                        double cast_range = ab->cast_range();
+                                        if (drag_double("Cast Range", cast_range,
+                                                        5.0f, 0.0, 5000.0, "%.0f")) {
+                                            ab->set_cast_range(cast_range);
+                                        }
+                                        double cast_point = ab->cast_point();
+                                        if (drag_double("Cast Point", cast_point,
+                                                        0.01f, 0.0, 10.0, "%.2f")) {
+                                            ab->set_cast_point(cast_point);
+                                        }
+                                        double backswing = ab->backswing();
+                                        if (drag_double("Backswing", backswing,
+                                                        0.01f, 0.0, 10.0, "%.2f")) {
+                                            ab->set_backswing(backswing);
+                                        }
+                                        double channel_time = ab->channel_time();
+                                        if (drag_double("Channel Time", channel_time,
+                                                        0.01f, 0.0, 30.0, "%.2f")) {
+                                            ab->set_channel_time(channel_time);
+                                        }
+                                        double cooldown = ab->cooldown_for_level();
+                                        if (drag_double("Cooldown", cooldown,
+                                                        0.1f, 0.0, 300.0, "%.1f")) {
+                                            ab->set_cooldown_levels({cooldown});
+                                        }
+                                        double mana_cost = ab->mana_cost_for_level();
+                                        if (drag_double("Mana Cost", mana_cost,
+                                                        1.0f, 0.0, 2000.0, "%.0f")) {
+                                            ab->set_mana_cost_levels({mana_cost});
+                                        }
+
+                                        AbilitySpecial special = ab->ability_special();
+                                        bool special_changed = false;
+                                        if (!special.empty() && ImGui::TreeNode("Specials")) {
+                                            for (auto& [key, value] : special) {
+                                                const std::size_t value_count = value.is_int
+                                                    ? value.ints.size() : value.floats.size();
+                                                if (value_count == 0) continue;
+                                                const std::size_t idx = static_cast<std::size_t>(
+                                                    std::clamp(ab->level() - 1, 0,
+                                                               static_cast<int>(value_count) - 1));
+                                                double v = value.get_float(ab->level());
+                                                if (drag_double(key.c_str(), v,
+                                                                value.is_int ? 1.0f : 0.05f,
+                                                                -10000.0, 10000.0,
+                                                                value.is_int ? "%.0f" : "%.2f")) {
+                                                    if (value.is_int) {
+                                                        const long iv = static_cast<long>(std::llround(v));
+                                                        value.ints[idx] = iv;
+                                                        if (idx < value.floats.size()) {
+                                                            value.floats[idx] = static_cast<double>(iv);
+                                                        }
+                                                    } else {
+                                                        value.floats[idx] = v;
+                                                    }
+                                                    special_changed = true;
+                                                }
+                                            }
+                                            ImGui::TreePop();
+                                        }
+                                        if (special_changed) {
+                                            ab->set_ability_special(std::move(special));
+                                        }
+
+                                        if (ImGui::Button("Remove Ability", ImVec2(-FLT_MIN, 26.0f))) {
+                                            remove_ability_index = i;
+                                        }
+                                        ImGui::TreePop();
+                                    }
+                                    ImGui::PopID();
+                                }
+                                if (remove_ability_index < abilities.size()) {
+                                    scene.remove_ability_at(*selected, remove_ability_index);
+                                    selected_ability = -1;
+                                    show_toast("Ability removed", Color{200, 200, 80, 255});
+                                }
+
+                                ImGui::SeparatorText("Add");
+                                const auto& choices = scene.ability_choices();
+                                static int add_ability_idx = 0;
+                                if (add_ability_idx >= static_cast<int>(choices.size())) {
+                                    add_ability_idx = 0;
+                                }
+                                if (choices.empty()) {
+                                    ImGui::TextDisabled("(no registered abilities)");
+                                } else {
+                                    if (ImGui::BeginCombo("Name", choices[add_ability_idx].label.c_str())) {
+                                        for (std::size_t i = 0; i < choices.size(); ++i) {
+                                            const bool selected_item =
+                                                add_ability_idx == static_cast<int>(i);
+                                            if (ImGui::Selectable(choices[i].label.c_str(), selected_item)) {
+                                                add_ability_idx = static_cast<int>(i);
+                                            }
+                                            if (selected_item) ImGui::SetItemDefaultFocus();
+                                        }
+                                        ImGui::EndCombo();
+                                    }
+                                    if (ImGui::Button("Add Ability", ImVec2(-FLT_MIN, 28.0f))) {
+                                        Ability* added = scene.add_ability_to(
+                                            *selected, choices[add_ability_idx].name);
+                                        if (added) {
+                                            selected_ability = -1;
+                                            show_toast("Ability added", Color{120, 230, 120, 255});
+                                        } else {
+                                            show_toast("Ability add failed", Color{220, 100, 100, 255});
+                                        }
+                                    }
+                                }
+                                ImGui::EndTabItem();
+                            }
+
+                            ImGui::EndTabBar();
+                        }
                     }
+                    ImGui::EndTabItem();
                 }
+
+                if (ImGui::BeginTabItem("Scenario")) {
+                    ImGui::SeparatorText("Dummy Stats");
+                    ImGui::SliderFloat("HP",   &tune_max_health,  100.0f, 10000.0f, "%.0f");
+                    ImGui::SliderFloat("MR+",  &tune_mr_bonus,     -1.0f,    1.0f,  "%+.2f");
+                    ImGui::SliderFloat("Arm+", &tune_armor_bonus, -10.0f,   30.0f,  "%+.1f");
+                    ImGui::SliderFloat("AD",   &tune_attack_dmg,    0.0f,  200.0f,  "%.0f");
+                    ImGui::Spacing();
+                    const float btn_w = (ImGui::GetContentRegionAvail().x - 8.0f) * 0.5f;
+                    if (ImGui::Button("Apply", ImVec2(btn_w, 28.0f))) {
+                        apply_dummy_tune(true);
+                        show_toast("Dummy stats applied", Color{120, 230, 120, 255});
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Reset", ImVec2(btn_w, 28.0f))) {
+                        tune_max_health  = 6000.0f;
+                        tune_attack_dmg  = 0.0f;
+                        tune_mr_bonus    = 0.0f;
+                        tune_armor_bonus = 0.0f;
+                        scene.set_dummy_override({});
+                        scene.rebuild_with_hero(scene.hero_index());
+                        select_caster();
+                        selected_ability = -1;
+                        aim = AimMode::None;
+                        show_toast("Dummies reset", Color{200, 200, 80, 255});
+                    }
+
+                    ImGui::SeparatorText("Dummy AI");
+                    const char* ai_items[] = {"Idle", "Strafe", "Charge"};
+                    const int prev_ai = dummy_ai_idx;
+                    ImGui::Combo("Mode", &dummy_ai_idx, ai_items, IM_ARRAYSIZE(ai_items));
+                    if (prev_ai != dummy_ai_idx) {
+                        // 切到 Idle 时清掉所有 dummy 的 move 指令
+                        if (dummy_ai_idx == static_cast<int>(DummyAI::Idle)) {
+                            for (Unit* d : scene.dummies()) {
+                                if (d) d->stop_move();
+                            }
+                        }
+                    }
+                    ImGui::EndTabItem();
+                }
+
+                ImGui::EndTabBar();
             }
         }
         ImGui::End();
