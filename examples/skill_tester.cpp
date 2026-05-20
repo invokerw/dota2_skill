@@ -1108,8 +1108,23 @@ int main() {
                 Unit* d = ds[i];
                 if (!d || !d->alive()) continue;
                 if (mode == DummyAI::Charge) {
+                    // 用 OrderAttackTarget 让 dummy 走到 attack_range 内开打 --
+                    // 比纯 issue_move 更接近 Dota A 键行为 (路径上对手就揍).
                     if (scene.caster() && scene.caster()->alive()) {
-                        d->issue_move(scene.caster()->position());
+                        // 已经在攻击同一目标 -> 不重复入队 (覆盖会清掉 attack_cd
+                        // 推进的 dispatched 状态, 但 OrderAttackTarget 是持续行为,
+                        // 重复 issue 会反复清队, 实际无副作用; 这里通过 current_order
+                        // 跳过避免噪音).
+                        const auto* cur = d->current_order();
+                        bool already = false;
+                        if (cur) {
+                            if (auto* at = std::get_if<OrderAttackTarget>(cur)) {
+                                already = (at->target == scene.caster()->id());
+                            }
+                        }
+                        if (!already) {
+                            d->issue_order(OrderAttackTarget{scene.caster()->id()});
+                        }
                     }
                 } else if (mode == DummyAI::Strafe) {
                     // 在 (pos.x, pos.y ± 200) 之间往返. 到达后(无 target)切方向.

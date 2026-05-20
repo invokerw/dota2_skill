@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+using dota::OrderAttackTarget;
 using dota::Team;
 using dota::Unit;
 using dota::UnitStats;
@@ -84,7 +85,7 @@ TEST(World, AttackOrderDealsDamageAtExpectedCadence) {
     World w;
     auto* a = w.spawn("A", Team::Radiant, basic_stats(1000.0, 50.0));
     auto* b = w.spawn("B", Team::Dire,    basic_stats(1000.0, 50.0));
-    w.order_attack(*a, *b);
+    a->issue_order(OrderAttackTarget{b->id()});
 
     int lands = 0;
     w.events().subscribe<dota::AttackLandedEvent>(
@@ -108,8 +109,8 @@ TEST(World, UnitDiesAndFiresEventExactlyOnce) {
     World w;
     auto* a = w.spawn("A", Team::Radiant, basic_stats(1000.0, 200.0));
     auto* b = w.spawn("B", Team::Dire,    basic_stats(400.0,  50.0));
-    w.order_attack(*a, *b);
-    w.order_attack(*b, *a);
+    a->issue_order(OrderAttackTarget{b->id()});
+    b->issue_order(OrderAttackTarget{a->id()});
 
     int deaths = 0;
     dota::EntityId dead_id = 0;

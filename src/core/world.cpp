@@ -203,18 +203,6 @@ std::vector<Unit*> World::find_enemies_in_cone(Vec2 origin, Vec2 direction, doub
     return out;
 }
 
-void World::order_attack(Unit& attacker, Unit& target) {
-    stop_attack(attacker);
-    orders_.push_back({attacker.id(), target.id()});
-}
-
-void World::stop_attack(Unit& attacker) {
-    orders_.erase(
-        std::remove_if(orders_.begin(), orders_.end(),
-                       [&](const AttackOrder& o) { return o.attacker == attacker.id(); }),
-        orders_.end());
-}
-
 void World::fill_move_path(Unit& u, Vec2 target, MovePath& out) {
     out.waypoints.clear();
     out.index = 0;
@@ -330,10 +318,6 @@ void World::tick_once() {
     // 改坐标 -- moved_this_tick_for_collision 自动置位, 末尾的 resolve_unit_collisions
     // 兜底分离重叠.
     tick_movement(kTickDt);
-    // 指令队列尾部 sweep: tick_movement 走完一段 move_path 后, 队首 OrderMoveToPoint
-    // 此时 move_path 为空 -- pump_orders 把它 pop, 衔接队列里的下一条指令.
-    // (Stage 3/4 启用 Cast/Attack 后, 派发逻辑还在此处补齐.)
-    tick_units([&](Unit& u) { u.pump_orders(); });
     // 在 modifier 之后推进技能(施法前摇计时器, 引导思考, 冷却),
     // 使刚过期的眩晕不会打断本 tick 应该完成的施法
     tick_units([&](Unit& u) { u.tick_abilities(kTickDt); });
@@ -354,26 +338,13 @@ void World::tick_once() {
     // 首先递减所有攻击冷却, 使在同一 tick 内安排新攻击保持一致
     tick_units([&](Unit& u) { u.tick_attack_cd(kTickDt); });
 
-    // 处理未完成的攻击指令. 快照 orders_, 因为攻击可能发布移除指令的事件(例如死亡时)
-    auto snapshot = orders_;
-    for (const auto& order : snapshot) {
-        Unit* attacker = find(order.attacker);
-        Unit* target   = find(order.target);
-        if (!attacker || !target) continue;
-        if (!attacker->alive() || !target->alive()) continue;
-        if (attacker->attack_cd() > 0.0) continue;
-        if (!attacker->can_attack()) continue;   // 眩晕/缴械等
-        resolve_attack(*attacker, *target);
-    }
-
-    // 清除参与者消失或死亡的指令
-    orders_.erase(
-        std::remove_if(orders_.begin(), orders_.end(), [&](const AttackOrder& o) {
-            Unit* a = find(o.attacker);
-            Unit* t = find(o.target);
-            return !a || !t || !a->alive() || !t->alive();
-        }),
-        orders_.end());
+    // 指令队列尾部 sweep: tick_movement / tick_attack_cd 都走完之后, 派发各单位
+    // 队首. 三个职责:
+    //   - MoveToPoint: 走完 (move_path 空) -> pop 并衔接下一条.
+    //   - Cast*: 派发 / 完成检测 (Stage 3 落地).
+    //   - AttackTarget: 距离不够派生跟随 move; 在范围且 attack_cd<=0 -> 调
+    //     World::resolve_attack. 持续行为, 不 pop, 直到 target 死亡或被新指令覆盖.
+    tick_units([&](Unit& u) { u.pump_orders(); });
 
     ++tick_count_;
     TickEndEvent ev{time_, tick_count_};
@@ -478,7 +449,8 @@ void World::resolve_attack(Unit& attacker, Unit& target) {
     if (!target.alive()) {
         UnitDiedEvent died{target.id(), attacker.id()};
         events_.publish(died);
-        stop_attack(target); // 死亡目标失去其指令
+        // 死亡目标也清掉自己队列里的攻击指令 (它正攻击的对象不再有效).
+        target.clear_orders();
     }
 
     attacker.set_attack_cd(attacker.seconds_per_attack());

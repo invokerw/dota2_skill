@@ -183,7 +183,7 @@ int main(int argc, char** argv) {
         blade_fury->order_cast(t, world);
     }
     // 旋转时自动攻击 Lina
-    world.order_attack(*jug, *lina);
+    jug->issue_order(OrderAttackTarget{lina->id()});
     world.advance(2.0);
     status();
 
@@ -216,8 +216,8 @@ int main(int argc, char** argv) {
 
     // 让剩余的自动攻击结算
     log_header("Cleanup: auto-attacks until someone falls");
-    world.order_attack(*lion, *jug);
-    world.order_attack(*lina, *jug);
+    lion->issue_order(OrderAttackTarget{jug->id()});
+    lina->issue_order(OrderAttackTarget{jug->id()});
     for (int i = 0; i < 40; ++i) {
         world.advance(0.5);
         if (!jug->alive() || (!lion->alive() && !lina->alive())) break;

@@ -273,6 +273,90 @@ TEST(OrderQueue, CastTargetFollowsMovingTarget) {
     EXPECT_GT(lion->position().y, 50.0);
 }
 
+// --- Stage 4: AttackTarget 迁移 ---
+
+TEST(OrderQueue, AttackTargetAutoApproach) {
+    // attacker 与 target 距离 600 (远超 attack_range=150 + 双 hull). 发
+    // OrderAttackTarget -> 单位应自动走到 attack_range 内才发出第一次 attack_landed.
+    World w;
+    UnitStats a_stats = hero_stats(400.0);
+    a_stats.attack_range = 150.0;
+    UnitStats t_stats = hero_stats();
+    auto* a = w.spawn("A", Team::Radiant, a_stats, {0.0,   0.0});
+    auto* t = w.spawn("T", Team::Dire,    t_stats, {600.0, 0.0});
+
+    int hits_in_range = 0;
+    bool any_hit = false;
+    w.events().subscribe<AttackLandedEvent>([&](AttackLandedEvent& e) {
+        any_hit = true;
+        // 命中那一刻 attacker 应已走进 attack_range.
+        const double r = a->stats().attack_range
+                       + a->hull_radius() + t->hull_radius();
+        if (distance_sq(a->position(), t->position()) <= r * r) {
+            ++hits_in_range;
+        }
+        (void)e;
+    });
+
+    a->issue_order(OrderAttackTarget{t->id()});
+    // 600 距离 -> 走到 ~198 (attack_range+hulls) 需要 ~1s, 留 2s 余量含 swing.
+    w.advance(2.0);
+
+    EXPECT_TRUE(any_hit);
+    EXPECT_GT(hits_in_range, 0);
+}
+
+TEST(OrderQueue, AttackTargetPersistsAcrossSwings) {
+    // 一次 issue_order, 应当持续攻击, 多次 attack_landed 直到对手死亡.
+    World w;
+    auto* a = w.spawn("A", Team::Radiant, hero_stats(), {0.0,   0.0});
+    auto* t = w.spawn("T", Team::Dire,    hero_stats(), {100.0, 0.0});
+    a->issue_order(OrderAttackTarget{t->id()});
+    int hits = 0;
+    w.events().subscribe<AttackLandedEvent>([&](AttackLandedEvent&) { ++hits; });
+    w.advance(3.5);
+    EXPECT_GT(hits, 1);
+    // 还活着 -- 攻击仍在持续, current_order 不被 pop.
+    EXPECT_TRUE(a->current_order());
+    EXPECT_TRUE(std::holds_alternative<OrderAttackTarget>(*a->current_order()));
+}
+
+TEST(OrderQueue, AttackTargetPopsWhenTargetDies) {
+    // target 死亡 -> attack 项 pop, 队列衔接到下一条.
+    World w;
+    UnitStats a_stats = hero_stats(150.0);  // 慢速, 让 MoveToPoint 还在走
+    a_stats.attack_damage = 9999.0;          // 一击必杀
+    auto* a = w.spawn("A", Team::Radiant, a_stats, {0.0,   0.0});
+    auto* t = w.spawn("T", Team::Dire,    hero_stats(), {100.0, 0.0});
+    a->issue_order(OrderAttackTarget{t->id()});
+    a->issue_order(OrderMoveToPoint{Vec2{2000.0, 0.0}}, /*queue=*/true);
+
+    w.advance(2.0);
+    EXPECT_FALSE(t->alive());
+    // 第一条 attack 已 pop, 衔接到 MoveToPoint (距离 2000, 速度 150 -> 还远没走完).
+    ASSERT_TRUE(a->current_order());
+    EXPECT_TRUE(std::holds_alternative<OrderMoveToPoint>(*a->current_order()));
+}
+
+TEST(OrderQueue, AttackTargetStopOverridesQueue) {
+    // 攻击中发 OrderStop -> 整队清空, 不再继续攻击.
+    World w;
+    auto* a = w.spawn("A", Team::Radiant, hero_stats(), {0.0,   0.0});
+    auto* t = w.spawn("T", Team::Dire,    hero_stats(), {100.0, 0.0});
+    a->issue_order(OrderAttackTarget{t->id()});
+    w.advance(0.2);  // 至少一次 swing.
+
+    a->issue_order(OrderStop{});
+    EXPECT_TRUE(a->orders().empty());
+
+    int hits_after_stop = 0;
+    w.events().subscribe<AttackLandedEvent>([&](AttackLandedEvent&) {
+        ++hits_after_stop;
+    });
+    w.advance(2.0);
+    EXPECT_EQ(hits_after_stop, 0);
+}
+
 TEST(OrderQueue, CastTargetDeadPopsAndContinues) {
     // 跟随期间 target 死亡, 该 cast 项应被 pop, 队列里下一条衔接.
     AbilityRegistry reg;

@@ -151,25 +151,28 @@ const Order* current_order() const;              // 队首; 空队 nullptr
 - 移除 `World::orders_` 字段与 `AttackOrder` 结构, `tick_once` 末尾原 `orders_` 处理段落删掉.
 - duel.cpp + 5 处测试调用点全部改为 OrderAttackTarget. dummy AI Charge 模式同样改用此指令.
 
-**Status**: Not Started
+**Status**: Complete
 
 ### Stage 4 改动
 
-- [src/core/world.cpp](src/core/world.cpp): 删除 `orders_` 处理段落与 `AttackOrder` 结构. `tick_orders` 加 AttackTarget 分支.
-- [include/dota/core/world.hpp](include/dota/core/world.hpp): 删除 `order_attack` / `stop_attack` / `AttackOrder` / `orders_`.
+- [include/dota/core/world.hpp](include/dota/core/world.hpp): 删除 `order_attack` / `stop_attack` / `AttackOrder` 结构 / `orders_` 字段. `resolve_attack` 改为 public, 由 `dispatch_front` 在 unit.cpp 调用.
+- [src/core/world.cpp](src/core/world.cpp): 删除 `tick_once` 末尾整段 `orders_` 处理 (snapshot 遍历 + 死亡清理). 把 `pump_orders` tick 调用挪到 `tick_attack_cd` 之后, 让 AttackTarget 派发能看到本 tick 已归零的 cd. `resolve_attack` 中 target 死亡分支由 `stop_attack(target)` 改为 `target.clear_orders()`.
+- [src/core/unit.cpp](src/core/unit.cpp) `dispatch_front` 加 `OrderAttackTarget` 分支: target 死亡 -> pop; 在 `attack_range + 双 hull` 内 -> 清 move_path + (cd<=0 && can_attack) 调 `world->resolve_attack`; 否则派生跟随 move. **持续行为**, 不 pop. 新增内部 helper `in_attack_range`.
+- `Unit::issue_order` 跳过 `OrderAttackTarget` 的入队即派发 -- 与原 `World::order_attack` 行为对齐 (第一次 swing 留到下个 tick, 这样调用方在 issue 后再 subscribe 也能收到).
 - [examples/duel.cpp](examples/duel.cpp): 3 处 `world.order_attack` -> `unit->issue_order(OrderAttackTarget{...})`.
-- [examples/skill_tester.cpp](examples/skill_tester.cpp) Charge 模式: `d->issue_move(caster->position())` -> `d->issue_order(OrderAttackTarget{caster->id()})` (更接近 Dota 行为).
-- [tests/test_unit_basic.cpp](tests/test_unit_basic.cpp), [tests/test_modifier_state.cpp](tests/test_modifier_state.cpp): 4 处调用点改成 issue_order.
-- [src/script/bindings.cpp](src/script/bindings.cpp): 暴露 `issue_order_attack(target)` / `issue_order_stop()` 等 Lua 包装 (按需, 当前没有脚本用 order_attack, 可不暴露).
+- [examples/skill_tester.cpp](examples/skill_tester.cpp) Charge 模式: 改为 `d->issue_order(OrderAttackTarget{caster->id()})`. 同一目标避免重复 issue (用 current_order + std::get_if 判定).
+- [tests/test_unit_basic.cpp](tests/test_unit_basic.cpp), [tests/test_modifier_state.cpp](tests/test_modifier_state.cpp): 4 处 `w.order_attack(...)` 改为 `unit->issue_order(OrderAttackTarget{...})`.
 
 ### Stage 4 测试
 
-新增 (test_order_queue.cpp):
+新增 ([tests/test_order_queue.cpp](tests/test_order_queue.cpp)):
 
-- `AttackTargetAutoApproach`: 600 距离 -> 单位走到 attack_range 内才发出 attack_landed.
-- `AttackTargetPersistsUntilDeath`: 一次 issue_order, 多次 attack_landed 直到 target 死亡, current_order 自动清空.
+- `AttackTargetAutoApproach`: 600 距离, attack_range=150 -> 单位先走到 attack_range 内才发出第一次 attack_landed (订阅函数验证 attacker 在攻击范围内).
+- `AttackTargetPersistsAcrossSwings`: 一次 issue_order, 推 3.5s 多次 attack_landed; current_order 仍是 OrderAttackTarget (持续行为不 pop).
+- `AttackTargetPopsWhenTargetDies`: attack_damage 一击必杀, 后接 MoveToPoint -> target 死亡 -> attack 项 pop, 衔接到 MoveToPoint.
+- `AttackTargetStopOverridesQueue`: 攻击中 issue OrderStop -> 整队清空, 后续 attack_landed 计数为 0.
 
-修改 ([tests/test_unit_basic.cpp](tests/test_unit_basic.cpp), [tests/test_modifier_state.cpp](tests/test_modifier_state.cpp)): 把 `w.order_attack(...)` 替换为 `unit->issue_order(OrderAttackTarget{...})`.
+修改: `tests/test_unit_basic.cpp` (3 处) + `tests/test_modifier_state.cpp` (1 处) 中的 `w.order_attack(...)` 调用.
 
 ## Stage 5: shift 队列追加 + skill_tester UI
 

@@ -173,12 +173,6 @@ public:
     // 前进 `dt` 秒. 内部细分为 kTickDt 切片.
     void advance(double dt);
 
-    // 发出基础攻击命令. 阶段 1: 攻击者每次攻击冷却归零时
-    // 自动攻击 `target`, 只要双方都存活.
-    // 实际攻击发生在 `advance()` 内部.
-    void order_attack(Unit& attacker, Unit& target);
-    void stop_attack(Unit& attacker);
-
     // --- Pathfinder 接口(目前仅留 hook, A* 后续实现)
     void set_pathfinder(std::unique_ptr<Pathfinder> p) { pathfinder_ = std::move(p); }
     Pathfinder* pathfinder() const { return pathfinder_.get(); }
@@ -187,14 +181,13 @@ public:
     // 公开是因为 Unit 持有 World*, 不希望把策略散落到 unit.cpp.
     void fill_move_path(Unit& u, Vec2 target, MovePath& out);
 
-private:
-    struct AttackOrder {
-        EntityId attacker;
-        EntityId target;
-    };
-
-    void tick_once();
+    // 普通攻击结算 (闪避 + 物理伤害管线 + 设置 attack_cd). 由 OrderAttackTarget
+    // 在 dispatch_front 检距通过, 攻击 cd 归零, 双方存活时调用. 公开是因为派发
+    // 在 unit.cpp 里, 这条路径不希望再绕到 World 内部 helper.
     void resolve_attack(Unit& attacker, Unit& target);
+
+private:
+    void tick_once();
 
     // 玩家移动指令: 在 motion controller 之后, ability 之前推进每个单位的
     // move_path. 通过 set_position 改坐标 -- 末尾的 resolve_unit_collisions
@@ -207,7 +200,6 @@ private:
     void resolve_unit_collisions();
 
     std::vector<std::unique_ptr<Unit>> units_;
-    std::vector<AttackOrder>           orders_;
     EventBus events_;
     EntityId next_id_{1};
     double   time_{0.0};

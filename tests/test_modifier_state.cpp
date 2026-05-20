@@ -89,7 +89,7 @@ TEST(ModifierState, StunnedAttackerStopsSwingingInWorld) {
     World w;
     auto* a = w.spawn("A", Team::Radiant, basic_stats());
     auto* b = w.spawn("B", Team::Dire,    basic_stats());
-    w.order_attack(*a, *b);
+    a->issue_order(OrderAttackTarget{b->id()});
 
     int hits = 0;
     w.events().subscribe<dota::AttackLandedEvent>(

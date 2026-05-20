@@ -245,6 +245,14 @@ bool in_cast_range_unit(const Unit& caster, const Ability& ab, const Unit& tgt) 
     return distance_sq(caster.position(), tgt.position()) <= eff * eff;
 }
 
+// 攻击距离合法判定: attack_range + 双方 hull. Dota 中 attack_range 从 hull 边
+// 起算, 加上双方半径才是中心距离上限.
+bool in_attack_range(const Unit& attacker, const Unit& target) {
+    const double r = attacker.stats().attack_range
+                   + attacker.hull_radius() + target.hull_radius();
+    return distance_sq(attacker.position(), target.position()) <= r * r;
+}
+
 } // namespace
 
 // 激活队首 Order: 派生 move_path / 立即施放无目标 cast / 立即清队等. 不需要每
@@ -330,9 +338,22 @@ static bool dispatch_front(Unit& self, std::deque<Order>& orders,
                 // 跟随移动: 每 tick 重新设置目标位置, 应对 target 移动.
                 set_internal_move_path(self, move_path, world, target->position());
             }
+        } else if constexpr (std::is_same_v<T, OrderAttackTarget>) {
+            // 持续行为: 在 attack_range 内时, attack_cd<=0 且 can_attack 触发
+            // 一次 resolve_attack; 否则派生跟随 move. target 死亡 / 消失 -> pop.
+            Unit* target = world->find(v.target);
+            if (!target || !target->alive()) { pop = true; return; }
+            if (in_attack_range(self, *target)) {
+                move_path = {};  // 已到位 -> 停下打
+                if (self.can_attack() && self.attack_cd() <= 0.0) {
+                    world->resolve_attack(self, *target);
+                }
+            } else {
+                set_internal_move_path(self, move_path, world, target->position());
+            }
         }
-        // 其他类型: MoveToPoint/Stop 在 activate_front; AttackTarget Stage 4;
-        // MoveToUnit 暂未启用.
+        // OrderMoveToPoint / OrderStop: activate_front 已处理.
+        // OrderMoveToUnit: 暂未启用.
     }, front);
     return pop;
 }
@@ -379,8 +400,11 @@ void Unit::issue_order(Order o, bool queue) {
         activate_front(*this, orders_, move_path_, world_);
         // 入队即派发一次, 让 NoTarget cast 在同一 tick 内立刻施放 (与现有
         // ability::order_cast 行为对齐). 距离不够的 Cast/Target 会派生 move,
-        // 等待下个 tick 的 pump_orders.
-        if (!orders_.empty()) {
+        // 等待下个 tick 的 pump_orders. AttackTarget 不在此走 -- 与原
+        // World::order_attack 行为一致, 第一次 swing 留到下一个 tick (这样
+        // 测试在 issue 后再 subscribe events 仍能收到全部 attack_landed).
+        if (!orders_.empty() &&
+            !std::holds_alternative<OrderAttackTarget>(orders_.front())) {
             const bool pop = dispatch_front(*this, orders_, move_path_, world_);
             if (pop) {
                 orders_.pop_front();
