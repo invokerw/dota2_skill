@@ -1,12 +1,14 @@
 #pragma once
 
 #include "dota/ability/manager.hpp"
+#include "dota/core/order.hpp"
 #include "dota/core/types.hpp"
 #include "dota/modifier/enums.hpp"
 #include "dota/modifier/manager.hpp"
 #include "dota/modifier/modifier.hpp"  // for DamageType used in apply_damage
 
 #include <cstddef>
+#include <deque>
 #include <memory>
 #include <optional>
 #include <string>
@@ -122,7 +124,27 @@ public:
     bool can_cast()   const;
     bool can_move()   const;
 
-    // --- 移动指令
+    // --- 指令队列(Dota 2 PlayerOrder 风格)---
+    //
+    // 所有"走/打/放"指令都进同一个 FIFO. World::tick_orders 在每 tick 内
+    // 派发队首: MoveTo 派生 move_path, Cast/Attack 在 Stage 3/4 启用.
+    //
+    // queue=false (默认) 覆盖整队; queue=true 追加到队尾(shift 排队).
+    void issue_order(Order o, bool queue = false);
+    // 清空整个队列, 同时清掉派生的 move_path. 等价于 issue_order(OrderStop{}).
+    void clear_orders();
+    const std::deque<Order>& orders() const { return orders_; }
+    // 队首; 空队返回 nullptr.
+    const Order* current_order() const {
+        return orders_.empty() ? nullptr : &orders_.front();
+    }
+    // 内部(World::tick_orders 用): 弹出已完成的队首并激活新的队首.
+    // - 完成判定: OrderMoveToPoint 在 move_path 已空; OrderStop 立即清队.
+    // - 激活: 为 OrderMoveToPoint 派生 move_path. Stage 3/4 后扩展.
+    // 幂等 -- 重复调用安全, 中途路径仍非空时无副作用.
+    void pump_orders();
+
+    // --- 移动指令(便捷 wrapper, 内部走 issue_order)
     // 设置目的地. World 上若挂了 Pathfinder 会用 find_path 填充多航点; 否则单航点.
     void issue_move(Vec2 target);
     // 清除当前指令.
@@ -193,6 +215,7 @@ private:
     World* world_{nullptr};
 
     MovePath move_path_{};
+    std::deque<Order> orders_{};
 };
 
 } // namespace dota

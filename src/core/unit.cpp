@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <type_traits>
+#include <variant>
 
 namespace dota {
 
@@ -208,19 +210,84 @@ void Unit::tick_abilities(double dt) {
     abilities_->advance(dt);
 }
 
-void Unit::issue_move(Vec2 target) {
-    move_path_.waypoints.clear();
-    move_path_.index = 0;
-    if (world_) {
-        world_->fill_move_path(*this, target, move_path_);
-    } else {
-        // 无 World 上下文时(测试用裸 Unit) 退化为单航点
-        move_path_.waypoints.push_back(target);
+// 激活队首 Order: 对 OrderMoveToPoint 派生 move_path; OrderStop 直接 pop;
+// 其他类型 Stage 3/4 接入. 入参为引用以便递归 pop. 入队首激活后即返回.
+static void activate_front(Unit& self, std::deque<Order>& orders,
+                            MovePath& move_path, World* world) {
+    while (!orders.empty()) {
+        const Order& front = orders.front();
+        bool consumed = false;
+        std::visit([&](auto&& v) {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (std::is_same_v<T, OrderMoveToPoint>) {
+                move_path.waypoints.clear();
+                move_path.index = 0;
+                if (world) {
+                    world->fill_move_path(self, v.point, move_path);
+                } else {
+                    move_path.waypoints.push_back(v.point);
+                }
+                // fill 后仍空 (target 与起点重合且 fill 没生成航点) -- 视作完成.
+                if (move_path.empty()) consumed = true;
+            } else if constexpr (std::is_same_v<T, OrderStop>) {
+                move_path = {};
+                consumed = true;
+            } else {
+                (void)v;  // Stage 3/4: 暂不消费, 留待后续 stage 派发
+            }
+        }, front);
+        if (!consumed) return;  // 已激活但未立即完成 -> 等待 tick 推进
+        orders.pop_front();
     }
 }
 
-void Unit::stop_move() {
+void Unit::issue_order(Order o, bool queue) {
+    if (!queue) {
+        orders_.clear();
+        move_path_ = {};
+    }
+    // 覆盖模式 + OrderStop: 整队已清, 不入队.
+    if (!queue && std::holds_alternative<OrderStop>(o)) return;
+    const bool was_empty = orders_.empty();
+    orders_.push_back(std::move(o));
+    // 队列原本为空 (或刚被覆盖清掉) -> 立即激活新队首; 否则等队首走完后衔接.
+    if (was_empty) activate_front(*this, orders_, move_path_, world_);
+}
+
+void Unit::clear_orders() {
+    orders_.clear();
     move_path_ = {};
+}
+
+void Unit::pump_orders() {
+    // World 每 tick 在 tick_movement 之后调用. 检测当前队首是否已完成
+    // (MoveTo 看 move_path 是否走完), 完成则 pop + 激活下一条.
+    while (!orders_.empty()) {
+        const Order& front = orders_.front();
+        bool done = false;
+        std::visit([&](auto&& v) {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (std::is_same_v<T, OrderMoveToPoint>) {
+                done = move_path_.empty();
+            }
+            // 其他类型 Stage 3/4 接入完成判定.
+            (void)v;
+        }, front);
+        if (!done) break;
+        orders_.pop_front();
+        activate_front(*this, orders_, move_path_, world_);
+        // activate_front 已经把"立即完成"的 Order 全部 pop 干净并激活了下一个,
+        // 故下一轮 while 检查的就是新的活动队首.
+        return;
+    }
+}
+
+void Unit::issue_move(Vec2 target) {
+    issue_order(OrderMoveToPoint{target});
+}
+
+void Unit::stop_move() {
+    clear_orders();
 }
 
 std::optional<Vec2> Unit::move_target() const {

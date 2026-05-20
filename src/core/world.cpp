@@ -330,6 +330,10 @@ void World::tick_once() {
     // 改坐标 -- moved_this_tick_for_collision 自动置位, 末尾的 resolve_unit_collisions
     // 兜底分离重叠.
     tick_movement(kTickDt);
+    // 指令队列尾部 sweep: tick_movement 走完一段 move_path 后, 队首 OrderMoveToPoint
+    // 此时 move_path 为空 -- pump_orders 把它 pop, 衔接队列里的下一条指令.
+    // (Stage 3/4 启用 Cast/Attack 后, 派发逻辑还在此处补齐.)
+    tick_units([&](Unit& u) { u.pump_orders(); });
     // 在 modifier 之后推进技能(施法前摇计时器, 引导思考, 冷却),
     // 使刚过期的眩晕不会打断本 tick 应该完成的施法
     tick_units([&](Unit& u) { u.tick_abilities(kTickDt); });
