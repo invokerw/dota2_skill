@@ -99,7 +99,8 @@ CastError Ability::validate_target(const CastTarget& target) const {
         }
 
         if (cast_range_ > 0.0) {
-            const double r2 = cast_range_ * cast_range_;
+            const double effective_range = cast_range_ + target.unit->hull_radius();
+            const double r2 = effective_range * effective_range;
             if (distance_sq(caster_.position(), target.unit->position()) > r2) {
                 return CastError::OutOfRange;
             }

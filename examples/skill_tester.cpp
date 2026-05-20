@@ -587,7 +587,8 @@ int main() {
                 if (hover_unit) {
                     const Vector2 us = cam.to_screen(hover_unit->position());
                     const double d = std::sqrt(dist2(caster_pos, hover_unit->position()));
-                    const Color ring = (range <= 0.0 || d <= range)
+                    const double effective_range = range + hover_unit->hull_radius();
+                    const Color ring = (range <= 0.0 || d <= effective_range)
                         ? Color{255, 220, 80, 255}
                         : Color{220, 80, 80, 255};
                     const float r_px = std::max(dota::visual::kMinUnitRadiusPx,

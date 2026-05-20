@@ -85,6 +85,23 @@ TEST(AbilityLifecycle, FailsWhenOutOfRange) {
     EXPECT_EQ(spike->can_cast(t), CastError::OutOfRange);
 }
 
+TEST(AbilityLifecycle, UnitTargetRangeUsesTargetHullOverlap) {
+    AbilityRegistry reg;
+    World w;
+    auto* lion = w.spawn("Lion", Team::Radiant, hero_stats(), {0.0, 0.0});
+
+    UnitStats enemy_stats = hero_stats();
+    enemy_stats.hull_radius = 30.0;
+    auto* enemy = w.spawn("Enemy", Team::Dire, enemy_stats, {650.0, 0.0});
+    auto* spike = attach_earth_spike(reg, *lion);
+
+    CastTarget t; t.unit = enemy;
+    EXPECT_EQ(spike->can_cast(t), CastError::None);
+
+    enemy->set_position({656.0, 0.0});
+    EXPECT_EQ(spike->can_cast(t), CastError::OutOfRange);
+}
+
 TEST(AbilityLifecycle, CastPointResolveTriggersOnSpellStart) {
     AbilityRegistry reg;
     World w;
