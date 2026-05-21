@@ -113,6 +113,35 @@ if(BUILD_VISUAL)
     endif()
 endif()
 
+# --- CJK font (hero_workshop 中文显示) ---
+# 下载一个开源 CJK TTF, 把绝对路径以宏 DOTA_CJK_FONT_PATH 传给 hero_workshop.
+# 默认开启; 网络环境不允许时可 -DDOWNLOAD_CJK_FONT=OFF 跳过, 此时会退化到
+# 系统字体路径搜索.
+option(DOWNLOAD_CJK_FONT "Download a CJK font for hero_workshop" ON)
+set(DOTA_CJK_FONT_PATH "" CACHE STRING "Path to CJK font TTF/TTC")
+if(DOWNLOAD_CJK_FONT AND BUILD_VISUAL AND NOT DOTA_CJK_FONT_PATH)
+    set(_cjk_dir   "${CMAKE_BINARY_DIR}/cjk_font")
+    set(_cjk_file  "${_cjk_dir}/LXGWWenKai-Regular.ttf")
+    set(_cjk_url
+        "https://github.com/lxgw/LxgwWenKai/releases/download/v1.522/LXGWWenKai-Regular.ttf")
+    if(NOT EXISTS "${_cjk_file}")
+        file(MAKE_DIRECTORY "${_cjk_dir}")
+        message(STATUS "Downloading CJK font: ${_cjk_url}")
+        file(DOWNLOAD "${_cjk_url}" "${_cjk_file}"
+             SHOW_PROGRESS
+             STATUS _cjk_status
+             TLS_VERIFY ON)
+        list(GET _cjk_status 0 _cjk_code)
+        if(NOT _cjk_code EQUAL 0)
+            message(WARNING "CJK font download failed: ${_cjk_status}")
+            file(REMOVE "${_cjk_file}")
+        endif()
+    endif()
+    if(EXISTS "${_cjk_file}")
+        set(DOTA_CJK_FONT_PATH "${_cjk_file}" CACHE STRING "" FORCE)
+    endif()
+endif()
+
 # --- Stage 4 dependency: sol2 (header-only C++ bindings) ---
 CPMAddPackage(
     NAME sol2
@@ -149,6 +178,12 @@ add_library(dota_core
     src/replay/recorder.cpp
     src/replay/player.cpp
     src/tools/hero_catalog.cpp
+    src/tools/hero_writer.cpp
+    src/tools/hero_ops.cpp
+    src/tools/ability_ops.cpp
+    src/tools/modifier_scanner.cpp
+    src/tools/modifier_ops.cpp
+    src/tools/trash.cpp
 )
 target_include_directories(dota_core PUBLIC include)
 target_compile_features(dota_core PUBLIC cxx_std_20)
@@ -170,6 +205,20 @@ if(BUILD_VISUAL)
     target_link_libraries(skill_tester PRIVATE dota_core raylib rlImGui)
     target_compile_definitions(skill_tester PRIVATE
         DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
+
+    # --- Example: hero_workshop (英雄/技能/Modifier 编辑器) ---
+    add_executable(hero_workshop
+        examples/hero_workshop/main.cpp
+        examples/hero_workshop/ability_panel.cpp
+        examples/hero_workshop/modifier_panel.cpp
+    )
+    target_link_libraries(hero_workshop PRIVATE dota_core raylib rlImGui)
+    target_compile_definitions(hero_workshop PRIVATE
+        DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
+    if(DOTA_CJK_FONT_PATH)
+        target_compile_definitions(hero_workshop PRIVATE
+            DOTA_CJK_FONT_PATH=\"${DOTA_CJK_FONT_PATH}\")
+    endif()
 endif()
 
 # --- Tests ---
@@ -212,6 +261,12 @@ add_executable(dota_tests
     tests/test_replay_player.cpp
     tests/test_hero_catalog.cpp
     tests/test_skill_tester_smoke.cpp
+    tests/test_hero_writer.cpp
+    tests/test_trash.cpp
+    tests/test_hero_ops.cpp
+    tests/test_ability_ops.cpp
+    tests/test_modifier_scanner.cpp
+    tests/test_modifier_ops.cpp
 )
 target_link_libraries(dota_tests PRIVATE dota_core GTest::gtest_main)
 target_compile_definitions(dota_tests PRIVATE
