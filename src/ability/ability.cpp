@@ -152,13 +152,15 @@ CastError Ability::trigger_cast(const CastTarget& target, World& world,
     if (CastError verr = validate_target(target); verr != CastError::None) return verr;
 
     if (!ignore_mana) caster_.spend_mana(mana_cost_for_level());
-    pending_target_ = target;
+    pending_target_ = {target.unit ? target.unit->id() : kInvalidEntityId,
+                       target.point, target.has_point};
     world_          = &world;
 
-    publish_cast_started(world_, caster_.id(), name_, pending_target_);
+    const CastTarget snap = resolve_pending();
+    publish_cast_started(world_, caster_.id(), name_, snap);
 
     if (cast_point_ <= 0.0) {
-        CastContext ctx{&caster_, world_, pending_target_, level_};
+        CastContext ctx{&caster_, world_, snap, level_};
         on_spell_start(ctx);
 
         if (is_channelled() && channel_time_ > 0.0) {
@@ -182,14 +184,16 @@ CastError Ability::order_cast(const CastTarget& target, World& world) {
     if (err != CastError::None) return err;
 
     caster_.spend_mana(mana_cost_for_level());
-    pending_target_ = target;
+    pending_target_ = {target.unit ? target.unit->id() : kInvalidEntityId,
+                       target.point, target.has_point};
     world_          = &world;
 
-    publish_cast_started(world_, caster_.id(), name_, pending_target_);
+    const CastTarget snap = resolve_pending();
+    publish_cast_started(world_, caster_.id(), name_, snap);
 
     // 零施法前摇 → 立即执行, 这样瞬发技能不需要第一次 `advance()` 调用(测试依赖此行为)
     if (cast_point_ <= 0.0) {
-        CastContext ctx{&caster_, world_, pending_target_, level_};
+        CastContext ctx{&caster_, world_, snap, level_};
         on_spell_start(ctx);
 
         if (is_channelled() && channel_time_ > 0.0) {
@@ -208,6 +212,16 @@ CastError Ability::order_cast(const CastTarget& target, World& world) {
     return CastError::None;
 }
 
+CastTarget Ability::resolve_pending() const {
+    CastTarget t;
+    t.point     = pending_target_.point;
+    t.has_point = pending_target_.has_point;
+    if (pending_target_.unit_id != kInvalidEntityId && world_) {
+        t.unit = world_->find(pending_target_.unit_id);
+    }
+    return t;
+}
+
 void Ability::enter_phase(CastPhase p, double timer) {
     phase_       = p;
     phase_timer_ = timer;
@@ -215,7 +229,9 @@ void Ability::enter_phase(CastPhase p, double timer) {
 
 bool Ability::current_target_still_valid() const {
     if (!has_flag(behavior_, BehaviorFlag::UnitTarget)) return true;
-    return pending_target_.unit && pending_target_.unit->alive();
+    if (pending_target_.unit_id == kInvalidEntityId || !world_) return false;
+    Unit* u = world_->find(pending_target_.unit_id);
+    return u && u->alive();
 }
 
 void Ability::advance(double dt) {
@@ -240,7 +256,7 @@ void Ability::advance(double dt) {
 
     auto interrupt = [&](bool channelled) {
         if (channelled) {
-            CastContext ctx{&caster_, world_, pending_target_, level_};
+            CastContext ctx{&caster_, world_, resolve_pending(), level_};
             on_channel_finish(ctx, /*interrupted*/ true);
         }
         publish_cast_finished(world_, caster_.id(), name_, /*interrupted*/ true);
@@ -263,7 +279,7 @@ void Ability::advance(double dt) {
 
     if (phase_ == CastPhase::Channelling) {
         // 持续施法期间每帧触发 think 回调
-        CastContext ctx{&caster_, world_, pending_target_, level_};
+        CastContext ctx{&caster_, world_, resolve_pending(), level_};
         on_channel_think(ctx, dt);
         if (phase_timer_ == 0.0) {
             on_channel_finish(ctx, /*interrupted*/ false);
@@ -276,7 +292,7 @@ void Ability::advance(double dt) {
     }
 
     if (phase_ == CastPhase::Casting && phase_timer_ == 0.0) {
-        CastContext ctx{&caster_, world_, pending_target_, level_};
+        CastContext ctx{&caster_, world_, resolve_pending(), level_};
         on_spell_start(ctx);
         if (is_channelled() && channel_time_ > 0.0) {
             enter_phase(CastPhase::Channelling, channel_time_);

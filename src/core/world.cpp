@@ -79,6 +79,9 @@ Unit* World::create_thinker(Vec2 position, double duration,
     s.attack_damage = 0.0;
     s.move_speed = 0.0;
     Unit* th = spawn("npc_dota_thinker", Team::Neutral, s, position);
+    // thinker 是临时占位单位, 到期或被自毁后立刻从 World::units_ 中 erase, 防止
+    // 长期累积. 普通 spawn 不开此项 -- 由调用方按需设置.
+    th->set_remove_on_death(true);
     // 始终给 thinker 一个 untargetable + invulnerable + no-collision + no-health-bar 状态.
     const std::uint32_t mask = state_bit(ModifierState::Untargetable) |
                                 state_bit(ModifierState::Invulnerable) |
@@ -91,8 +94,9 @@ Unit* World::create_thinker(Vec2 position, double duration,
     if (lua && !modifier_name.empty()) {
         const auto* spec = lua->modifier_registry().find(modifier_name);
         if (spec) {
+            const EntityId src_id = source ? source->id() : kInvalidEntityId;
             th->modifiers().attach(std::make_unique<ScriptedModifier>(
-                *th, modifier_name, duration, *spec, *lua, source, /*ability=*/nullptr));
+                *th, modifier_name, duration, *spec, *lua, src_id, /*ability=*/nullptr));
         } else {
             lua->report_error("create_thinker", "未注册的修饰器: " + modifier_name);
         }
@@ -345,6 +349,17 @@ void World::tick_once() {
     //   - AttackTarget: 距离不够派生跟随 move; 在范围且 attack_cd<=0 -> 调
     //     World::resolve_attack. 持续行为, 不 pop, 直到 target 死亡或被新指令覆盖.
     tick_units([&](Unit& u) { u.pump_orders(); });
+
+    // 死亡清理: 把 alive=false 且 remove_on_death=true 的单位从 units_ 中移除.
+    // 必须在所有 tick 阶段(motion / movement / ability / projectile / pump_orders)
+    // 之后, 才能保证不会有热路径还持有指针. 跨 tick 的引用统一走 EntityId + find,
+    // 所以这里 erase 不会让任何长寿命指针悬挂.
+    units_.erase(
+        std::remove_if(units_.begin(), units_.end(),
+                       [](const std::unique_ptr<Unit>& u) {
+                           return u && !u->alive() && u->remove_on_death();
+                       }),
+        units_.end());
 
     ++tick_count_;
     TickEndEvent ev{time_, tick_count_};

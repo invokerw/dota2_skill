@@ -178,12 +178,22 @@ private:
     std::vector<double> mana_costs_;  // 每级
     AbilitySpecial      special_;
 
+    // 跨 tick 的目标快照: 仅存 EntityId / 点 / has_point. 每次派发到子类时
+    // 通过 world_->find 重新解析成 Unit*; 若期间 target 已被销毁(指针失效),
+    // 这里也只是 find 返回 nullptr, 不会悬挂.
+    struct PendingCast {
+        EntityId unit_id  = kInvalidEntityId;
+        Vec2     point    = {};
+        bool     has_point = false;
+    };
+    CastTarget resolve_pending() const;
+
     // 运行时.
-    CastPhase phase_       = CastPhase::Ready;
-    double    phase_timer_ = 0.0;
-    double    cooldown_    = 0.0;
-    World*    world_       = nullptr; // 在施法/后摇期间有效
-    CastTarget pending_target_{};
+    CastPhase   phase_       = CastPhase::Ready;
+    double      phase_timer_ = 0.0;
+    double      cooldown_    = 0.0;
+    World*      world_       = nullptr; // 在施法/后摇期间有效
+    PendingCast pending_target_{};
 };
 
 } // namespace dota

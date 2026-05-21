@@ -222,9 +222,9 @@ void register_bindings(sol::state& lua, LuaState* owner) {
                 if (os.is<int>())          stacks = std::max(1, os.as<int>());
                 else if (os.is<double>())  stacks = std::max(1, static_cast<int>(os.as<double>()));
             }
-            Unit* src = source ? *source : nullptr;
+            const EntityId src_id = (source && *source) ? (*source)->id() : kInvalidEntityId;
             auto mod = std::make_unique<ScriptedModifier>(
-                u, mod_name, duration, *spec, *owner, src, /*ability=*/nullptr);
+                u, mod_name, duration, *spec, *owner, src_id, /*ability=*/nullptr);
             if (stacks > 1) mod->set_stack_count(stacks);
             return u.modifiers().attach(std::move(mod));
         });

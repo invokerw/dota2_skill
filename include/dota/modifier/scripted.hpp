@@ -29,8 +29,8 @@ public:
                      double duration,
                      const LuaModifierRegistry::CompiledSpec& spec,
                      LuaState& lua,
-                     Unit* source     = nullptr,
-                     Ability* ability = nullptr);
+                     EntityId source_id = kInvalidEntityId,
+                     Ability* ability   = nullptr);
 
     std::vector<ModifierProvidedProperty> declared_properties() const override;
     std::uint32_t declared_states() const override;
@@ -47,8 +47,10 @@ public:
 
     bool is_debuff() const override { return is_debuff_; }
 
-    // 暴露给 Lua self.GetCaster / GetAbility 类方法用.
-    Unit*    source()  const { return source_; }
+    // 暴露给 Lua self.GetCaster / GetAbility 类方法用. source 仅存 EntityId,
+    // 通过 World::find 解析: 如果 source 单位已被销毁会得到 nullptr, 不会悬挂.
+    EntityId source_id() const { return source_id_; }
+    Unit*    source() const;
     Ability* ability() const { return ability_; }
 
 private:
@@ -60,7 +62,7 @@ private:
     const LuaModifierRegistry::CompiledSpec* compiled_{nullptr};
     std::uint32_t state_mask_cache_ = 0;             // 静态状态位
     bool       is_debuff_ = false;
-    Unit*      source_  = nullptr;
+    EntityId   source_id_ = kInvalidEntityId;
     Ability*   ability_ = nullptr;
 };
 

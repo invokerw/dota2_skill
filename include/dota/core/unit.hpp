@@ -67,6 +67,12 @@ public:
     double max_mana()   const;
     bool   alive()  const { return health_ > 0.0; }
 
+    // 死亡后是否由 World 自动从 units_ 中 erase. thinker 默认 true(到期自毁后立即清理),
+    // 普通 spawn 默认 false(尸体保留, 与 Dota 大多数英雄/小兵在死亡后仍存在一段时间一致).
+    // 一旦真正被 erase, 任何缓存的 Unit* 都会失效 -- 跨 tick 的引用必须改用 EntityId.
+    bool remove_on_death() const { return remove_on_death_; }
+    void set_remove_on_death(bool b) { remove_on_death_ = b; }
+
     Vec2   position() const { return position_; }
     void   set_position(Vec2 p) { position_ = p; }
 
@@ -209,6 +215,7 @@ private:
     Vec2   position_{};
     Vec2   tick_start_pos_{};
     bool   force_moved_flag_{false};
+    bool   remove_on_death_{false};
 
     std::unique_ptr<ModifierManager> modifiers_;
     std::unique_ptr<AbilityManager>  abilities_;

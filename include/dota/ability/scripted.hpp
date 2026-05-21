@@ -37,9 +37,10 @@ private:
     sol::table self_;     // 为 Lua 调用包装 `this`
 
     // 最后一次 CastContext 目标的快照, 以便在构造时安装的 Lua 闭包
-    // 可以检索当前施法的点/单位.
-    Vec2   last_target_point_{};
-    Unit*  last_target_unit_{nullptr};
+    // 可以检索当前施法的点/单位. unit 仅存 EntityId, 闭包按需 World::find 解析,
+    // 防止跨 tick 持有已被销毁的 Unit*.
+    Vec2     last_target_point_{};
+    EntityId last_target_unit_id_{kInvalidEntityId};
 };
 
 } // namespace dota

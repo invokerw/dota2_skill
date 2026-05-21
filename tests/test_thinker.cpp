@@ -25,10 +25,45 @@ TEST(Thinker, SelfDestructsAtDuration) {
     World w;
     Unit* th = w.create_thinker({0, 0}, 1.0, "", &lua);
     ASSERT_NE(th, nullptr);
+    const EntityId id = th->id();
     EXPECT_TRUE(th->alive());
+    EXPECT_TRUE(th->remove_on_death());
 
     w.advance(1.5);
-    EXPECT_FALSE(th->alive());
+    // 到期自毁后, World::tick_once 末尾的清理 pass 会把 thinker 从 units_ 中 erase.
+    // 之后通过 EntityId 再 find 应返回 nullptr; 缓存的 Unit* 此时已悬挂, 不可使用.
+    EXPECT_EQ(w.find(id), nullptr);
+}
+
+TEST(Thinker, NormalUnitNotErasedOnDeath) {
+    // 普通 spawn 默认 remove_on_death=false: 死亡后 Unit 仍保留在 units_ 中,
+    // 与 Dota 大多数英雄 / 小兵尸体保留一段时间的行为一致.
+    World w;
+    UnitStats s;
+    s.max_health = 50.0;
+    Unit* u = w.spawn("hero", Team::Radiant, s, {0, 0});
+    const EntityId id = u->id();
+    ASSERT_FALSE(u->remove_on_death());
+
+    u->apply_raw_damage(1000.0);
+    EXPECT_FALSE(u->alive());
+
+    w.advance(1.0);
+    EXPECT_NE(w.find(id), nullptr);
+}
+
+TEST(Thinker, NormalUnitErasedWhenFlagged) {
+    // 普通 spawn 也可以显式开启 remove_on_death, 用于一次性的小兵 / 召唤物.
+    World w;
+    UnitStats s;
+    s.max_health = 50.0;
+    Unit* u = w.spawn("summon", Team::Radiant, s, {0, 0});
+    u->set_remove_on_death(true);
+    const EntityId id = u->id();
+
+    u->apply_raw_damage(1000.0);
+    w.advance(World::kTickDt);
+    EXPECT_EQ(w.find(id), nullptr);
 }
 
 TEST(Thinker, FiresOnIntervalThink) {

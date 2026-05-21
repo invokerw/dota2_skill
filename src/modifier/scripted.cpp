@@ -1,6 +1,7 @@
 #include "dota/modifier/scripted.hpp"
 
 #include "dota/core/unit.hpp"
+#include "dota/core/world.hpp"
 
 #include <algorithm>
 
@@ -8,17 +9,23 @@ namespace dota {
 
 ScriptedModifier::ScriptedModifier(Unit& owner, std::string name, double duration,
                                    const LuaModifierRegistry::CompiledSpec& spec,
-                                   LuaState& lua, Unit* source, Ability* ability)
+                                   LuaState& lua, EntityId source_id, Ability* ability)
     : Modifier(std::move(name), owner, duration)
     , lua_(&lua)
     , spec_table_(spec.table)
     , compiled_(&spec)
-    , source_(source)
+    , source_id_(source_id)
     , ability_(ability) {
     sol::state_view sv(lua_->state());
     table_ = sv.create_table();
     apply_compiled_flags(spec);
     if (spec.think_interval > 0.0) set_think_interval(spec.think_interval);
+}
+
+Unit* ScriptedModifier::source() const {
+    if (source_id_ == kInvalidEntityId) return nullptr;
+    World* w = owner().world();
+    return w ? w->find(source_id_) : nullptr;
 }
 
 void ScriptedModifier::apply_compiled_flags(const LuaModifierRegistry::CompiledSpec& spec) {
