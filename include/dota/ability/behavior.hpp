@@ -20,6 +20,12 @@ enum class BehaviorFlag : std::uint32_t {
     IgnoreSilence   = 1u << 7,   // 物品等
     IgnoreMagicImmune = 1u << 8,
     IgnoreUntargetable = 1u << 9,
+    // 法球类技能 (orb): 不主动施法, 通过 intrinsic modifier 在攻击时认领 record
+    // 落副作用. 与 Dota DOTA_ABILITY_BEHAVIOR_ATTACK 对应; 与 Passive 共存.
+    Attack          = 1u << 10,
+    // 法球默认是否在挂载时启用自动施放 (玩家可关). 对应 Dota
+    // DOTA_ABILITY_BEHAVIOR_AUTOCAST.
+    AutoCast        = 1u << 11,
 };
 
 constexpr std::uint32_t to_mask(BehaviorFlag f) {

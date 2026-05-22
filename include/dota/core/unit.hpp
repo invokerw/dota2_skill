@@ -45,6 +45,8 @@ struct UnitStats {
     double move_speed        = 300.0;
     double attack_range      = 150.0;
     double hull_radius       = 24.0;   // 碰撞 / 命中判定半径(Dota 2 默认英雄 24)
+    bool   ranged            = false;  // true 表示远程, 普攻走 TrackingProjectile
+    double projectile_speed  = 900.0;  // 远程普攻投射物速度(像素/秒); 仅 ranged=true 时使用
 };
 
 class Unit {

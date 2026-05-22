@@ -288,6 +288,15 @@ add_executable(dota_tests
     tests/test_ability_registry_dir.cpp
     tests/test_passive_intrinsic.cpp
     tests/test_modifier_on_ability_executed.cpp
+    tests/test_attack_record.cpp
+    tests/test_attack_bonus_damage.cpp
+    tests/test_attack_orb.cpp
+    tests/test_attack_projectile_name.cpp
+    tests/test_hero_drow_ranger.cpp
+    tests/test_hero_luna.cpp
+    tests/test_hero_sven_cleave.cpp
+    tests/test_hero_viper.cpp
+    tests/test_hero_obsidian_destroyer.cpp
 )
 target_link_libraries(dota_tests PRIVATE dota_core GTest::gtest_main)
 target_compile_definitions(dota_tests PRIVATE

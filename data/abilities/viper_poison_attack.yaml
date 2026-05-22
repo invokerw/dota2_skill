@@ -1,0 +1,12 @@
+name: viper_poison_attack
+base_class: ability_datadriven
+behavior: [PASSIVE, ATTACK, AUTOCAST]
+target_team: ENEMY
+cast_point: 0.0
+cooldown: [0]
+mana_cost: [20, 20, 20, 20]
+intrinsic_modifier: modifier_viper_poison_attack
+ability_special:
+  duration:           [3.0, 3.0, 3.0, 3.0]
+  damage_per_second:  [10, 18, 26, 34]
+  max_stacks:         [4, 4, 4, 4]

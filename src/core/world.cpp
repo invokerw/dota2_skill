@@ -1,12 +1,14 @@
 #include "dota/core/world.hpp"
 
 #include "dota/combat/damage.hpp"
+#include "dota/core/attack.hpp"
 #include "dota/modifier/library.hpp"
 #include "dota/modifier/manager.hpp"
 #include "dota/modifier/modifier.hpp"
 #include "dota/modifier/registry.hpp"
 #include "dota/modifier/scripted.hpp"
 #include "dota/projectile/manager.hpp"
+#include "dota/projectile/projectile.hpp"
 #include "dota/script/lua_state.hpp"
 
 #include <algorithm>
@@ -442,33 +444,133 @@ void World::resolve_unit_collisions() {
     }
 }
 
-void World::resolve_attack(Unit& attacker, Unit& target) {
-    // 闪避检定: 在伤害结算之前掷骰. 命中则走伤害管线.
-    const double evasion = target.evasion();
-    if (evasion > 0.0 && rng_.chance(evasion)) {
-        AttackLandedEvent miss{attacker.id(), target.id(), 0.0, /*missed=*/true};
-        events_.publish(miss);
-        attacker.set_attack_cd(attacker.seconds_per_attack());
+namespace {
+
+// complete: 走完一次 attack record 的伤害结算. 闪避 -> miss + on_attack_fail;
+// 命中 -> deal_damage + on_attack_landed. 最后无论结果都派发 on_attack_record_destroy.
+// attacker / target 任意一方在攻击飞行期间死亡时也会调用 (record.missed=true 路径).
+//
+// 调用时 record.processed 必须为 false; 调用后置 true 防止重复处理 (远程
+// projectile 的 on_finish 兜底也走这里, 期间命中已 complete 则 no-op).
+void complete_attack_impl(World& world, AttackRecord& record) {
+    if (record.processed) return;
+    record.processed = true;
+
+    Unit* attacker = world.find(record.attacker);
+    Unit* target   = world.find(record.target);
+
+    // attacker 已不存在 -> 仍要派发 destroy 给已认领 modifier (但目前 listeners
+    // 指针属于 attacker 上的 ModifierManager, attacker 没了等于自动失效, 直接返回).
+    if (!attacker) return;
+
+    const bool target_alive = target && target->alive() &&
+                               !target->modifiers().has_state(ModifierState::Untargetable) &&
+                               !target->modifiers().has_state(ModifierState::OutOfGame);
+
+    if (!target_alive) {
+        record.missed = true;
+        AttackLandedEvent miss{record.attacker, record.target, 0.0,
+                                /*missed=*/true, record.id};
+        world.events().publish(miss);
+        attacker->modifiers().dispatch_on_attack_fail(record);
+        attacker->modifiers().dispatch_on_attack_record_destroy(record);
         return;
     }
 
-    // 普通攻击使用物理伤害管线, 使 modifier 可以介入
-    // (阶段 2 的护盾吸收, 阶段 5 的伤害格挡/反弹)
-    const double raw     = attacker.attack_damage();
-    const double applied = deal_damage({&attacker, &target,
-                                         DamageType::Physical, raw, 0});
-
-    AttackLandedEvent ev{attacker.id(), target.id(), applied, /*missed=*/false};
-    events_.publish(ev);
-
-    if (!target.alive()) {
-        UnitDiedEvent died{target.id(), attacker.id()};
-        events_.publish(died);
-        // 死亡目标也清掉自己队列里的攻击指令 (它正攻击的对象不再有效).
-        target.clear_orders();
+    // 闪避检定 (与 Stage 1 之前位置一致, 在伤害结算前).
+    const double evasion = target->evasion();
+    if (evasion > 0.0 && world.rng().chance(evasion)) {
+        record.missed = true;
+        AttackLandedEvent miss{record.attacker, record.target, 0.0,
+                                /*missed=*/true, record.id};
+        world.events().publish(miss);
+        attacker->modifiers().dispatch_on_attack_fail(record);
+        attacker->modifiers().dispatch_on_attack_record_destroy(record);
+        return;
     }
 
+    const double total = record.base_damage + record.bonus_damage;
+    const double applied = deal_damage({attacker, target,
+                                         record.damage_type, total, 0});
+
+    AttackLandedEvent ev{record.attacker, record.target, applied,
+                          /*missed=*/false, record.id};
+    world.events().publish(ev);
+    attacker->modifiers().dispatch_on_attack_landed(record);
+
+    if (!target->alive()) {
+        UnitDiedEvent died{target->id(), attacker->id()};
+        world.events().publish(died);
+        target->clear_orders();
+    }
+    attacker->modifiers().dispatch_on_attack_record_destroy(record);
+}
+
+} // namespace
+
+void World::resolve_attack(Unit& attacker, Unit& target) {
+    // Stage 1 流程:
+    //   1. begin: 锁 base_damage, 创建 record, 派发 on_attack (法球认领).
+    //   2. 远程 -> spawn TrackingProjectile, 命中回调 complete_attack_impl.
+    //      近战 -> 立即 complete_attack_impl.
+    //   3. attack_cd 在 begin 立即设置 -- 与 Dota 的 swing 节奏一致, 不会因为
+    //      远程在飞而连点.
+    AttackRecord record;
+    record.id           = next_attack_record_id_++;
+    record.attacker     = attacker.id();
+    record.target       = target.id();
+    record.base_damage  = attacker.attack_damage();
+    record.damage_type  = DamageType::Physical;
+    record.missed       = false;
+    record.processed    = false;
+
+    attacker.modifiers().dispatch_on_attack(record);
+
     attacker.set_attack_cd(attacker.seconds_per_attack());
+
+    if (!attacker.stats().ranged) {
+        complete_attack_impl(*this, record);
+        return;
+    }
+
+    // 远程: 用 TrackingProjectile 把 record 带到 target 命中点再结算.
+    // shared_ptr 持有 record, 让 hit / finish 回调共享同一份并 mutate processed.
+    auto rec = std::make_shared<AttackRecord>(std::move(record));
+
+    TrackingProjectile::Params p;
+    p.source_id   = attacker.id();
+    p.source_team = attacker.team();
+    p.origin      = attacker.position();
+    p.target_id   = target.id();
+    const double speed = attacker.stats().projectile_speed > 0.0
+                             ? attacker.stats().projectile_speed
+                             : 900.0;
+    p.speed       = speed;
+
+    auto proj = std::make_unique<TrackingProjectile>(p);
+
+    // 法球 (或其它 modifier) 可提供普攻 projectile 名 (粒子). 选 attacker 上
+    // 首个非空字符串. 空串表示走默认普攻投射物 (录像层用 unit 默认).
+    for (const auto& mod : attacker.modifiers().all()) {
+        if (!mod) continue;
+        std::string n = mod->projectile_name();
+        if (!n.empty()) {
+            proj->set_name(std::move(n));
+            break;
+        }
+    }
+
+    World* self = this;
+    proj->set_on_hit([self, rec](Unit& /*victim*/, Vec2 /*hit*/) {
+        complete_attack_impl(*self, *rec);
+    });
+    proj->set_on_finish([self, rec]() {
+        // target 死亡 / Untargetable 中途逃逸 -> projectile 没调 on_hit. 这里
+        // 兜底走 fail 路径. complete_attack_impl 内部用 processed 防重入.
+        complete_attack_impl(*self, *rec);
+    });
+
+    projectiles_->spawn(std::move(proj));
 }
 
 } // namespace dota

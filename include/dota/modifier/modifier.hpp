@@ -11,6 +11,7 @@ namespace dota {
 
 class Unit;
 struct AbilityExecutedInfo;
+struct AttackRecord;
 
 // 伤害类型. 在此处重复定义(除了将拥有它的 Stage 5 战斗头文件),
 // 以便 Stage 2 可以在伤害前事件中推理魔法 vs 物理伤害.
@@ -141,6 +142,26 @@ public:
 
     // owner 完整释放完一个非 passive ability. interrupted 的 cast 不会触发.
     virtual void on_ability_executed(const AbilityExecutedInfo&) {}
+
+    // 普攻 attack record 钩子 (对应 Dota 的 MODIFIER_EVENT_ON_ATTACK /
+    // PROCATTACK_FEEDBACK / ON_ATTACK_FAIL / ON_ATTACK_RECORD_DESTROY).
+    // - on_attack: World::begin_attack 派发到 attacker 上所有 modifier. 法球
+    //   modifier 在此处把 self push 进 record.orb_listeners 以认领此次攻击,
+    //   并可改 record.bonus_damage / record.damage_type.
+    // - on_attack_landed: 攻击命中并造成 (或可能 0) 伤害后, 仅对 orb_listeners
+    //   派发. 落副作用 (减速, 中毒, 抢蓝).
+    // - on_attack_fail: 闪避 / target 死亡 / Untargetable 导致未命中.
+    // - on_attack_record_destroy: record 即将销毁前最终通知, lua 法球用来清理
+    //   self.records[id]. 任何认领过的 modifier 都会收到, 不论命中与否.
+    virtual void on_attack(AttackRecord&)                       {}
+    virtual void on_attack_landed(const AttackRecord&)          {}
+    virtual void on_attack_fail(const AttackRecord&)            {}
+    virtual void on_attack_record_destroy(const AttackRecord&)  {}
+
+    // 法球可提供攻击 projectile 资源名 (粒子). 远程普攻 spawn 投射物时,
+    // 引擎挑 attacker 上 modifiers 里第一个非空字符串作为投射物名. 空表示用
+    // unit 默认 (yaml-driven; 当前仅录像层使用, 不影响命中逻辑).
+    virtual std::string projectile_name() const { return {}; }
 
     // Motion controller 钩子: 仅对 is_motion_controller_=true 的修饰器调用.
     // 在 ModifierManager::advance_motion 中, ability tick 之前由 World 驱动.

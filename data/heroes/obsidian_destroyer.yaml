@@ -1,0 +1,9 @@
+hero:
+  name: npc_dota_hero_obsidian_destroyer
+  base_health: 600
+  base_mana: 380
+  base_armor: 1
+  base_magic_resist: 0.25
+
+abilities:
+  - obsidian_destroyer_arcane_orb

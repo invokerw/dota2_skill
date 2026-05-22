@@ -10,6 +10,7 @@
 namespace dota {
 
 class Ability;
+struct AttackRecord;
 
 // Lua 端的修饰器实例, 与一个 LuaModifierRegistry::CompiledSpec 关联.
 // 每次属性查询/事件钩子触发时, 按需调用 spec 表上的 Lua 函数.
@@ -46,6 +47,11 @@ public:
     void on_post_take_heal(PostTakeHealEvent& ev) override;
     void on_motion_tick(double dt) override;
     void on_ability_executed(const AbilityExecutedInfo& info) override;
+    void on_attack(AttackRecord& record) override;
+    void on_attack_landed(const AttackRecord& record) override;
+    void on_attack_fail(const AttackRecord& record) override;
+    void on_attack_record_destroy(const AttackRecord& record) override;
+    std::string projectile_name() const override;
 
     bool is_debuff() const override { return is_debuff_; }
 

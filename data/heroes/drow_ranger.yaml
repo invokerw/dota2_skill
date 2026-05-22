@@ -1,0 +1,9 @@
+hero:
+  name: npc_dota_hero_drow_ranger
+  base_health: 540
+  base_mana: 195
+  base_armor: 0
+  base_magic_resist: 0.25
+
+abilities:
+  - drow_ranger_frost_arrows

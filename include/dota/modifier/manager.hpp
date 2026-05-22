@@ -11,6 +11,7 @@
 namespace dota {
 
 class Unit;
+struct AttackRecord;
 
 // 拥有并驱动附加到单个 Unit 的修饰器.
 //
@@ -78,6 +79,15 @@ public:
     // 把 owner 释放 ability 的事件派发给所有挂载的 modifier (对应 Dota
     // MODIFIER_EVENT_ON_ABILITY_EXECUTED). 由 Ability 在 cast 完整结束时调度.
     void dispatch_ability_executed(const AbilityExecutedInfo& info);
+
+    // 普攻 attack record 派发. on_attack 走全部 modifier (法球在此认领);
+    // on_attack_landed / on_attack_fail 仅派发到 record.orb_listeners 中的
+    // modifier (与本 manager 的 owner 匹配); on_attack_record_destroy 同样仅
+    // 通知曾认领过的 modifier.
+    void dispatch_on_attack(AttackRecord& record);
+    void dispatch_on_attack_landed(const AttackRecord& record);
+    void dispatch_on_attack_fail(const AttackRecord& record);
+    void dispatch_on_attack_record_destroy(const AttackRecord& record);
 
 private:
     Unit& owner_;

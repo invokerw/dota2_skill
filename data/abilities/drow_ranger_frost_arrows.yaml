@@ -1,0 +1,12 @@
+name: drow_ranger_frost_arrows
+base_class: ability_datadriven
+behavior: [PASSIVE, ATTACK, AUTOCAST]
+target_team: ENEMY
+cast_point: 0.0
+cooldown: [0]
+mana_cost: [12, 12, 12, 12]
+intrinsic_modifier: modifier_drow_ranger_frost_arrows
+ability_special:
+  bonus_damage:    [10, 17, 24, 32]
+  slow_pct:        [15, 30, 45, 60]
+  slow_duration:   [1.5, 1.5, 1.5, 1.5]

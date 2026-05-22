@@ -102,6 +102,7 @@ void register_bindings(sol::state& lua, LuaState* owner) {
         "name",          [](const Unit& u) { return u.name(); },
         "team",          [](const Unit& u) { return static_cast<int>(u.team()); },
         "alive",         &Unit::alive,
+        "world",         [](Unit& u) -> World* { return u.world(); },
         "position",      &Unit::position,
         "set_position",  &Unit::set_position,
         "issue_move",      [](Unit& u, Vec2 target) { u.issue_move(target); },
@@ -162,6 +163,10 @@ void register_bindings(sol::state& lua, LuaState* owner) {
         "has_modifier",
         [](const Unit& u, const std::string& name) {
             return u.modifiers().find(name) != nullptr;
+        },
+        "find_modifier",
+        [](Unit& u, const std::string& name) -> Modifier* {
+            return u.modifiers().find(name);
         },
         "remove_modifier",
         [](Unit& u, const std::string& name) {
@@ -238,6 +243,13 @@ void register_bindings(sol::state& lua, LuaState* owner) {
         "name",       [](const Ability& a) { return a.name(); },
         "level",      &Ability::level,
         "is_passive", &Ability::is_passive,
+        "is_orb",     &Ability::is_orb,
+        "autocast_on",     &Ability::autocast_on,
+        "set_autocast_on", &Ability::set_autocast_on,
+        "cooldown_remaining", &Ability::cooldown_remaining,
+        "mana_cost",          &Ability::mana_cost_for_level,
+        "can_use_resources_for_orb", &Ability::can_use_resources_for_orb,
+        "use_resources_for_orb",     &Ability::use_resources_for_orb,
         "caster",     [](Ability& a) -> Unit* { return &a.caster(); },
         "get_special",
         [](const Ability& a, const std::string& key) -> double {
@@ -264,6 +276,10 @@ void register_bindings(sol::state& lua, LuaState* owner) {
         "World",
         sol::no_constructor,
         "time", &World::time,
+        "find",
+        [](World& w, int id) -> Unit* {
+            return w.find(static_cast<EntityId>(id));
+        },
         "find_enemies_in_radius",
         [](World& w, Vec2 origin, double radius, int source_team) {
             // sol2 将 std::vector<Unit*> 干净地转换为 Lua 数组表

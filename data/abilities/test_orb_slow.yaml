@@ -1,0 +1,12 @@
+name: test_orb_slow
+base_class: ability_datadriven
+behavior: [PASSIVE, ATTACK, AUTOCAST]
+target_team: ENEMY
+cast_point: 0.0
+cooldown: [1.5]
+mana_cost: [25]
+intrinsic_modifier: modifier_test_orb_slow
+ability_special:
+  bonus_damage:    [10]
+  slow_pct:        [25]
+  slow_duration:   [2.0]

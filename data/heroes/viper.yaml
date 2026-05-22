@@ -1,0 +1,9 @@
+hero:
+  name: npc_dota_hero_viper
+  base_health: 540
+  base_mana: 230
+  base_armor: 1
+  base_magic_resist: 0.25
+
+abilities:
+  - viper_poison_attack

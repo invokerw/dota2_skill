@@ -3,6 +3,7 @@
 #include "dota/core/types.hpp"
 
 #include <functional>
+#include <string>
 #include <unordered_set>
 
 namespace dota {
@@ -38,6 +39,10 @@ public:
     void set_on_hit(HitCallback cb)    { on_hit_ = std::move(cb); }
     void set_on_finish(FinishCallback cb) { on_finish_ = std::move(cb); }
 
+    // 录像层用的资源名 (粒子). 空表示走默认.
+    const std::string& name() const { return name_; }
+    void set_name(std::string s)    { name_ = std::move(s); }
+
 protected:
     EntityId       pid_{kInvalidEntityId};
     EntityId       source_id_{kInvalidEntityId};
@@ -45,6 +50,7 @@ protected:
     Vec2           pos_{};
     HitCallback    on_hit_;
     FinishCallback on_finish_;
+    std::string    name_;
 };
 
 // 直线投射物: 从 origin 沿 direction 推进, 扫描 (prev, cur) 段对敌人.

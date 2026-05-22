@@ -1,6 +1,7 @@
 #include "dota/modifier/manager.hpp"
 
 #include "dota/ability/ability.hpp"
+#include "dota/core/attack.hpp"
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
 
@@ -208,6 +209,44 @@ void ModifierManager::dispatch_post_take_heal(PostTakeHealEvent& ev) {
 
 void ModifierManager::dispatch_ability_executed(const AbilityExecutedInfo& info) {
     for_each_snapshot(modifiers_, [&](Modifier& m) { m.on_ability_executed(info); });
+}
+
+void ModifierManager::dispatch_on_attack(AttackRecord& record) {
+    // record 在派发期间是可变的 (法球可改 bonus_damage / damage_type / 认领),
+    // 但不暴露 record.processed 给钩子 -- 钩子顺序无关结果.
+    for_each_snapshot(modifiers_, [&](Modifier& m) { m.on_attack(record); });
+}
+
+namespace {
+// orb_listeners 里的指针只在 owner 与本 manager 一致时才属于这条链路. 对应
+// Lua 端 self.records[id]: 同一 record 落地时, 多个 attacker 上的 modifier
+// 都收到分发, 但仅认领过的回调被触发. 本辅助过滤出与 owner 关联的 listener
+// 集合并对其调用 fn. 同时丢弃已被 ModifierManager 移除的 stale 指针.
+template <typename Fn>
+void for_each_listener(const std::vector<std::unique_ptr<Modifier>>& mods,
+                        const std::vector<Modifier*>& listeners, Fn&& fn) {
+    if (listeners.empty()) return;
+    for (Modifier* lp : listeners) {
+        for (const auto& m : mods) {
+            if (m.get() == lp) { fn(*m); break; }
+        }
+    }
+}
+} // namespace
+
+void ModifierManager::dispatch_on_attack_landed(const AttackRecord& record) {
+    for_each_listener(modifiers_, record.orb_listeners,
+                       [&](Modifier& m) { m.on_attack_landed(record); });
+}
+
+void ModifierManager::dispatch_on_attack_fail(const AttackRecord& record) {
+    for_each_listener(modifiers_, record.orb_listeners,
+                       [&](Modifier& m) { m.on_attack_fail(record); });
+}
+
+void ModifierManager::dispatch_on_attack_record_destroy(const AttackRecord& record) {
+    for_each_listener(modifiers_, record.orb_listeners,
+                       [&](Modifier& m) { m.on_attack_record_destroy(record); });
 }
 
 } // namespace dota

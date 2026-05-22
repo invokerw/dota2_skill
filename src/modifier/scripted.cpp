@@ -1,6 +1,7 @@
 #include "dota/modifier/scripted.hpp"
 
 #include "dota/ability/ability.hpp"
+#include "dota/core/attack.hpp"
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
 
@@ -224,6 +225,105 @@ void ScriptedModifier::on_motion_tick(double dt) {
         sol::error err = r;
         lua_->report_error(name() + ".OnMotionTick", err.what());
     }
+}
+
+namespace {
+
+// 把 AttackRecord 关键字段同步到 Lua 表. on_attack 钩子可写 bonus_damage /
+// damage_type, 这两项写回 record. id / attacker / target / base_damage 是只读语义,
+// 即便 lua 改了也忽略.
+sol::table record_to_table(sol::state_view sv, const AttackRecord& r) {
+    sol::table t = sv.create_table();
+    t["id"]           = static_cast<int>(r.id);
+    t["attacker_id"]  = static_cast<int>(r.attacker);
+    t["target_id"]    = static_cast<int>(r.target);
+    t["base_damage"]  = r.base_damage;
+    t["bonus_damage"] = r.bonus_damage;
+    t["damage_type"]  = static_cast<int>(r.damage_type);
+    t["missed"]       = r.missed;
+    return t;
+}
+
+void apply_writable_fields(const sol::table& t, AttackRecord& r) {
+    sol::object bonus = t["bonus_damage"];
+    if (bonus.is<double>())      r.bonus_damage = bonus.as<double>();
+    else if (bonus.is<int>())    r.bonus_damage = static_cast<double>(bonus.as<int>());
+    sol::object dtype = t["damage_type"];
+    if (dtype.is<int>()) {
+        const int v = dtype.as<int>();
+        if (v >= 0 && v <= 2) r.damage_type = static_cast<DamageType>(v);
+    }
+}
+
+} // namespace
+
+void ScriptedModifier::on_attack(AttackRecord& record) {
+    sol::protected_function fn = spec_table_["OnAttack"];
+    if (!fn.valid()) return;
+    sol::state_view sv(lua_->state());
+    sol::table evt = record_to_table(sv, record);
+    auto r = fn(table_, &owner(), evt);
+    if (!r.valid()) {
+        sol::error err = r;
+        lua_->report_error(name() + ".OnAttack", err.what());
+        return;
+    }
+    apply_writable_fields(evt, record);
+    // claim 字段: lua 端写 evt.claim = true 即把 self 加到 orb_listeners.
+    sol::object claim = evt["claim"];
+    if (claim.is<bool>() && claim.as<bool>()) {
+        record.orb_listeners.push_back(this);
+    }
+}
+
+void ScriptedModifier::on_attack_landed(const AttackRecord& record) {
+    sol::protected_function fn = spec_table_["OnAttackLanded"];
+    if (!fn.valid()) return;
+    sol::state_view sv(lua_->state());
+    sol::table evt = record_to_table(sv, record);
+    auto r = fn(table_, &owner(), evt);
+    if (!r.valid()) {
+        sol::error err = r;
+        lua_->report_error(name() + ".OnAttackLanded", err.what());
+    }
+}
+
+void ScriptedModifier::on_attack_fail(const AttackRecord& record) {
+    sol::protected_function fn = spec_table_["OnAttackFail"];
+    if (!fn.valid()) return;
+    sol::state_view sv(lua_->state());
+    sol::table evt = record_to_table(sv, record);
+    auto r = fn(table_, &owner(), evt);
+    if (!r.valid()) {
+        sol::error err = r;
+        lua_->report_error(name() + ".OnAttackFail", err.what());
+    }
+}
+
+void ScriptedModifier::on_attack_record_destroy(const AttackRecord& record) {
+    sol::protected_function fn = spec_table_["OnAttackRecordDestroy"];
+    if (!fn.valid()) return;
+    sol::state_view sv(lua_->state());
+    sol::table evt = record_to_table(sv, record);
+    auto r = fn(table_, &owner(), evt);
+    if (!r.valid()) {
+        sol::error err = r;
+        lua_->report_error(name() + ".OnAttackRecordDestroy", err.what());
+    }
+}
+
+std::string ScriptedModifier::projectile_name() const {
+    sol::protected_function fn = spec_table_["GetAttackProjectileName"];
+    if (!fn.valid()) return {};
+    auto r = fn(table_, &owner());
+    if (!r.valid()) {
+        sol::error err = r;
+        lua_->report_error(name() + ".GetAttackProjectileName", err.what());
+        return {};
+    }
+    sol::object out = r;
+    if (out.is<std::string>()) return out.as<std::string>();
+    return {};
 }
 
 void ScriptedModifier::on_ability_executed(const AbilityExecutedInfo& info) {

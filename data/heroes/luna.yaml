@@ -1,0 +1,9 @@
+hero:
+  name: npc_dota_hero_luna
+  base_health: 600
+  base_mana: 270
+  base_armor: 0
+  base_magic_resist: 0.25
+
+abilities:
+  - luna_lunar_blessing

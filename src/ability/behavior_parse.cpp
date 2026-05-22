@@ -39,6 +39,8 @@ std::uint32_t parse_one(std::string_view tok) {
     if (norm == "NOT_LEARNABLE")                             return to_mask(BehaviorFlag::NotLearnable);
     if (norm == "IGNORE_SILENCE")                            return to_mask(BehaviorFlag::IgnoreSilence);
     if (norm == "IGNORE_MAGIC_IMMUNE")                       return to_mask(BehaviorFlag::IgnoreMagicImmune);
+    if (norm == "ATTACK")                                    return to_mask(BehaviorFlag::Attack);
+    if (norm == "AUTOCAST" || norm == "AUTO_CAST")           return to_mask(BehaviorFlag::AutoCast);
     return 0;
 }
 

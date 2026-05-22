@@ -1,0 +1,10 @@
+name: luna_lunar_blessing
+base_class: ability_datadriven
+behavior: [PASSIVE]
+target_team: NONE
+cast_point: 0.0
+cooldown: [0]
+mana_cost: [0]
+intrinsic_modifier: modifier_luna_lunar_blessing
+ability_special:
+  bonus_damage: [10, 20, 30, 40]

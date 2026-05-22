@@ -21,6 +21,7 @@ Projectile* ProjectileManager::spawn(std::unique_ptr<Projectile> p) {
             raw->length_total(),
             raw->width(),
             raw->target_id(),
+            raw->name(),
         };
         world_->events().publish(ev);
     }

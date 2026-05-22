@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dota/core/attack.hpp"
 #include "dota/core/event_bus.hpp"
 #include "dota/core/random.hpp"
 #include "dota/core/types.hpp"
@@ -34,11 +35,13 @@ struct UnitDiedEvent {
 // 每当基础攻击命中目标时触发. 阶段 1 使用原始
 // 物理伤害; 阶段 5 将用伤害管线替换这个手工计算.
 // `missed=true` 表示因 evasion 闪避, damage 为 0.
+// `record_id` 关联到生成此次攻击的 AttackRecord, 便于录像 / 法球关联本次普攻.
 struct AttackLandedEvent {
     EntityId attacker;
     EntityId victim;
     double   damage;
     bool     missed{false};
+    EntityId record_id{kInvalidEntityId};
 };
 
 // --- 录像 / 可视化用事件(Stage A)---
@@ -65,15 +68,18 @@ struct AbilityCastFinishedEvent {
 // 投射物 spawn. linear=true 时 dir/length/width 有效;
 // linear=false (tracking) 时 target 有效, dir/length/width 为零.
 struct ProjectileSpawnedEvent {
-    EntityId pid;
-    EntityId source;
-    Vec2     origin;
-    bool     linear{true};
-    Vec2     dir{};
-    double   speed{0.0};
-    double   length{0.0};
-    double   width{0.0};
-    EntityId target{kInvalidEntityId};
+    EntityId    pid;
+    EntityId    source;
+    Vec2        origin;
+    bool        linear{true};
+    Vec2        dir{};
+    double      speed{0.0};
+    double      length{0.0};
+    double      width{0.0};
+    EntityId    target{kInvalidEntityId};
+    // particle / 美术资源名 (例如 "particles/units/heroes/hero_drow_ranger/drow_base_attack.vpcf").
+    // 录像层照搬, 不影响游戏逻辑. 空表示走默认普攻投射物.
+    std::string name;
 };
 
 struct ProjectileHitEvent {
@@ -184,6 +190,11 @@ public:
     // 普通攻击结算 (闪避 + 物理伤害管线 + 设置 attack_cd). 由 OrderAttackTarget
     // 在 dispatch_front 检距通过, 攻击 cd 归零, 双方存活时调用. 公开是因为派发
     // 在 unit.cpp 里, 这条路径不希望再绕到 World 内部 helper.
+    //
+    // 内部分两段:
+    //   begin_attack -> 创建 AttackRecord, 派发 on_attack 给 attacker 上所有
+    //   modifier (法球认领 record). 近战立即 complete_attack; 远程 spawn
+    //   TrackingProjectile, 命中回调里 complete_attack, finish 回调里 destroy.
     void resolve_attack(Unit& attacker, Unit& target);
 
 private:
@@ -202,6 +213,7 @@ private:
     std::vector<std::unique_ptr<Unit>> units_;
     EventBus events_;
     EntityId next_id_{1};
+    EntityId next_attack_record_id_{1};
     double   time_{0.0};
     std::uint64_t tick_count_{0};
     Rng      rng_;

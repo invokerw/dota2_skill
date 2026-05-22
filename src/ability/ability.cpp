@@ -68,7 +68,11 @@ long AbilitySpecialValue::get_int(int level) const {
 // 技能
 
 Ability::Ability(std::string name, std::uint32_t behavior, TargetTeam team, Unit& caster)
-    : name_(std::move(name)), behavior_(behavior), target_team_(team), caster_(caster) {}
+    : name_(std::move(name)), behavior_(behavior), target_team_(team), caster_(caster) {
+    // 法球默认 autocast 开启. AutoCast 标志位与 Attack 共存仅表示玩家可关 -- 这里
+    // 不模拟玩家 toggle, 调用方可通过 set_autocast_on(false) 显式关闭.
+    if (has_flag(behavior_, BehaviorFlag::Attack)) autocast_on_ = true;
+}
 
 void Ability::set_level(int l) {
     const int new_level = std::max(1, l);
@@ -155,6 +159,23 @@ CastError Ability::can_cast(const CastTarget& target) const {
     }
 
     return validate_target(target);
+}
+
+bool Ability::can_use_resources_for_orb() const {
+    if (!is_orb()) return false;
+    if (cooldown_ > 0.0) return false;
+    if (caster_.mana() < mana_cost_for_level()) return false;
+    return true;
+}
+
+bool Ability::use_resources_for_orb() {
+    if (!can_use_resources_for_orb()) return false;
+    caster_.spend_mana(mana_cost_for_level());
+    cooldown_ = cooldown_for_level();
+    if (cooldown_ > 0.0 && phase_ == CastPhase::Ready) {
+        phase_ = CastPhase::OnCooldown;
+    }
+    return true;
 }
 
 CastError Ability::trigger_cast(const CastTarget& target, World& world,

@@ -117,6 +117,9 @@ Recorder::Recorder(World& world, std::ostream& out)
         } else if (e.target != kInvalidEntityId) {
             s << ",\"target\":" << e.target;
         }
+        if (!e.name.empty()) {
+            s << ",\"name\":\"" << json_escape(e.name) << "\"";
+        }
         s << "}";
         tick_events_.push_back(s.str());
     });
@@ -175,7 +178,8 @@ Recorder::Recorder(World& world, std::ostream& out)
         s << "{\"type\":\"attack_landed\",\"src\":" << e.attacker
           << ",\"dst\":" << e.victim
           << ",\"dmg\":" << fmt_double(e.damage)
-          << ",\"missed\":" << (e.missed ? "true" : "false") << "}";
+          << ",\"missed\":" << (e.missed ? "true" : "false")
+          << ",\"record\":" << e.record_id << "}";
         tick_events_.push_back(s.str());
     });
 

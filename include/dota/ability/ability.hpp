@@ -142,6 +142,19 @@ public:
     double      cooldown_remaining() const { return cooldown_; }
     bool        is_passive()   const { return has_flag(behavior_, BehaviorFlag::Passive); }
     bool        is_channelled()const { return has_flag(behavior_, BehaviorFlag::Channelled); }
+    bool        is_orb()       const { return has_flag(behavior_, BehaviorFlag::Attack); }
+
+    // 法球 (orb) 的资源消耗入口. 由 intrinsic modifier 在 on_attack 钩子中调用,
+    // 决定本次普攻是否升级为法球. 返回 true 表示成功扣蓝 + 进 cd, 调用方应认领
+    // record; false 表示资源不够 (cd 中或蓝量不足), 调用方应忽略钩子, 普攻保持
+    // 原样. 不检查沉默 / 眩晕等状态 -- 这些应由调用方 (modifier) 自行决定.
+    bool        use_resources_for_orb();
+    bool        can_use_resources_for_orb() const;
+
+    // 自动施放: 法球默认是否启用. 玩家可通过 set_autocast_on 切换. AutoCast
+    // 行为位决定初始值.
+    bool        autocast_on() const { return autocast_on_; }
+    void        set_autocast_on(bool b) { autocast_on_ = b; }
 
     // 合法性检查, 不改变状态. 将第一个找到的
     // 失败原因填充到 `err`.
@@ -216,6 +229,7 @@ private:
     double      cooldown_    = 0.0;
     World*      world_       = nullptr; // 在施法/后摇期间有效
     PendingCast pending_target_{};
+    bool        autocast_on_ = false;
 };
 
 } // namespace dota
