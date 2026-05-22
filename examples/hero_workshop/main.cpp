@@ -505,7 +505,14 @@ void open_diff_modal(State& s) {
 void open_trash_dir() {
     const fs::path trash = fs::path(data_dir()) / ".trash";
     fs::create_directories(trash);
+    // 各平台用各自的文件管理器命令打开目录, 不阻塞当前进程.
+#if defined(_WIN32)
+    const std::string cmd = "explorer \"" + trash.string() + "\"";
+#elif defined(__APPLE__)
     const std::string cmd = "open \"" + trash.string() + "\" &";
+#else
+    const std::string cmd = "xdg-open \"" + trash.string() + "\" &";
+#endif
     std::system(cmd.c_str());
 }
 
