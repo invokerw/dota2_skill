@@ -1,17 +1,14 @@
 #include "ability_panel.hpp"
 
 #include "dota/ability/behavior.hpp"
-#include "dota/tools/ability_ops.hpp"
-#include "dota/tools/trash.hpp"
 
 #include "imgui.h"
 
-#include <algorithm>
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -20,8 +17,6 @@ namespace dota::hero_workshop {
 namespace fs = std::filesystem;
 
 namespace {
-
-// --- behavior bitmask 复选框 -----------------------------------------------
 
 struct BehaviorEntry {
     BehaviorFlag flag;
@@ -61,7 +56,6 @@ int parse_target_team_idx(const std::string& s) {
     return 0;
 }
 
-// 读 ability.behavior 列表 (csv 或 yaml seq) 为 bitmask.
 std::uint32_t read_behavior_mask(const YAML::Node& a) {
     if (!a["behavior"]) return 0;
     if (a["behavior"].IsScalar()) {
@@ -86,8 +80,6 @@ void write_behavior_mask(YAML::Node a, std::uint32_t mask) {
     if (seq.size() == 0) seq.push_back(std::string("NO_TARGET"));
     a["behavior"] = seq;
 }
-
-// --- level array 编辑 ------------------------------------------------------
 
 std::vector<double> read_double_seq(const YAML::Node& n) {
     std::vector<double> out;
@@ -159,8 +151,6 @@ bool draw_level_array(const char* label, std::vector<double>& vals,
     return changed;
 }
 
-// --- ability_special 编辑 --------------------------------------------------
-
 bool detect_int(const YAML::Node& seq) {
     if (!seq || !seq.IsSequence()) return false;
     for (const auto& e : seq) {
@@ -181,19 +171,16 @@ bool draw_ability_special(YAML::Node a) {
     for (auto it = spec.begin(); it != spec.end(); ++it) {
         const std::string k = it->first.as<std::string>();
         ImGui::PushID(k.c_str());
-        const bool open = ImGui::TreeNodeEx(
-            "##sk", ImGuiTreeNodeFlags_DefaultOpen,
-            "%s", k.c_str());
+        const bool open = ImGui::TreeNodeEx("##sk",
+            ImGuiTreeNodeFlags_DefaultOpen, "%s", k.c_str());
         ImGui::SameLine();
-        if (ImGui::SmallButton("X")) {
-            remove_key = k;
-        }
+        if (ImGui::SmallButton("X")) remove_key = k;
         if (open) {
             const bool as_int = detect_int(it->second);
             std::vector<double> vals = read_double_seq(it->second);
             if (draw_level_array("levels", vals, as_int,
-                                 -100000.0, 100000.0,
-                                 as_int ? 1.0f : 0.5f)) {
+                                  -100000.0, 100000.0,
+                                  as_int ? 1.0f : 0.5f)) {
                 write_double_seq(spec, k.c_str(), vals, as_int);
                 changed = true;
             }
@@ -209,7 +196,7 @@ bool draw_ability_special(YAML::Node a) {
     static char new_key[64] = {};
     ImGui::SetNextItemWidth(160.0f);
     ImGui::InputTextWithHint("##new_special_key",
-                             "new key", new_key, sizeof(new_key));
+                              "new key", new_key, sizeof(new_key));
     ImGui::SameLine();
     if (ImGui::Button("Add key") && new_key[0]) {
         if (!spec[new_key]) {
@@ -224,8 +211,6 @@ bool draw_ability_special(YAML::Node a) {
     return changed;
 }
 
-// --- on_spell_start (datadriven) ------------------------------------------
-
 bool draw_action_list(YAML::Node a) {
     bool changed = false;
     if (!a["on_spell_start"] || !a["on_spell_start"].IsSequence()) {
@@ -239,8 +224,8 @@ bool draw_action_list(YAML::Node a) {
         YAML::Node action = list[i];
         if (action.IsMap() && action.size() == 1) {
             const std::string kind = action.begin()->first.as<std::string>();
-            const bool open = ImGui::TreeNodeEx(
-                "##act", ImGuiTreeNodeFlags_DefaultOpen,
+            const bool open = ImGui::TreeNodeEx("##act",
+                ImGuiTreeNodeFlags_DefaultOpen,
                 "[%zu] %s", i, kind.c_str());
             ImGui::SameLine();
             if (ImGui::SmallButton("X")) remove_idx = static_cast<int>(i);
@@ -295,12 +280,19 @@ bool draw_action_list(YAML::Node a) {
     return changed;
 }
 
-// --- 单个 ability 表单 -----------------------------------------------------
+} // namespace
 
-bool draw_ability_form(YAML::Node a, const fs::path& data_root) {
+void reset_for_new_doc(AbilityPanelState& s) { s.dirty = false; }
+
+AbilityPanelResult draw_ability_form(YAML::Node a, AbilityPanelState& s,
+                                       const fs::path& data_root) {
+    AbilityPanelResult res;
+    if (!a || !a.IsMap()) {
+        ImGui::TextDisabled("(no ability loaded)");
+        return res;
+    }
+
     bool changed = false;
-
-    // base_class 单选
     bool is_lua = a["base_class"] &&
                   a["base_class"].as<std::string>() == "ability_lua";
     if (ImGui::RadioButton("ability_datadriven", !is_lua)) {
@@ -313,7 +305,6 @@ bool draw_ability_form(YAML::Node a, const fs::path& data_root) {
         changed = true;
     }
 
-    // name (只读 -- rename 留给 hero_ops 风格的专用流程, 避免引用悬空)
     if (a["name"]) {
         ImGui::Text("name: %s", a["name"].as<std::string>().c_str());
     }
@@ -327,7 +318,7 @@ bool draw_ability_form(YAML::Node a, const fs::path& data_root) {
         if (ImGui::Button("Open in $EDITOR")) {
             const char* editor = std::getenv("EDITOR");
             const std::string cmd = std::string(editor ? editor : "open") +
-                                    " \"" + full.string() + "\" &";
+                                     " \"" + full.string() + "\" &";
             std::system(cmd.c_str());
         }
     }
@@ -352,7 +343,7 @@ bool draw_ability_form(YAML::Node a, const fs::path& data_root) {
         parse_target_team_idx(a["target_team"].as<std::string>()) : 0;
     const char* team_items[] = {"NONE", "ENEMY", "FRIENDLY", "BOTH"};
     if (ImGui::Combo("target_team", &team_idx,
-                     team_items, IM_ARRAYSIZE(team_items))) {
+                      team_items, IM_ARRAYSIZE(team_items))) {
         a["target_team"] = std::string(target_team_token(team_idx));
         changed = true;
     }
@@ -364,18 +355,17 @@ bool draw_ability_form(YAML::Node a, const fs::path& data_root) {
         double v = a[key] ? a[key].as<double>() : 0.0;
         float fv = static_cast<float>(v);
         if (ImGui::DragFloat(key, &fv, speed,
-                             static_cast<float>(min_v),
-                             static_cast<float>(max_v),
-                             fmt)) {
+                              static_cast<float>(min_v),
+                              static_cast<float>(max_v), fmt)) {
             a[key] = static_cast<double>(fv);
             return true;
         }
         return false;
     };
-    changed |= drag_double_field("cast_point",   0.01f, 0.0, 10.0, "%.2f");
-    changed |= drag_double_field("backswing",    0.01f, 0.0, 10.0, "%.2f");
+    changed |= drag_double_field("cast_point",   0.01f, 0.0, 10.0,   "%.2f");
+    changed |= drag_double_field("backswing",    0.01f, 0.0, 10.0,   "%.2f");
     changed |= drag_double_field("cast_range",   5.0f,  0.0, 5000.0, "%.0f");
-    changed |= drag_double_field("channel_time", 0.05f, 0.0, 60.0, "%.2f");
+    changed |= drag_double_field("channel_time", 0.05f, 0.0, 60.0,   "%.2f");
 
     ImGui::SeparatorText("Cooldown / Mana");
     {
@@ -399,170 +389,7 @@ bool draw_ability_form(YAML::Node a, const fs::path& data_root) {
         changed |= draw_action_list(a);
     }
 
-    return changed;
-}
-
-} // namespace
-
-void reset_for_new_doc(AbilityPanelState& s) {
-    s.selected = -1;
-    s.dirty = false;
-    s.add_mode = AbilityPanelState::AddMode::None;
-    s.add_pending_open = false;
-    s.add_error.clear();
-    std::memset(s.add_input, 0, sizeof(s.add_input));
-}
-
-// 处理右键 "New ability" modal. add_mode 决定 datadriven vs lua.
-void draw_add_ability_modal(YAML::Node root,
-                             AbilityPanelState& s,
-                             const fs::path& data_root,
-                             AbilityPanelResult& res) {
-    if (s.add_mode == AbilityPanelState::AddMode::None) return;
-    const char* label = (s.add_mode == AbilityPanelState::AddMode::Lua)
-        ? "New ability_lua" : "New ability_datadriven";
-    if (s.add_pending_open) {
-        ImGui::OpenPopup(label);
-        s.add_pending_open = false;
-    }
-    ImGui::SetNextWindowSize(ImVec2(420.0f, 0.0f), ImGuiCond_Appearing);
-    if (ImGui::BeginPopupModal(label, nullptr,
-                                ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextWrapped("ability name (建议 <hero_stem>_<short>):");
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::InputText("##newname", s.add_input, sizeof(s.add_input));
-        if (!s.add_error.empty()) {
-            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
-                               "%s", s.add_error.c_str());
-        }
-        if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
-            s.add_mode = AbilityPanelState::AddMode::None;
-            s.add_error.clear();
-            std::memset(s.add_input, 0, sizeof(s.add_input));
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Add", ImVec2(120.0f, 0.0f)) && s.add_input[0]) {
-            try {
-                std::size_t idx;
-                if (s.add_mode == AbilityPanelState::AddMode::Lua) {
-                    const std::string fname =
-                        std::string(s.add_input) + ".lua";
-                    idx = dota::tools::add_lua_ability(
-                        root, data_root, s.add_input, fname);
-                } else {
-                    idx = dota::tools::add_datadriven_ability(
-                        root, s.add_input);
-                }
-                s.selected = static_cast<int>(idx);
-                s.dirty = true;
-                res.status = std::string("added ") + s.add_input;
-                s.add_mode = AbilityPanelState::AddMode::None;
-                s.add_error.clear();
-                std::memset(s.add_input, 0, sizeof(s.add_input));
-                ImGui::CloseCurrentPopup();
-            } catch (const std::exception& e) {
-                s.add_error = e.what();
-            }
-        }
-        ImGui::EndPopup();
-    }
-}
-
-void open_add_modal(AbilityPanelState& s,
-                     AbilityPanelState::AddMode m) {
-    s.add_mode = m;
-    s.add_pending_open = true;
-    s.add_error.clear();
-    std::memset(s.add_input, 0, sizeof(s.add_input));
-}
-
-AbilityPanelResult draw_ability_panel(YAML::Node root,
-                                       AbilityPanelState& s,
-                                       const fs::path& data_root,
-                                       const std::string& /*hero_stem*/) {
-    AbilityPanelResult res;
-    if (!root || !root.IsMap()) {
-        ImGui::TextDisabled("(no hero loaded)");
-        return res;
-    }
-    if (!root["abilities"] || !root["abilities"].IsSequence()) {
-        ImGui::TextDisabled("(abilities 不是序列)");
-        return res;
-    }
-    YAML::Node abs = root["abilities"];
-
-    // --- 列表
-    ImGui::BeginChild("##ability_list", ImVec2(220.0f, 0.0f), true);
-
-    int remove_idx = -1;
-    for (std::size_t i = 0; i < abs.size(); ++i) {
-        const std::string n = abs[i]["name"] ?
-            abs[i]["name"].as<std::string>() : "(no name)";
-        const bool sel = (static_cast<int>(i) == s.selected);
-        ImGui::PushID(static_cast<int>(i));
-        if (ImGui::Selectable(n.c_str(), sel)) {
-            s.selected = static_cast<int>(i);
-        }
-        if (ImGui::BeginPopupContextItem("##ab_ctx")) {
-            s.selected = static_cast<int>(i);
-            ImGui::PushStyleColor(ImGuiCol_Text,
-                                  ImVec4(1.0f, 0.5f, 0.5f, 1.0f));
-            if (ImGui::MenuItem("Remove ability")) {
-                remove_idx = static_cast<int>(i);
-            }
-            ImGui::PopStyleColor();
-            ImGui::EndPopup();
-        }
-        ImGui::PopID();
-    }
-
-    // 空白处右键: New ability_datadriven / New ability_lua
-    if (ImGui::BeginPopupContextWindow("##ab_empty_ctx",
-            ImGuiPopupFlags_MouseButtonRight |
-            ImGuiPopupFlags_NoOpenOverItems)) {
-        if (ImGui::MenuItem("New ability_datadriven ...")) {
-            open_add_modal(s, AbilityPanelState::AddMode::DataDriven);
-        }
-        if (ImGui::MenuItem("New ability_lua ...")) {
-            open_add_modal(s, AbilityPanelState::AddMode::Lua);
-        }
-        ImGui::EndPopup();
-    }
-    ImGui::EndChild();
-
-    if (remove_idx >= 0) {
-        try {
-            auto recs = dota::tools::remove_ability_at(
-                root, data_root,
-                static_cast<std::size_t>(remove_idx));
-            res.status = std::string("removed ability") +
-                (recs.empty() ? "" :
-                 std::string(" (trashed ") +
-                 std::to_string(recs.size()) + " script)");
-            if (s.selected == remove_idx) s.selected = -1;
-            else if (s.selected > remove_idx) --s.selected;
-            s.dirty = true;
-        } catch (const std::exception& e) {
-            res.status = std::string("remove failed: ") + e.what();
-        }
-    }
-
-    // --- 详情
-    ImGui::SameLine();
-    ImGui::BeginChild("##ability_form", ImVec2(0.0f, 0.0f), false);
-    if (s.selected < 0 || s.selected >= static_cast<int>(abs.size())) {
-        ImGui::TextDisabled("(选一个 ability 开始编辑)");
-    } else {
-        YAML::Node a = abs[s.selected];
-        if (draw_ability_form(a, data_root)) {
-            s.dirty = true;
-        }
-    }
-    ImGui::EndChild();
-
-    draw_add_ability_modal(root, s, data_root, res);
-
+    if (changed) s.dirty = true;
     return res;
 }
 

@@ -208,20 +208,18 @@ if(BUILD_VISUAL)
         DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
 
     # --- Example: hero_workshop (英雄/技能/Modifier 编辑器) ---
-    # Stage 4 拆三 tab 期间暂用 BUILD_HERO_WORKSHOP 守卫, 下一 commit 移除.
-    if(BUILD_HERO_WORKSHOP)
-        add_executable(hero_workshop
-            examples/hero_workshop/main.cpp
-            examples/hero_workshop/ability_panel.cpp
-            examples/hero_workshop/modifier_panel.cpp
-        )
-        target_link_libraries(hero_workshop PRIVATE dota_core raylib rlImGui)
+    add_executable(hero_workshop
+        examples/hero_workshop/main.cpp
+        examples/hero_workshop/hero_panel.cpp
+        examples/hero_workshop/ability_panel.cpp
+        examples/hero_workshop/modifier_panel.cpp
+    )
+    target_link_libraries(hero_workshop PRIVATE dota_core raylib rlImGui)
+    target_compile_definitions(hero_workshop PRIVATE
+        DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
+    if(DOTA_CJK_FONT_PATH)
         target_compile_definitions(hero_workshop PRIVATE
-            DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
-        if(DOTA_CJK_FONT_PATH)
-            target_compile_definitions(hero_workshop PRIVATE
-                DOTA_CJK_FONT_PATH=\"${DOTA_CJK_FONT_PATH}\")
-        endif()
+            DOTA_CJK_FONT_PATH=\"${DOTA_CJK_FONT_PATH}\")
     endif()
 endif()
 
