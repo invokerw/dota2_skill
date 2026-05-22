@@ -21,12 +21,15 @@
 - `include/dota/combat/`, `src/combat/`: `deal_damage` 和 `deal_heal` 分阶段战斗管线.
 - `include/dota/projectile/`, `src/projectile/`: 直线和追踪投射物, `ProjectileManager`.
 - `include/dota/replay/`, `src/replay/`: JSONL 录像写入和回放.
+- `include/dota/tools/`, `src/tools/`: 编辑器/迁移用工具层. `HeroDoc`/`HeroCatalog`, `AbilityDoc`/`AbilityCatalog`, `*_ops` 文件级 CRUD, `ModifierScanner`, `Trash`.
 - `src/script/`: sol2 绑定, 枚举表, `register_modifier`.
-- `data/heroes/*.yaml`: 英雄和技能数据.
+- `data/heroes/*.yaml`: 英雄定义, 只含 `hero:` 元字段和 `abilities: [name1, ...]` 引用列表.
+- `data/abilities/*.yaml`: 独立 ability 定义, 平铺 (stem = ability name), 跨 hero 共享.
 - `data/scripts/abilities/*.lua`: Lua 技能脚本.
 - `data/scripts/modifiers/*.lua`: Lua modifier 脚本.
 - `examples/skill_tester/`: raylib + imgui 交互式技能测试器.
-- `tests/`: GoogleTest 测试. 当前构建有 170 个测试, 最近一次全量 `ctest` 通过.
+- `examples/hero_workshop/`: raylib + imgui 数据编辑器. 左侧 Heroes / Abilities / Modifiers 三 tab, 各自管列表 + 详情 + dirty.
+- `tests/`: GoogleTest 测试. 当前构建有 228 个测试, 最近一次全量 `ctest` 通过.
 
 ## 构建和测试
 
@@ -67,9 +70,10 @@ ctest --test-dir build --output-on-failure
 
 ## 数据和脚本约定
 
-英雄 YAML 使用当前 schema:
+英雄 yaml 只持元字段和 ability 名字引用:
 
 ```yaml
+# data/heroes/example.yaml
 hero:
   name: npc_dota_hero_example
   base_health: 600
@@ -78,22 +82,32 @@ hero:
   base_magic_resist: 0.25
 
 abilities:
-  - name: example_spell
-    base_class: ability_datadriven
-    behavior: [UNIT_TARGET]
-    target_team: ENEMY
-    cast_point: 0.2
-    cooldown: [12, 12, 12, 12]
-    mana_cost: [100, 110, 120, 130]
-    cast_range: 600
-    ability_special:
-      damage: [100, 175, 250, 325]
-    on_spell_start:
-      - damage:
-          target: TARGET
-          type: MAGICAL
-          amount: "%damage"
+  - example_spell
+  - example_passive
 ```
+
+Ability 是独立资源, 跨 hero 共享:
+
+```yaml
+# data/abilities/example_spell.yaml
+name: example_spell
+base_class: ability_datadriven
+behavior: [UNIT_TARGET]
+target_team: ENEMY
+cast_point: 0.2
+cooldown: [12, 12, 12, 12]
+mana_cost: [100, 110, 120, 130]
+cast_range: 600
+ability_special:
+  damage: [100, 175, 250, 325]
+on_spell_start:
+  - damage:
+      target: TARGET
+      type: MAGICAL
+      amount: "%damage"
+```
+
+加载入口: `AbilityRegistry::load_hero(hero_yaml, abilities_dir)` 解析引用列表并按需 load 对应文件; `load_dir(abilities_dir)` 一次性扫整个目录. 顶层 `abilities[]` 只接受 scalar 名, 不再支持内嵌 map 老格式.
 
 DataDriven action 是单键 map, 当前支持 `damage`, `heal`, `apply_modifier`. `amount` 和 `duration` 可以引用 `ability_special` 中的 `%key`.
 
@@ -115,12 +129,19 @@ Lua modifier:
 
 新增英雄:
 
-1. 新增 `data/heroes/<name>.yaml`.
-2. `ability_lua` 技能新增 `data/scripts/abilities/<ability_name>.lua`.
-3. 如需要 Lua modifier, 新增 `data/scripts/modifiers/<modifier_name>.lua` 并用 PascalCase spec.
-4. 新增 `tests/test_hero_<name>.cpp`.
-5. 在 `CMakeLists.txt` 的 `dota_tests` 源文件列表中注册测试.
-6. 运行相关 hero 测试和全量构建.
+1. 为每个新 ability 新增 `data/abilities/<ability_name>.yaml`. 已有 ability 直接复用引用名, 不需要复制文件.
+2. 新增 `data/heroes/<name>.yaml`, `abilities:` 列表只填 ability 名引用.
+3. `ability_lua` 类型 ability 新增 `data/scripts/abilities/<ability_name>.lua`.
+4. 如需要 Lua modifier, 新增 `data/scripts/modifiers/<modifier_name>.lua` 并用 PascalCase spec.
+5. 新增 `tests/test_hero_<name>.cpp`.
+6. 在 `CMakeLists.txt` 的 `dota_tests` 源文件列表中注册测试.
+7. 运行相关 hero 测试和全量构建.
+
+新增 / 编辑 ability:
+
+- 直接编辑 `data/abilities/<name>.yaml`, 多个 hero 的引用会同步生效.
+- 重命名 ability 应通过 `AbilityOps::rename_ability_file` 或 `hero_workshop` Abilities tab 触发, 它会扫所有 hero yaml 同步替换引用名.
+- 删除 ability 应通过 `AbilityOps::delete_ability_file` 或 UI 触发, 被任何 hero 引用时拒绝并列出 referencing hero.
 
 新增 DataDriven action:
 
@@ -145,5 +166,5 @@ Lua modifier:
 
 - 不要编辑 `build/` 下的生成文件, 除非用户明确要求.
 - 不要回滚用户已有改动. 如果工作树有无关改动, 忽略它们.
-- 文档示例必须跟当前解析器和 Lua 绑定一致. 改 schema 或绑定时同步 `README.md`, `CLAUDE.md`, 本文件和相关 `doc/`.
+- 文档示例必须跟当前解析器和 Lua 绑定一致. 改 schema 或绑定时同步 `README.md`, 本文件和相关 `doc/`. (`CLAUDE.md` 是 `@AGENTS.md` 的引用桩, 不需要改.)
 - 引入新依赖前先确认必要性. 现有项目偏向少依赖, 录像 JSONL 是手写序列化.
