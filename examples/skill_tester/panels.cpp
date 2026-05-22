@@ -97,6 +97,9 @@ void draw_unit_base_tab(Scene& scene, AppState& app, Unit& selected) {
 void draw_unit_modifiers_tab(Scene& scene, AppState& app, Unit& selected) {
     const auto& mods = selected.modifiers().all();
     std::size_t remove_index = mods.size();
+    // 表格行只放 [Name(toggle) | Time | Stacks | Del], 详情放到表外按全 panel 宽渲染
+    // 避免在窄 Name 列里被裁切.
+    std::vector<bool> open_flags(mods.size(), false);
     if (ImGui::BeginTable(
             "##mod_table", 4,
             ImGuiTableFlags_BordersInnerV |
@@ -114,25 +117,11 @@ void draw_unit_modifiers_tab(Scene& scene, AppState& app, Unit& selected) {
             ImGui::PushID(static_cast<int>(i));
 
             ImGui::TableSetColumnIndex(0);
-            if (ImGui::TreeNode("##mod_details", "%s", mod->name().c_str())) {
-                ImGui::Text("Purgable %s  Dispellable %s  %s",
-                            mod->is_purgable() ? "yes" : "no",
-                            mod->is_dispellable() ? "yes" : "no",
-                            mod->is_debuff() ? "debuff" : "buff");
-                ImGui::TextUnformatted("States");
-                draw_state_mask(mod->declared_states());
-                const auto props = mod->declared_properties();
-                ImGui::TextUnformatted("Properties");
-                if (props.empty()) {
-                    ImGui::TextDisabled("(none)");
-                } else {
-                    for (const auto& p : props) {
-                        ImGui::BulletText("%s %+0.2f",
-                                          property_label(p.property), p.value);
-                    }
-                }
-                ImGui::TreePop();
-            }
+            open_flags[i] = ImGui::TreeNodeEx(
+                "##mod_details",
+                ImGuiTreeNodeFlags_NoTreePushOnOpen |
+                ImGuiTreeNodeFlags_SpanAvailWidth,
+                "%s", mod->name().c_str());
 
             ImGui::TableSetColumnIndex(1);
             double duration = mod->permanent() ? -1.0 : mod->duration_remaining();
@@ -154,6 +143,35 @@ void draw_unit_modifiers_tab(Scene& scene, AppState& app, Unit& selected) {
         }
         ImGui::EndTable();
     }
+
+    // 展开行的详情. 在表外渲染, 走整个 panel 宽度.
+    for (std::size_t i = 0; i < mods.size(); ++i) {
+        if (!open_flags[i]) continue;
+        Modifier* mod = mods[i].get();
+        if (!mod) continue;
+        ImGui::PushID(static_cast<int>(i));
+        ImGui::Indent();
+        ImGui::SeparatorText(mod->name().c_str());
+        ImGui::Text("Purgable %s  Dispellable %s  %s",
+                    mod->is_purgable() ? "yes" : "no",
+                    mod->is_dispellable() ? "yes" : "no",
+                    mod->is_debuff() ? "debuff" : "buff");
+        ImGui::TextUnformatted("States");
+        draw_state_mask(mod->declared_states());
+        const auto props = mod->declared_properties();
+        ImGui::TextUnformatted("Properties");
+        if (props.empty()) {
+            ImGui::TextDisabled("(none)");
+        } else {
+            for (const auto& p : props) {
+                ImGui::BulletText("%s %+0.2f",
+                                  property_label(p.property), p.value);
+            }
+        }
+        ImGui::Unindent();
+        ImGui::PopID();
+    }
+
     if (remove_index < mods.size()) {
         selected.modifiers().remove_at(remove_index);
     }
