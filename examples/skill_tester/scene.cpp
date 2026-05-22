@@ -50,12 +50,11 @@ void Scene::rebuild_with_hero(std::size_t idx) {
     cs.base_attack_time = 1.7;
     caster_ = world_->spawn(h.yaml_name, Team::Radiant, cs, {-600.0, 0.0});
 
-    caster_abilities_.clear();
+    // 被动 ability 也要 instantiate, 因为 intrinsic_modifier 是在
+    // AbilityRegistry::instantiate 时挂上的; sync_caster_abilities 会按
+    // !is_passive 过滤进 UI 快捷槽.
     for (const auto& a : h.abilities) {
-        if (a.is_passive) continue;
-        if (Ability* inst = reg_->instantiate(a.name, *caster_)) {
-            caster_abilities_.push_back(inst);
-        }
+        reg_->instantiate(a.name, *caster_);
     }
     sync_caster_abilities();
 
