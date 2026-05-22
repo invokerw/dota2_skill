@@ -33,7 +33,9 @@ fs::path relative_under(const fs::path& root, const fs::path& src) {
     const fs::path r = fs::weakly_canonical(root);
     const fs::path s = fs::weakly_canonical(src);
     const fs::path rel = s.lexically_relative(r);
-    if (rel.empty() || rel.native().rfind("..", 0) == 0) {
+    // Windows 上 path::native() 是 wstring, 不能直接对它 rfind("..").
+    // 用 path::operator== 比较第一个组件, 自带平台转换, 跨平台干净.
+    if (rel.empty() || *rel.begin() == fs::path("..")) {
         throw std::runtime_error("move_to_trash: src 不在 data_root 内: " +
                                  src.string());
     }
