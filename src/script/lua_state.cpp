@@ -3,15 +3,21 @@
 #include "dota/modifier/registry.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 
 namespace dota {
 
-LuaState::LuaState()
+LuaState::LuaState() {
+    // 运行期 env 覆盖优先于编译期宏, 让打包后的可执行文件可以指向相对路径
+    // 下的 data/scripts (与 examples 中 data_dir() 的 DOTA_DATA_DIR 处理一致).
+    if (const char* env = std::getenv("DOTA_SCRIPT_DIR"); env && *env) {
+        script_root_ = env;
+    } else {
 #ifdef DOTA_SCRIPT_DIR
-    : script_root_(DOTA_SCRIPT_DIR)
+        script_root_ = DOTA_SCRIPT_DIR;
 #endif
-{
+    }
     modifier_registry_ = std::make_unique<LuaModifierRegistry>();
     lua_.open_libraries(sol::lib::base,
                          sol::lib::table,

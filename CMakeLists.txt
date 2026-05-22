@@ -10,7 +10,11 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "" FORCE)
 endif()
 
-add_compile_options(-Wall -Wextra -Wpedantic)
+if(MSVC)
+    add_compile_options(/W3 /utf-8)
+else()
+    add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
 
 include(cmake/CPM.cmake)
 
@@ -60,7 +64,11 @@ if(lua_ADDED)
         target_compile_definitions(lua PUBLIC LUA_USE_LINUX)
     endif()
     # Lua's C code triggers pedantic C warnings; silence them locally.
-    target_compile_options(lua PRIVATE -w)
+    if(MSVC)
+        target_compile_options(lua PRIVATE /w)
+    else()
+        target_compile_options(lua PRIVATE -w)
+    endif()
 endif()
 
 # --- Visualization dependency: raylib (only needed by skill_tester) ---
@@ -94,7 +102,11 @@ if(BUILD_VISUAL)
             "${imgui_SOURCE_DIR}/imgui_demo.cpp"
         )
         target_include_directories(imgui PUBLIC "${imgui_SOURCE_DIR}")
-        target_compile_options(imgui PRIVATE -w)
+        if(MSVC)
+            target_compile_options(imgui PRIVATE /w)
+        else()
+            target_compile_options(imgui PRIVATE -w)
+        endif()
     endif()
 
     # rlImGui: imgui 的 raylib 后端. master 分支稳定够用; 固定到一个具体 commit
@@ -109,7 +121,11 @@ if(BUILD_VISUAL)
         add_library(rlImGui STATIC "${rlImGui_SOURCE_DIR}/rlImGui.cpp")
         target_include_directories(rlImGui PUBLIC "${rlImGui_SOURCE_DIR}")
         target_link_libraries(rlImGui PUBLIC imgui raylib)
-        target_compile_options(rlImGui PRIVATE -w)
+        if(MSVC)
+            target_compile_options(rlImGui PRIVATE /w)
+        else()
+            target_compile_options(rlImGui PRIVATE -w)
+        endif()
     endif()
 endif()
 

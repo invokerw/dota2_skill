@@ -912,15 +912,24 @@ void handle_shortcuts(State& s) {
 }
 
 void load_cjk_font() {
+    // 字体路径解析: 运行期 env DOTA_CJK_FONT_PATH 优先, 否则用编译期烤进去的宏.
+    // 打包发布的可执行文件可以通过启动器把 env 指向相对路径下的字体.
+    std::string path;
+    if (const char* env = std::getenv("DOTA_CJK_FONT_PATH"); env && *env) {
+        path = env;
+    } else {
 #ifdef DOTA_CJK_FONT_PATH
+        path = DOTA_CJK_FONT_PATH;
+#endif
+    }
+    if (path.empty() || !fs::exists(path)) return;
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->Clear();
     const ImWchar* ranges = io.Fonts->GetGlyphRangesChineseFull();
     ImFont* font = io.Fonts->AddFontFromFileTTF(
-        DOTA_CJK_FONT_PATH, 16.0f, nullptr, ranges);
+        path.c_str(), 16.0f, nullptr, ranges);
     if (!font) io.Fonts->AddFontDefault();
     rlImGuiReloadFonts();
-#endif
 }
 
 } // namespace
