@@ -270,6 +270,8 @@ add_executable(dota_tests
     tests/test_modifier_scanner.cpp
     tests/test_modifier_ops.cpp
     tests/test_ability_registry_dir.cpp
+    tests/test_passive_intrinsic.cpp
+    tests/test_modifier_on_ability_executed.cpp
 )
 target_link_libraries(dota_tests PRIVATE dota_core GTest::gtest_main)
 target_compile_definitions(dota_tests PRIVATE

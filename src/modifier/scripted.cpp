@@ -1,5 +1,6 @@
 #include "dota/modifier/scripted.hpp"
 
+#include "dota/ability/ability.hpp"
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
 
@@ -18,6 +19,11 @@ ScriptedModifier::ScriptedModifier(Unit& owner, std::string name, double duratio
     , ability_(ability) {
     sol::state_view sv(lua_->state());
     table_ = sv.create_table();
+    // self.handle: 让 Lua 钩子能调用 stack_count / refresh / duration_remaining
+    // 等基类方法 (sol2 Modifier usertype). self.ability: 持有 intrinsic ability 句柄,
+    // 方便取 ability_special.
+    table_["handle"]  = static_cast<Modifier*>(this);
+    table_["ability"] = ability_;
     apply_compiled_flags(spec);
     if (spec.think_interval > 0.0) set_think_interval(spec.think_interval);
 }
@@ -122,6 +128,10 @@ void ScriptedModifier::on_stack_changed(int old_count, int new_count) {
     }
 }
 
+void ScriptedModifier::on_refresh() {
+    call_simple(lua_, name(), table_, spec_table_, "OnRefresh", &owner());
+}
+
 void ScriptedModifier::on_interval_think() {
     call_simple(lua_, name(), table_, spec_table_, "OnIntervalThink", &owner());
 }
@@ -213,6 +223,22 @@ void ScriptedModifier::on_motion_tick(double dt) {
     if (!r.valid()) {
         sol::error err = r;
         lua_->report_error(name() + ".OnMotionTick", err.what());
+    }
+}
+
+void ScriptedModifier::on_ability_executed(const AbilityExecutedInfo& info) {
+    sol::protected_function fn = spec_table_["OnAbilityExecuted"];
+    if (!fn.valid()) return;
+    sol::state_view sv(lua_->state());
+    sol::table evt = sv.create_table();
+    evt["unit"]         = info.caster;
+    evt["ability"]      = info.ability;
+    evt["ability_name"] = info.ability_name;
+    evt["is_passive"]   = info.is_passive;
+    auto r = fn(table_, &owner(), evt);
+    if (!r.valid()) {
+        sol::error err = r;
+        lua_->report_error(name() + ".OnAbilityExecuted", err.what());
     }
 }
 

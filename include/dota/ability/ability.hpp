@@ -71,6 +71,18 @@ struct CastContext {
     int        level    = 1;
 };
 
+// modifier 监听 owner 释放 ability 的事件 (对应 Dota 的
+// MODIFIER_EVENT_ON_ABILITY_EXECUTED / OnAbilityFullyCast). 由 Ability 在
+// 施法成功完整结束 (非中断) 时由 ModifierManager 派发到 owner 上的所有 modifier.
+// passive ability 不会触发该事件, 因为它们走不通 trigger_cast/order_cast 路径.
+class Ability;
+struct AbilityExecutedInfo {
+    Unit*       caster      = nullptr;
+    Ability*    ability     = nullptr;
+    std::string ability_name;
+    bool        is_passive  = false;
+};
+
 // 所有技能的抽象基类 -- DataDriven(YAML)和 Scripted
 //(Lua, 阶段 4)共享. 生命周期: 由施法者的 AbilityManager 拥有.
 class Ability {
@@ -94,7 +106,16 @@ public:
 
     // --- 每级字段 ---
     int  level() const { return level_; }
-    void set_level(int l) { level_ = std::max(1, l); }
+    // 设置等级. 若实际改变了等级, 触发 on_upgrade(new_level), 默认实现会
+    // 调用 caster 上同名 intrinsic modifier 的 on_refresh, 让它重读
+    // ability_special.
+    void set_level(int l);
+
+    // --- Intrinsic modifier ---
+    // ability 实例化时自动给 caster 挂的永久 modifier 名(可空). 由
+    // AbilityRegistry::instantiate 设置, 由 Ability::on_upgrade 默认实现使用.
+    const std::string& intrinsic_modifier_name() const { return intrinsic_modifier_; }
+    void set_intrinsic_modifier_name(std::string n) { intrinsic_modifier_ = std::move(n); }
 
     double cast_point()    const { return cast_point_; }
     double backswing()     const { return backswing_; }
@@ -177,6 +198,7 @@ private:
     std::vector<double> cooldowns_;   // 每级
     std::vector<double> mana_costs_;  // 每级
     AbilitySpecial      special_;
+    std::string         intrinsic_modifier_;
 
     // 跨 tick 的目标快照: 仅存 EntityId / 点 / has_point. 每次派发到子类时
     // 通过 world_->find 重新解析成 Unit*; 若期间 target 已被销毁(指针失效),

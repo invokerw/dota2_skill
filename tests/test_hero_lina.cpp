@@ -123,3 +123,78 @@ TEST_F(HeroLinaTest, LagunaBladeKillsLowHpTarget) {
 
     EXPECT_FALSE(enemy_->alive());
 }
+
+// 炽魂被动: instantiate 后挂 modifier_lina_fiery_soul 在 Lina 身上, 但起始 0 层无加成.
+TEST_F(HeroLinaTest, FierySoulStartsWithNoStacks) {
+    Ability* fs = reg_.instantiate("lina_fiery_soul", *caster_);
+    ASSERT_NE(fs, nullptr);
+    EXPECT_TRUE(fs->is_passive());
+
+    auto* mod = caster_->modifiers().find("modifier_lina_fiery_soul");
+    ASSERT_NE(mod, nullptr);
+    EXPECT_EQ(mod->stack_count(), 0);
+
+    // 没层数 -> 攻击速度加成和移动速度回退到基础值.
+    const UnitStats base = hero_stats();
+    EXPECT_DOUBLE_EQ(
+        caster_->modifiers().aggregated(ModifierProperty::AttackSpeedBonusConstant),
+        0.0);
+    EXPECT_DOUBLE_EQ(caster_->move_speed(), base.move_speed);
+}
+
+// 释放一次主动技能 -> 1 层加成生效.
+TEST_F(HeroLinaTest, FierySoulGainsStackOnCast) {
+    reg_.instantiate("lina_fiery_soul", *caster_);
+    Ability* ds = reg_.instantiate("lina_dragon_slave", *caster_);
+    ASSERT_NE(ds, nullptr);
+
+    CastTarget t; t.point = {200.0, 0.0}; t.has_point = true;
+    ASSERT_EQ(ds->order_cast(t, world_), CastError::None);
+    world_.advance(0.5);
+
+    auto* mod = caster_->modifiers().find("modifier_lina_fiery_soul");
+    ASSERT_NE(mod, nullptr);
+    EXPECT_EQ(mod->stack_count(), 1);
+
+    // 1 级 fiery_soul: +40 AS / 层, +5% MS / 层.
+    const UnitStats base = hero_stats();
+    EXPECT_DOUBLE_EQ(
+        caster_->modifiers().aggregated(ModifierProperty::AttackSpeedBonusConstant),
+        40.0);
+    EXPECT_NEAR(caster_->move_speed(), base.move_speed * 1.05, 1e-6);
+}
+
+// 多次释放主动技能 -> 叠层卡在 max_stacks (1 级 = 3).
+TEST_F(HeroLinaTest, FierySoulCapsAtMaxStacks) {
+    reg_.instantiate("lina_fiery_soul", *caster_);
+    Ability* ds = reg_.instantiate("lina_dragon_slave", *caster_);
+    ASSERT_NE(ds, nullptr);
+
+    CastTarget t; t.point = {200.0, 0.0}; t.has_point = true;
+    for (int i = 0; i < 5; ++i) {
+        ASSERT_EQ(ds->trigger_cast(t, world_), CastError::None);
+        world_.advance(0.5);
+    }
+    auto* mod = caster_->modifiers().find("modifier_lina_fiery_soul");
+    ASSERT_NE(mod, nullptr);
+    EXPECT_EQ(mod->stack_count(), 3);
+}
+
+// 持续时间到期 -> 层数清空.
+TEST_F(HeroLinaTest, FierySoulStacksDecayAfterDuration) {
+    reg_.instantiate("lina_fiery_soul", *caster_);
+    Ability* ds = reg_.instantiate("lina_dragon_slave", *caster_);
+    ASSERT_NE(ds, nullptr);
+
+    CastTarget t; t.point = {200.0, 0.0}; t.has_point = true;
+    ASSERT_EQ(ds->trigger_cast(t, world_), CastError::None);
+    world_.advance(0.5);
+
+    auto* mod = caster_->modifiers().find("modifier_lina_fiery_soul");
+    ASSERT_NE(mod, nullptr);
+    EXPECT_EQ(mod->stack_count(), 1);
+
+    // 1 级 duration = 18s, 推到 19s 后层数应归 0.
+    world_.advance(19.0);
+    EXPECT_EQ(mod->stack_count(), 0);
+}

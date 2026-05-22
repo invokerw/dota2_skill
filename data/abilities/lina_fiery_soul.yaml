@@ -1,11 +1,11 @@
 name: lina_fiery_soul
-base_class: ability_lua
-script: abilities/lina_fiery_soul.lua
+base_class: ability_datadriven
 behavior: [PASSIVE]
 target_team: NONE
 cast_point: 0.0
 cooldown: [0]
 mana_cost: [0]
+intrinsic_modifier: modifier_lina_fiery_soul
 ability_special:
   attack_speed_per_stack: [40, 55, 70, 85]
   move_speed_pct_per_stack: [5, 6, 7, 8]

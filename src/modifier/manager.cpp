@@ -1,5 +1,6 @@
 #include "dota/modifier/manager.hpp"
 
+#include "dota/ability/ability.hpp"
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
 
@@ -203,6 +204,10 @@ void ModifierManager::dispatch_pre_take_heal(PreTakeHealEvent& ev) {
 
 void ModifierManager::dispatch_post_take_heal(PostTakeHealEvent& ev) {
     for_each_snapshot(modifiers_, [&](Modifier& m) { m.on_post_take_heal(ev); });
+}
+
+void ModifierManager::dispatch_ability_executed(const AbilityExecutedInfo& info) {
+    for_each_snapshot(modifiers_, [&](Modifier& m) { m.on_ability_executed(info); });
 }
 
 } // namespace dota

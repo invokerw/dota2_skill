@@ -3,6 +3,7 @@
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
 #include "dota/modifier/manager.hpp"
+#include "dota/modifier/modifier.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -27,6 +28,19 @@ void publish_cast_finished(World* w, EntityId caster, const std::string& ability
     if (!w) return;
     AbilityCastFinishedEvent ev{caster, ability, interrupted};
     w->events().publish(ev);
+}
+
+// 把 cast 完整结束的事件派发给 caster 上的所有 modifier. passive ability
+// 不会调用此函数 (它们在 trigger_cast / order_cast 入口就被早退). interrupted
+// 也不调用 (与 Dota OnAbilityFullyCast 语义一致).
+void dispatch_ability_executed(Ability& ability) {
+    AbilityExecutedInfo info{
+        &ability.caster(),
+        &ability,
+        ability.name(),
+        ability.is_passive(),
+    };
+    ability.caster().modifiers().dispatch_ability_executed(info);
 }
 
 } // namespace
@@ -55,6 +69,19 @@ long AbilitySpecialValue::get_int(int level) const {
 
 Ability::Ability(std::string name, std::uint32_t behavior, TargetTeam team, Unit& caster)
     : name_(std::move(name)), behavior_(behavior), target_team_(team), caster_(caster) {}
+
+void Ability::set_level(int l) {
+    const int new_level = std::max(1, l);
+    if (new_level == level_) return;
+    level_ = new_level;
+    // 让 intrinsic modifier 重读 ability_special.
+    if (!intrinsic_modifier_.empty()) {
+        if (Modifier* m = caster_.modifiers().find(intrinsic_modifier_)) {
+            m->on_refresh();
+        }
+    }
+    on_upgrade(new_level);
+}
 
 double Ability::cooldown_for_level() const {
     if (cooldowns_.empty()) return 0.0;
@@ -172,6 +199,7 @@ CastError Ability::trigger_cast(const CastTarget& target, World& world,
             phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
             phase_timer_ = 0.0;
             publish_cast_finished(world_, caster_.id(), name_, false);
+            dispatch_ability_executed(*this);
         }
     } else {
         enter_phase(CastPhase::Casting, cast_point_);
@@ -205,6 +233,7 @@ CastError Ability::order_cast(const CastTarget& target, World& world) {
             phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
             phase_timer_ = 0.0;
             publish_cast_finished(world_, caster_.id(), name_, false);
+            dispatch_ability_executed(*this);
         }
     } else {
         enter_phase(CastPhase::Casting, cast_point_);
@@ -284,6 +313,7 @@ void Ability::advance(double dt) {
         if (phase_timer_ == 0.0) {
             on_channel_finish(ctx, /*interrupted*/ false);
             publish_cast_finished(world_, caster_.id(), name_, /*interrupted*/ false);
+            dispatch_ability_executed(*this);
             cooldown_ = cooldown_for_level();
             phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
             world_    = nullptr;
@@ -302,6 +332,7 @@ void Ability::advance(double dt) {
             cooldown_ = cooldown_for_level();
             phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
             publish_cast_finished(world_, caster_.id(), name_, /*interrupted*/ false);
+            dispatch_ability_executed(*this);
             world_    = nullptr;
         }
         return;
@@ -311,6 +342,7 @@ void Ability::advance(double dt) {
         cooldown_ = cooldown_for_level();
         phase_    = cooldown_ > 0.0 ? CastPhase::OnCooldown : CastPhase::Ready;
         publish_cast_finished(world_, caster_.id(), name_, /*interrupted*/ false);
+        dispatch_ability_executed(*this);
         world_    = nullptr;
     }
 }

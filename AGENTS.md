@@ -122,8 +122,17 @@ Lua modifier:
 - 通过 `register_modifier(name, spec)` 注册.
 - spec 字段统一 PascalCase, 不保留旧 lower_case 别名.
 - 常用字段: `IsHidden`, `IsPurgable`, `IsDispellable`, `IsDebuff`, `IsMotionController`, `MotionPriority`, `RemoveOnDeath`, `ThinkInterval`, `States`, `Properties`, `CheckState`.
-- 常用钩子: `OnCreated`, `OnDestroyed`, `OnStackChanged`, `OnIntervalThink`, `OnPreTakeDamage`, `OnPostTakeDamage`, `OnPreTakeHeal`, `OnPostTakeHeal`, `OnMotionTick`.
+- 常用钩子: `OnCreated`, `OnDestroyed`, `OnRefresh`, `OnStackChanged`, `OnIntervalThink`, `OnAbilityExecuted`, `OnPreTakeDamage`, `OnPostTakeDamage`, `OnPreTakeHeal`, `OnPostTakeHeal`, `OnMotionTick`.
 - 伤害/治疗钩子签名是 `(self, owner, ev_table)`. 通过修改 `ev.amount` 或在 `OnPreTakeDamage` 返回吸收数值影响管线.
+- ScriptedModifier 在构造时把 `self.handle` (`Modifier` 句柄: `stack_count` / `set_stack_count` / `refresh` / `duration_remaining` / `permanent` / `name`) 和 `self.ability` (intrinsic ability 句柄, 提供 `level` / `is_passive` / `get_special` / `caster`) 注入实例 self 表, 钩子里直接用即可.
+
+被动技能 (intrinsic modifier):
+
+- 推荐用 `intrinsic_modifier:` 字段实现, 与 Dota `GetIntrinsicModifierName` 等价: ability 是壳子, 真正逻辑在 modifier 里.
+- yaml 写 `behavior: [PASSIVE]`, `base_class: ability_datadriven`, 加 `intrinsic_modifier: <modifier_name>`. `AbilityRegistry::instantiate` 会自动给 caster 挂一个永久 ScriptedModifier, ability 句柄存在 modifier 上.
+- ability 升级 (`set_level`) 时引擎对该 modifier 调用 `OnRefresh`, 用来重读 `ability_special`.
+- 主动 ability 完整释放 (非 interrupted, 非 passive) 后, 引擎对 caster 上所有 modifier 触发 `OnAbilityExecuted(self, owner, ev)`, ev 含 `unit / ability / ability_name / is_passive`. 与 Dota `OnAbilityFullyCast` 语义一致.
+- 典型范例见 `data/scripts/modifiers/modifier_lina_fiery_soul.lua` (叠层 + 持续时间衰减 + 动态 `Properties`).
 
 ## 常见改动流程
 
@@ -132,10 +141,11 @@ Lua modifier:
 1. 为每个新 ability 新增 `data/abilities/<ability_name>.yaml`. 已有 ability 直接复用引用名, 不需要复制文件.
 2. 新增 `data/heroes/<name>.yaml`, `abilities:` 列表只填 ability 名引用.
 3. `ability_lua` 类型 ability 新增 `data/scripts/abilities/<ability_name>.lua`.
-4. 如需要 Lua modifier, 新增 `data/scripts/modifiers/<modifier_name>.lua` 并用 PascalCase spec.
-5. 新增 `tests/test_hero_<name>.cpp`.
-6. 在 `CMakeLists.txt` 的 `dota_tests` 源文件列表中注册测试.
-7. 运行相关 hero 测试和全量构建.
+4. 被动 ability 推荐用 `behavior: [PASSIVE]` + `intrinsic_modifier:`, 不写 `script:` 字段, 真正逻辑放进 `data/scripts/modifiers/<modifier_name>.lua` 的 `OnAbilityExecuted` / `OnRefresh` 等钩子里.
+5. 如需要 Lua modifier, 新增 `data/scripts/modifiers/<modifier_name>.lua` 并用 PascalCase spec.
+6. 新增 `tests/test_hero_<name>.cpp`.
+7. 在 `CMakeLists.txt` 的 `dota_tests` 源文件列表中注册测试.
+8. 运行相关 hero 测试和全量构建.
 
 新增 / 编辑 ability:
 

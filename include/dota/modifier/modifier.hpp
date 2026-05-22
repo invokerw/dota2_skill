@@ -10,6 +10,7 @@
 namespace dota {
 
 class Unit;
+struct AbilityExecutedInfo;
 
 // 伤害类型. 在此处重复定义(除了将拥有它的 Stage 5 战斗头文件),
 // 以便 Stage 2 可以在伤害前事件中推理魔法 vs 物理伤害.
@@ -129,11 +130,17 @@ public:
     virtual void on_destroyed()                    {}
     virtual void on_stack_changed(int /*old*/,
                                   int /*new_*/)    {}
+    // 由 Ability::set_level 触发, 用于 intrinsic modifier 重读 ability_special.
+    // 也可以在 modifier 因刷新持续时间而重新应用时手动调用.
+    virtual void on_refresh()                      {}
     virtual void on_interval_think()               {}  // 每 think_interval_ 触发一次
     virtual void on_pre_take_damage(PreTakeDamageEvent&)  {}
     virtual void on_post_take_damage(PostTakeDamageEvent&){}
     virtual void on_pre_take_heal(PreTakeHealEvent&)      {}
     virtual void on_post_take_heal(PostTakeHealEvent&)    {}
+
+    // owner 完整释放完一个非 passive ability. interrupted 的 cast 不会触发.
+    virtual void on_ability_executed(const AbilityExecutedInfo&) {}
 
     // Motion controller 钩子: 仅对 is_motion_controller_=true 的修饰器调用.
     // 在 ModifierManager::advance_motion 中, ability tick 之前由 World 驱动.

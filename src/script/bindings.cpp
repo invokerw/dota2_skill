@@ -229,6 +229,36 @@ void register_bindings(sol::state& lua, LuaState* owner) {
             return u.modifiers().attach(std::move(mod));
         });
 
+    // --- Ability ---
+    // 暴露给 modifier 钩子使用 (例如 OnAbilityExecuted 事件 ev.ability).
+    // 仅暴露只读元数据 + ability_special 查询.
+    lua.new_usertype<Ability>(
+        "Ability",
+        sol::no_constructor,
+        "name",       [](const Ability& a) { return a.name(); },
+        "level",      &Ability::level,
+        "is_passive", &Ability::is_passive,
+        "caster",     [](Ability& a) -> Unit* { return &a.caster(); },
+        "get_special",
+        [](const Ability& a, const std::string& key) -> double {
+            const auto& sp = a.ability_special();
+            auto it = sp.find(key);
+            return it == sp.end() ? 0.0 : it->second.get_float(a.level());
+        });
+
+    // --- Modifier ---
+    // 给 Lua 脚本拿到的 modifier 句柄 (add_modifier 的返回值, 或 self 在 ScriptedModifier
+    // 钩子里用 owner:find_modifier 反查到的实例) 提供基础控制方法.
+    lua.new_usertype<Modifier>(
+        "Modifier",
+        sol::no_constructor,
+        "name",               [](const Modifier& m) { return m.name(); },
+        "stack_count",        &Modifier::stack_count,
+        "set_stack_count",    &Modifier::set_stack_count,
+        "refresh",            &Modifier::refresh,
+        "duration_remaining", &Modifier::duration_remaining,
+        "permanent",          &Modifier::permanent);
+
     // --- World ---
     lua.new_usertype<World>(
         "World",

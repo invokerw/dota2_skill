@@ -38,12 +38,14 @@ public:
     void on_created() override;
     void on_destroyed() override;
     void on_stack_changed(int old_count, int new_count) override;
+    void on_refresh() override;
     void on_interval_think() override;
     void on_pre_take_damage(PreTakeDamageEvent& ev) override;
     void on_post_take_damage(PostTakeDamageEvent& ev) override;
     void on_pre_take_heal(PreTakeHealEvent& ev) override;
     void on_post_take_heal(PostTakeHealEvent& ev) override;
     void on_motion_tick(double dt) override;
+    void on_ability_executed(const AbilityExecutedInfo& info) override;
 
     bool is_debuff() const override { return is_debuff_; }
 

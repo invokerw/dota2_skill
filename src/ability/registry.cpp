@@ -3,6 +3,9 @@
 #include "dota/ability/manager.hpp"
 #include "dota/ability/scripted.hpp"
 #include "dota/core/unit.hpp"
+#include "dota/modifier/manager.hpp"
+#include "dota/modifier/registry.hpp"
+#include "dota/modifier/scripted.hpp"
 #include "dota/script/lua_state.hpp"
 
 #include <yaml-cpp/yaml.h>
@@ -162,6 +165,9 @@ AbilityDef parse_ability_node(const YAML::Node& n) {
             }
         }
     }
+    if (n["intrinsic_modifier"]) {
+        def.intrinsic_modifier = n["intrinsic_modifier"].as<std::string>();
+    }
     return def;
 }
 
@@ -253,21 +259,44 @@ Ability* AbilityRegistry::instantiate(const std::string& name, Unit& caster,
                                       LuaState* lua) {
     const AbilityDef* def = find(name);
     if (!def) return nullptr;
+
+    Ability* raw = nullptr;
     if (def->base_class == "ability_datadriven") {
         auto ability = std::make_unique<DataDrivenAbility>(caster, *def);
-        Ability* raw = ability.get();
+        raw = ability.get();
         caster.abilities().attach(std::move(ability));
-        return raw;
-    }
-    if (def->base_class == "ability_lua") {
+    } else if (def->base_class == "ability_lua") {
         LuaState* state = lua ? lua : default_lua_;
         if (!state) return nullptr;
         auto ability = std::make_unique<ScriptedAbility>(caster, *def, *state);
-        Ability* raw = ability.get();
+        raw = ability.get();
         caster.abilities().attach(std::move(ability));
-        return raw;
     }
-    return nullptr;
+    if (!raw) return nullptr;
+
+    // 处理 intrinsic_modifier: 在 caster 身上 attach 一个永久 ScriptedModifier,
+    // ability 句柄存在 modifier 上, 让 lua 端可以通过 self:GetAbility() 读 special.
+    raw->set_intrinsic_modifier_name(def->intrinsic_modifier);
+    if (!def->intrinsic_modifier.empty()) {
+        LuaState* state = lua ? lua : default_lua_;
+        if (!state) {
+            // 没有 LuaState 但声明了 intrinsic 是配置错误.
+            return raw;
+        }
+        const auto* spec = state->modifier_registry().find(def->intrinsic_modifier);
+        if (!spec) {
+            state->report_error(
+                "intrinsic_modifier",
+                "未注册的修饰器名: " + def->intrinsic_modifier +
+                " (ability: " + def->name + ")");
+            return raw;
+        }
+        auto mod = std::make_unique<ScriptedModifier>(
+            caster, def->intrinsic_modifier, /*duration=*/-1.0,
+            *spec, *state, /*source_id=*/caster.id(), /*ability=*/raw);
+        caster.modifiers().attach(std::move(mod));
+    }
+    return raw;
 }
 
 } // namespace dota

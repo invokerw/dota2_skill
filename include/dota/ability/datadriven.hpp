@@ -61,6 +61,12 @@ struct AbilityDef {
 
     // 当 base_class=="ability_lua" 时存在(阶段 4).
     std::string script_path;
+
+    // 可选: ability 实例化时自动给 caster 挂上的永久 modifier 名(对应
+    // Dota 的 GetIntrinsicModifierName). 适合做 PASSIVE 技能, 也可用于
+    // 主动技能的常驻被动部分(例如 Dragon Knight 龙血 + 龙形态既挂常驻 buff
+    // 又能主动施放). 留空则不附挂. 名字必须是已注册的 Lua modifier.
+    std::string intrinsic_modifier;
 };
 
 // 运行时 DataDriven 技能. 在构造时从 AbilityDef 填充其

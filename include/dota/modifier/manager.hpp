@@ -75,6 +75,10 @@ public:
     void dispatch_pre_take_heal(PreTakeHealEvent& ev);
     void dispatch_post_take_heal(PostTakeHealEvent& ev);
 
+    // 把 owner 释放 ability 的事件派发给所有挂载的 modifier (对应 Dota
+    // MODIFIER_EVENT_ON_ABILITY_EXECUTED). 由 Ability 在 cast 完整结束时调度.
+    void dispatch_ability_executed(const AbilityExecutedInfo& info);
+
 private:
     Unit& owner_;
     std::vector<std::unique_ptr<Modifier>> modifiers_;
