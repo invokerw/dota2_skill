@@ -1,0 +1,154 @@
+# 构建 examples (skill_tester / hero_workshop) 的 macOS arm64 和 Windows x64 产物.
+# 每个 artifact 自带 data/ 目录, 解压即可运行.
+
+name: build-examples
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            os: macos-14
+            archive_ext: tar.gz
+          - name: windows-x64
+            os: windows-2022
+            archive_ext: zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # CPM 会从 GitHub / lua.org / lxgw.github 下载依赖, 加缓存避免每次都拉.
+      - name: Cache CPM downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/build/_deps
+            ${{ github.workspace }}/build/cjk_font
+          key: cpm-${{ matrix.name }}-${{ hashFiles('CMakeLists.txt', 'cmake/CPM.cmake') }}
+          restore-keys: |
+            cpm-${{ matrix.name }}-
+
+      - name: Configure (macOS arm64)
+        if: matrix.name == 'macos-arm64'
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DBUILD_VISUAL=ON
+
+      - name: Configure (Windows x64)
+        if: matrix.name == 'windows-x64'
+        run: cmake -B build -A x64 -DBUILD_VISUAL=ON
+
+      - name: Build skill_tester + hero_workshop
+        run: cmake --build build --config Release --target skill_tester hero_workshop -j
+
+      # 把可执行文件 + data + 字体 + 启动器组装到 dist/<name>/ 下.
+      # 启动器通过 DOTA_DATA_DIR / DOTA_SCRIPT_DIR / DOTA_CJK_FONT_PATH 把
+      # 编译期烤进去的 CI 路径覆盖掉, 这样产物在用户机器上也能找到资源.
+      - name: Stage artifact (macOS arm64)
+        if: matrix.name == 'macos-arm64'
+        run: |
+          set -e
+          DIST="dist/dota2_skill-${{ matrix.name }}"
+          mkdir -p "$DIST/bin"
+          cp build/skill_tester   "$DIST/bin/"
+          cp build/hero_workshop  "$DIST/bin/"
+          cp -R data              "$DIST/data"
+          if [ -f build/cjk_font/LXGWWenKai-Regular.ttf ]; then
+            mkdir -p "$DIST/fonts"
+            cp build/cjk_font/LXGWWenKai-Regular.ttf "$DIST/fonts/"
+          fi
+          cat > "$DIST/run_skill_tester.sh" <<'EOF'
+          #!/usr/bin/env bash
+          HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          export DOTA_DATA_DIR="$HERE/data"
+          export DOTA_SCRIPT_DIR="$HERE/data/scripts"
+          [ -f "$HERE/fonts/LXGWWenKai-Regular.ttf" ] && \
+            export DOTA_CJK_FONT_PATH="$HERE/fonts/LXGWWenKai-Regular.ttf"
+          exec "$HERE/bin/skill_tester" "$@"
+          EOF
+          cat > "$DIST/run_hero_workshop.sh" <<'EOF'
+          #!/usr/bin/env bash
+          HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          export DOTA_DATA_DIR="$HERE/data"
+          export DOTA_SCRIPT_DIR="$HERE/data/scripts"
+          [ -f "$HERE/fonts/LXGWWenKai-Regular.ttf" ] && \
+            export DOTA_CJK_FONT_PATH="$HERE/fonts/LXGWWenKai-Regular.ttf"
+          exec "$HERE/bin/hero_workshop" "$@"
+          EOF
+          chmod +x "$DIST/run_skill_tester.sh" "$DIST/run_hero_workshop.sh"
+          tar -C dist -czf "dota2_skill-${{ matrix.name }}.tar.gz" \
+            "dota2_skill-${{ matrix.name }}"
+
+      - name: Stage artifact (Windows x64)
+        if: matrix.name == 'windows-x64'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = "dist\dota2_skill-${{ matrix.name }}"
+          New-Item -ItemType Directory -Force -Path "$dist\bin" | Out-Null
+          Copy-Item build\Release\skill_tester.exe  "$dist\bin\"
+          Copy-Item build\Release\hero_workshop.exe "$dist\bin\"
+          Copy-Item -Recurse data "$dist\data"
+          $font = "build\cjk_font\LXGWWenKai-Regular.ttf"
+          if (Test-Path $font) {
+            New-Item -ItemType Directory -Force -Path "$dist\fonts" | Out-Null
+            Copy-Item $font "$dist\fonts\"
+          }
+          @'
+          @echo off
+          setlocal
+          set "HERE=%~dp0"
+          set "DOTA_DATA_DIR=%HERE%data"
+          set "DOTA_SCRIPT_DIR=%HERE%data\scripts"
+          if exist "%HERE%fonts\LXGWWenKai-Regular.ttf" set "DOTA_CJK_FONT_PATH=%HERE%fonts\LXGWWenKai-Regular.ttf"
+          "%HERE%bin\skill_tester.exe" %*
+          '@ | Set-Content -Encoding ASCII "$dist\run_skill_tester.bat"
+          @'
+          @echo off
+          setlocal
+          set "HERE=%~dp0"
+          set "DOTA_DATA_DIR=%HERE%data"
+          set "DOTA_SCRIPT_DIR=%HERE%data\scripts"
+          if exist "%HERE%fonts\LXGWWenKai-Regular.ttf" set "DOTA_CJK_FONT_PATH=%HERE%fonts\LXGWWenKai-Regular.ttf"
+          "%HERE%bin\hero_workshop.exe" %*
+          '@ | Set-Content -Encoding ASCII "$dist\run_hero_workshop.bat"
+          Compress-Archive -Path "$dist" -DestinationPath "dota2_skill-${{ matrix.name }}.zip" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dota2_skill-${{ matrix.name }}
+          path: dota2_skill-${{ matrix.name }}.${{ matrix.archive_ext }}
+          if-no-files-found: error
+
+  release:
+    name: Attach to release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
