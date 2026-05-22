@@ -155,7 +155,13 @@ void emit_root(YAML::Emitter& out, const YAML::Node& n) {
             emit_hero_block(out, n[k]);
         } else if (k == "abilities" && n[k].IsSequence()) {
             out << YAML::BeginSeq;
-            for (const auto& a : n[k]) emit_ability(out, a);
+            for (const auto& a : n[k]) {
+                if (a.IsScalar()) {
+                    out << a.as<std::string>();   // 引用名 (新格式)
+                } else {
+                    emit_ability(out, a);          // 内嵌定义 (老格式, 兼容)
+                }
+            }
             out << YAML::EndSeq;
         } else {
             emit_default(out, n[k]);

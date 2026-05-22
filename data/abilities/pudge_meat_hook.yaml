@@ -1,0 +1,14 @@
+name: pudge_meat_hook
+base_class: ability_lua
+script: abilities/pudge_meat_hook.lua
+behavior: [POINT_TARGET]
+target_team: ENEMY
+cast_point: 0.30
+cooldown: [27, 22, 17, 12]
+mana_cost: [110, 120, 130, 140]
+cast_range: 1300
+ability_special:
+  damage:        [125, 175, 225, 275]
+  length:        [1300, 1300, 1300, 1300]
+  width:         [100, 100, 100, 100]
+  missile_speed: [1300, 1300, 1300, 1300]

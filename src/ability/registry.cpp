@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <stdexcept>
 
 namespace dota {
@@ -174,14 +175,67 @@ std::size_t AbilityRegistry::load_file(const std::string& path) {
         throw std::runtime_error("failed to parse YAML " + path + ": " + e.what());
     }
 
-    if (!root["abilities"] || !root["abilities"].IsSequence()) {
-        return 0;
+    // hero yaml: 顶层有 abilities 引用列表, 转发到 load_hero 解析引用.
+    if (root["abilities"] && root["abilities"].IsSequence()) {
+        return load_hero(path, "");
     }
+
+    // 新格式: 顶层就是单 ability 字段.
+    if (root && root.IsMap() && root["name"]) {
+        auto def = parse_ability_node(root);
+        defs_[def.name] = std::move(def);
+        return 1;
+    }
+
+    return 0;
+}
+
+std::size_t AbilityRegistry::load_dir(const std::string& dir) {
+    namespace fs = std::filesystem;
+    std::size_t count = 0;
+    fs::path base(dir);
+    if (!fs::exists(base) || !fs::is_directory(base)) {
+        throw std::runtime_error("ability dir not found: " + dir);
+    }
+    for (const auto& ent : fs::recursive_directory_iterator(base)) {
+        if (!ent.is_regular_file()) continue;
+        const auto ext = ent.path().extension().string();
+        if (ext != ".yaml" && ext != ".yml") continue;
+        count += load_file(ent.path().string());
+    }
+    return count;
+}
+
+std::size_t AbilityRegistry::load_hero(const std::string& hero_yaml,
+                                       const std::string& abilities_dir) {
+    namespace fs = std::filesystem;
+    YAML::Node root;
+    try {
+        root = YAML::LoadFile(hero_yaml);
+    } catch (const YAML::Exception& e) {
+        throw std::runtime_error("failed to parse hero YAML " + hero_yaml +
+                                 ": " + e.what());
+    }
+    if (!root["abilities"] || !root["abilities"].IsSequence()) return 0;
+
+    // abilities_dir 留空 -> 推断为 ../abilities (相对 hero yaml).
+    fs::path abil_base = abilities_dir.empty()
+        ? fs::path(hero_yaml).parent_path().parent_path() / "abilities"
+        : fs::path(abilities_dir);
+
     std::size_t count = 0;
     for (const auto& entry : root["abilities"]) {
-        auto def = parse_ability_node(entry);
-        defs_[def.name] = std::move(def);
-        ++count;
+        if (!entry.IsScalar()) {
+            throw std::runtime_error(
+                "abilities[] entry must be a scalar ability name");
+        }
+        const std::string name = entry.as<std::string>();
+        const fs::path p = abil_base / (name + ".yaml");
+        if (!fs::exists(p)) {
+            throw std::runtime_error(
+                "ability ref not found: " + name + " (" + p.string() + ")");
+        }
+        count += load_file(p.string());
     }
     return count;
 }

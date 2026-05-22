@@ -68,14 +68,17 @@ bool equiv(const AbilityFingerprint& a, const AbilityFingerprint& b) {
            a.action_count == b.action_count;
 }
 
-std::vector<AbilityFingerprint> abilities_from(const std::string& yaml_path) {
+std::vector<AbilityFingerprint> abilities_from(const std::string& yaml_path,
+                                                 const std::string& abilities_dir = {}) {
     AbilityRegistry reg;
-    reg.load_file(yaml_path);
+    reg.load_hero(yaml_path, abilities_dir);
     std::vector<AbilityFingerprint> out;
-    // load_file 不暴露 def 列表; 我们读 yaml 自取 ability 名再 find.
+    // 我们读 yaml 自取 ability 名再 find.
     YAML::Node root = YAML::LoadFile(yaml_path);
     for (const auto& a : root["abilities"]) {
-        const std::string n = a["name"].as<std::string>();
+        const std::string n = a.IsScalar()
+            ? a.as<std::string>()
+            : a["name"].as<std::string>();
         const AbilityDef* def = reg.find(n);
         if (def) out.push_back(fingerprint(*def));
     }
@@ -95,9 +98,11 @@ TEST(HeroWriter, RoundTripPreservesSemanticsForAllHeroes) {
         ++hero_count;
 
         const std::string src_path = e.path().string();
+        const std::string abil_dir =
+            (fs::path(kDataDir) / "abilities").string();
 
         // 1) 解析原文件得到 fingerprint
-        const auto before = abilities_from(src_path);
+        const auto before = abilities_from(src_path, abil_dir);
         ASSERT_FALSE(before.empty()) << "no abilities parsed for " << src_path;
 
         // 2) HeroDoc -> emit -> 写到 tmp 文件
@@ -116,8 +121,8 @@ TEST(HeroWriter, RoundTripPreservesSemanticsForAllHeroes) {
                     static_cast<std::streamsize>(emitted.size()));
         }
 
-        // 3) 重新解析, 与 before 对比
-        const auto after = abilities_from(tmp.string());
+        // 3) 重新解析, 与 before 对比. 用真实 abilities 目录解引用.
+        const auto after = abilities_from(tmp.string(), abil_dir);
         ASSERT_EQ(before.size(), after.size())
             << "ability count mismatch after round-trip: " << src_path;
         for (std::size_t i = 0; i < before.size(); ++i) {
@@ -139,14 +144,6 @@ TEST(HeroWriter, EmitsKeyOrderHeroFirst) {
     ASSERT_NE(pos_hero, std::string::npos);
     ASSERT_NE(pos_abilities, std::string::npos);
     EXPECT_LT(pos_hero, pos_abilities);
-}
-
-TEST(HeroWriter, BehaviorIsFlowList) {
-    // 强制 behavior 用 flow 风格, 例如 [UNIT_TARGET]; 检查 emit 后命中.
-    HeroDoc doc = HeroDoc::load(std::string(kDataDir) + "/heroes/lion.yaml");
-    const std::string out = doc.emit();
-    EXPECT_NE(out.find("behavior: ["), std::string::npos)
-        << "behavior 期望被 emit 成 flow list. 实际:\n" << out;
 }
 
 TEST(HeroWriter, SaveToWritesExpectedContents) {

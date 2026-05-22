@@ -180,6 +180,7 @@ add_library(dota_core
     src/tools/hero_catalog.cpp
     src/tools/hero_writer.cpp
     src/tools/hero_ops.cpp
+    src/tools/ability_doc.cpp
     src/tools/ability_ops.cpp
     src/tools/modifier_scanner.cpp
     src/tools/modifier_ops.cpp
@@ -207,17 +208,20 @@ if(BUILD_VISUAL)
         DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
 
     # --- Example: hero_workshop (英雄/技能/Modifier 编辑器) ---
-    add_executable(hero_workshop
-        examples/hero_workshop/main.cpp
-        examples/hero_workshop/ability_panel.cpp
-        examples/hero_workshop/modifier_panel.cpp
-    )
-    target_link_libraries(hero_workshop PRIVATE dota_core raylib rlImGui)
-    target_compile_definitions(hero_workshop PRIVATE
-        DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
-    if(DOTA_CJK_FONT_PATH)
+    # Stage 4 拆三 tab 期间暂用 BUILD_HERO_WORKSHOP 守卫, 下一 commit 移除.
+    if(BUILD_HERO_WORKSHOP)
+        add_executable(hero_workshop
+            examples/hero_workshop/main.cpp
+            examples/hero_workshop/ability_panel.cpp
+            examples/hero_workshop/modifier_panel.cpp
+        )
+        target_link_libraries(hero_workshop PRIVATE dota_core raylib rlImGui)
         target_compile_definitions(hero_workshop PRIVATE
-            DOTA_CJK_FONT_PATH=\"${DOTA_CJK_FONT_PATH}\")
+            DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
+        if(DOTA_CJK_FONT_PATH)
+            target_compile_definitions(hero_workshop PRIVATE
+                DOTA_CJK_FONT_PATH=\"${DOTA_CJK_FONT_PATH}\")
+        endif()
     endif()
 endif()
 
@@ -267,6 +271,7 @@ add_executable(dota_tests
     tests/test_ability_ops.cpp
     tests/test_modifier_scanner.cpp
     tests/test_modifier_ops.cpp
+    tests/test_ability_registry_dir.cpp
 )
 target_link_libraries(dota_tests PRIVATE dota_core GTest::gtest_main)
 target_compile_definitions(dota_tests PRIVATE

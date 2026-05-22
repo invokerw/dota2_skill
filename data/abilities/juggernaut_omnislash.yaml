@@ -1,0 +1,12 @@
+name: juggernaut_omnislash
+base_class: ability_lua
+script: abilities/juggernaut_omnislash.lua
+behavior: [UNIT_TARGET]
+target_team: ENEMY
+cast_point: 0.3
+cooldown: [130, 120, 110]
+mana_cost: [200, 275, 350]
+cast_range: 350
+ability_special:
+  slashes:         [3, 6, 9]
+  damage_per_hit:  [200, 225, 250]

@@ -7,17 +7,4 @@ hero:
   hull_radius: 27
 
 abilities:
-  - name: sven_storm_hammer
-    base_class: ability_lua
-    script: abilities/sven_storm_hammer.lua
-    behavior: [UNIT_TARGET]
-    target_team: ENEMY
-    cast_point: 0.55
-    cooldown: [13, 12, 11, 10]
-    mana_cost: [125, 130, 135, 140]
-    cast_range: 600
-    ability_special:
-      damage:        [80, 160, 240, 320]
-      stun_duration: [1.5, 1.7, 1.9, 2.1]
-      radius:        [225, 225, 225, 225]
-      missile_speed: [1100, 1100, 1100, 1100]
+  - sven_storm_hammer

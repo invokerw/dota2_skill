@@ -7,32 +7,5 @@ hero:
   hull_radius: 27
 
 abilities:
-  - name: pudge_meat_hook
-    base_class: ability_lua
-    script: abilities/pudge_meat_hook.lua
-    behavior: [POINT_TARGET]
-    target_team: ENEMY
-    cast_point: 0.30
-    cooldown: [27, 22, 17, 12]
-    mana_cost: [110, 120, 130, 140]
-    cast_range: 1300
-    ability_special:
-      damage:        [125, 175, 225, 275]
-      length:        [1300, 1300, 1300, 1300]
-      width:         [100, 100, 100, 100]
-      missile_speed: [1300, 1300, 1300, 1300]
-
-  - name: pudge_dismember
-    base_class: ability_lua
-    script: abilities/pudge_dismember.lua
-    behavior: [UNIT_TARGET, CHANNELLED]
-    target_team: ENEMY
-    cast_point: 0.30
-    channel_time: 3.0
-    cooldown: [30, 25, 20]
-    mana_cost: [100, 130, 170]
-    cast_range: 175
-    ability_special:
-      damage_per_tick:  [30, 50, 70]
-      tick_interval:    [0.5, 0.5, 0.5]
-      total_duration:   [3.0, 3.0, 3.0]
+  - pudge_meat_hook
+  - pudge_dismember

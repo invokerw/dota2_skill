@@ -1,0 +1,13 @@
+name: lina_dragon_slave
+base_class: ability_lua
+script: abilities/lina_dragon_slave.lua
+behavior: [POINT_TARGET]
+target_team: ENEMY
+cast_point: 0.45
+cooldown: [8.5, 7.5, 6.5, 5.5]
+mana_cost: [100, 115, 130, 145]
+cast_range: 800
+ability_special:
+  damage:     [85, 160, 235, 310]
+  radius:     [275, 275, 275, 275]
+  range:      [800, 800, 800, 800]

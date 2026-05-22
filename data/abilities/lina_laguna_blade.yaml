@@ -1,0 +1,11 @@
+name: lina_laguna_blade
+base_class: ability_lua
+script: abilities/lina_laguna_blade.lua
+behavior: [UNIT_TARGET]
+target_team: ENEMY
+cast_point: 0.45
+cooldown: [70, 60, 50]
+mana_cost: [280, 420, 680]
+cast_range: 600
+ability_special:
+  damage: [450, 650, 850]

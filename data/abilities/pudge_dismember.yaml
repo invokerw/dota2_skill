@@ -1,0 +1,14 @@
+name: pudge_dismember
+base_class: ability_lua
+script: abilities/pudge_dismember.lua
+behavior: [UNIT_TARGET, CHANNELLED]
+target_team: ENEMY
+cast_point: 0.30
+channel_time: 3.0
+cooldown: [30, 25, 20]
+mana_cost: [100, 130, 170]
+cast_range: 175
+ability_special:
+  damage_per_tick:  [30, 50, 70]
+  tick_interval:    [0.5, 0.5, 0.5]
+  total_duration:   [3.0, 3.0, 3.0]

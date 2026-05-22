@@ -1,0 +1,20 @@
+name: lion_earth_spike
+base_class: ability_datadriven
+behavior: [UNIT_TARGET]
+target_team: ENEMY
+cast_point: 0.3
+cooldown: [12, 12, 12, 12]
+mana_cost: [100, 120, 140, 160]
+cast_range: 625
+ability_special:
+  damage:        [80, 160, 240, 320]
+  stun_duration: [1.7, 1.9, 2.1, 2.3]
+on_spell_start:
+  - apply_modifier:
+      target: TARGET
+      name: modifier_stunned
+      duration: "%stun_duration"
+  - damage:
+      target: TARGET
+      type: MAGICAL
+      amount: "%damage"

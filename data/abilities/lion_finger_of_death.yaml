@@ -1,0 +1,11 @@
+name: lion_finger_of_death
+base_class: ability_lua
+script: abilities/lion_finger_of_death.lua
+behavior: [UNIT_TARGET]
+target_team: ENEMY
+cast_point: 0.5
+cooldown: [160, 100, 40, 40]
+mana_cost: [200, 420, 650]
+cast_range: 700
+ability_special:
+  damage: [600, 725, 850]

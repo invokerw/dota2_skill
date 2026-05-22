@@ -6,51 +6,6 @@ hero:
   base_magic_resist: 0.25
 
 abilities:
-  - name: lion_earth_spike
-    base_class: ability_datadriven
-    behavior: [UNIT_TARGET]
-    target_team: ENEMY
-    cast_point: 0.3
-    cooldown: [12, 12, 12, 12]
-    mana_cost: [100, 120, 140, 160]
-    cast_range: 625
-    ability_special:
-      damage:        [80, 160, 240, 320]
-      stun_duration: [1.7, 1.9, 2.1, 2.3]
-    on_spell_start:
-      - apply_modifier:
-          target: TARGET
-          name: modifier_stunned
-          duration: "%stun_duration"
-      - damage:
-          target: TARGET
-          type: MAGICAL
-          amount: "%damage"
-
-  - name: lion_hex
-    base_class: ability_datadriven
-    behavior: [UNIT_TARGET]
-    target_team: ENEMY
-    cast_point: 0.1
-    cooldown: [30, 24, 18, 12]
-    mana_cost: [125, 150, 175, 200]
-    cast_range: 625
-    ability_special:
-      hex_duration: [2.0, 2.5, 3.0, 3.5]
-    on_spell_start:
-      - apply_modifier:
-          target: TARGET
-          name: modifier_hexed
-          duration: "%hex_duration"
-
-  - name: lion_finger_of_death
-    base_class: ability_lua
-    script: abilities/lion_finger_of_death.lua
-    behavior: [UNIT_TARGET]
-    target_team: ENEMY
-    cast_point: 0.5
-    cooldown: [160, 100, 40, 40]
-    mana_cost: [200, 420, 650]
-    cast_range: 700
-    ability_special:
-      damage: [600, 725, 850]
+  - lion_earth_spike
+  - lion_hex
+  - lion_finger_of_death

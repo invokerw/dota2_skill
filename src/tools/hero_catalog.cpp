@@ -14,12 +14,49 @@ namespace {
 // behavior csv 解析: 复用 src/ability/behavior_parse.cpp 中的 parse_behavior_flags.
 } // namespace
 
+namespace {
+
+// 把单个 ability node (可能来自独立 yaml 顶层, 也可能来自老格式内嵌
+// abilities[i]) 解析成 AbilityMeta.
+AbilityMeta parse_ability_meta(const YAML::Node& a) {
+    AbilityMeta m;
+    if (a["name"])       m.name = a["name"].as<std::string>();
+    if (a["cast_range"]) m.cast_range = a["cast_range"].as<double>();
+    if (a["cast_point"]) m.cast_point = a["cast_point"].as<double>();
+
+    if (a["behavior"]) {
+        // behavior 在 yaml 里有可能是 list 也可能是 csv 字符串
+        std::string csv;
+        if (a["behavior"].IsSequence()) {
+            for (auto it = a["behavior"].begin(); it != a["behavior"].end(); ++it) {
+                if (!csv.empty()) csv += ",";
+                csv += it->as<std::string>();
+            }
+        } else {
+            csv = a["behavior"].as<std::string>();
+        }
+        m.behavior = parse_behavior_flags(csv);
+    }
+    if (a["target_team"]) {
+        m.target_team = parse_target_team(a["target_team"].as<std::string>());
+    }
+    m.is_passive    = has_flag(m.behavior, BehaviorFlag::Passive);
+    m.is_channelled = has_flag(m.behavior, BehaviorFlag::Channelled);
+    return m;
+}
+
+} // namespace
+
 std::size_t HeroCatalog::scan(const std::string& directory) {
     namespace fs = std::filesystem;
     heroes_.clear();
     if (!fs::exists(directory) || !fs::is_directory(directory)) {
         throw std::runtime_error("hero catalog: 目录不存在: " + directory);
     }
+
+    // 推断 abilities/ 目录: data/heroes -> data/abilities.
+    const fs::path abil_dir =
+        fs::path(directory).parent_path() / "abilities";
 
     std::vector<fs::path> files;
     for (auto& e : fs::directory_iterator(directory)) {
@@ -48,30 +85,23 @@ std::size_t HeroCatalog::scan(const std::string& directory) {
 
         if (root["abilities"] && root["abilities"].IsSequence()) {
             for (const auto& a : root["abilities"]) {
-                AbilityMeta m;
-                if (a["name"])       m.name = a["name"].as<std::string>();
-                if (a["cast_range"]) m.cast_range = a["cast_range"].as<double>();
-                if (a["cast_point"]) m.cast_point = a["cast_point"].as<double>();
-
-                if (a["behavior"]) {
-                    // behavior 在 yaml 里有可能是 list 也可能是 csv 字符串
-                    std::string csv;
-                    if (a["behavior"].IsSequence()) {
-                        for (auto it = a["behavior"].begin(); it != a["behavior"].end(); ++it) {
-                            if (!csv.empty()) csv += ",";
-                            csv += it->as<std::string>();
-                        }
-                    } else {
-                        csv = a["behavior"].as<std::string>();
+                if (a.IsScalar()) {
+                    // 新格式: 引用名, 去 abilities/<name>.yaml 读详情.
+                    const std::string ref = a.as<std::string>();
+                    const fs::path ap = abil_dir / (ref + ".yaml");
+                    if (!fs::exists(ap)) {
+                        AbilityMeta stub;
+                        stub.name = ref;
+                        h.abilities.push_back(std::move(stub));
+                        continue;
                     }
-                    m.behavior = parse_behavior_flags(csv);
+                    YAML::Node an = YAML::LoadFile(ap.string());
+                    auto m = parse_ability_meta(an);
+                    if (m.name.empty()) m.name = ref;
+                    h.abilities.push_back(std::move(m));
+                } else if (a.IsMap()) {
+                    h.abilities.push_back(parse_ability_meta(a));
                 }
-                if (a["target_team"]) {
-                    m.target_team = parse_target_team(a["target_team"].as<std::string>());
-                }
-                m.is_passive    = has_flag(m.behavior, BehaviorFlag::Passive);
-                m.is_channelled = has_flag(m.behavior, BehaviorFlag::Channelled);
-                h.abilities.push_back(std::move(m));
             }
         }
 

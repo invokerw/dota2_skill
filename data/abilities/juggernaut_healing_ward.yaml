@@ -1,0 +1,12 @@
+name: juggernaut_healing_ward
+base_class: ability_lua
+script: abilities/juggernaut_healing_ward.lua
+behavior: [NO_TARGET]
+target_team: NONE
+cast_point: 0.3
+cooldown: [60, 60, 60, 60]
+mana_cost: [100, 120, 140, 160]
+ability_special:
+  heal_pct:        [2.0, 3.0, 4.0, 5.0]   # % max HP per second
+  duration:        [25, 25, 25, 25]
+  tick_interval:   [1.0, 1.0, 1.0, 1.0]

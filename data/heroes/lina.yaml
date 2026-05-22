@@ -6,57 +6,7 @@ hero:
   base_magic_resist: 0.25
 
 abilities:
-  - name: lina_dragon_slave
-    base_class: ability_lua
-    script: abilities/lina_dragon_slave.lua
-    behavior: [POINT_TARGET]
-    target_team: ENEMY
-    cast_point: 0.45
-    cooldown: [8.5, 7.5, 6.5, 5.5]
-    mana_cost: [100, 115, 130, 145]
-    cast_range: 800
-    ability_special:
-      damage:     [85, 160, 235, 310]
-      radius:     [275, 275, 275, 275]
-      range:      [800, 800, 800, 800]
-
-  - name: lina_light_strike_array
-    base_class: ability_lua
-    script: abilities/lina_light_strike_array.lua
-    behavior: [POINT_TARGET, AOE]
-    target_team: ENEMY
-    cast_point: 0.45
-    cooldown: [7, 7, 7, 7]
-    mana_cost: [100, 110, 120, 130]
-    cast_range: 625
-    ability_special:
-      damage:         [120, 160, 200, 240]
-      stun_duration:  [1.6, 1.9, 2.2, 2.5]
-      radius:         [250, 250, 250, 250]
-      delay:          [0.5, 0.5, 0.5, 0.5]
-
-  - name: lina_fiery_soul
-    base_class: ability_lua
-    script: abilities/lina_fiery_soul.lua
-    behavior: [PASSIVE]
-    target_team: NONE
-    cast_point: 0.0
-    cooldown: [0]
-    mana_cost: [0]
-    ability_special:
-      attack_speed_per_stack: [40, 55, 70, 85]
-      move_speed_pct_per_stack: [5, 6, 7, 8]
-      max_stacks:     [3, 3, 3, 3]
-      duration:       [18, 18, 18, 18]
-
-  - name: lina_laguna_blade
-    base_class: ability_lua
-    script: abilities/lina_laguna_blade.lua
-    behavior: [UNIT_TARGET]
-    target_team: ENEMY
-    cast_point: 0.45
-    cooldown: [70, 60, 50]
-    mana_cost: [280, 420, 680]
-    cast_range: 600
-    ability_special:
-      damage: [450, 650, 850]
+  - lina_dragon_slave
+  - lina_light_strike_array
+  - lina_fiery_soul
+  - lina_laguna_blade

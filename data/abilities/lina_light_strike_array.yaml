@@ -1,0 +1,14 @@
+name: lina_light_strike_array
+base_class: ability_lua
+script: abilities/lina_light_strike_array.lua
+behavior: [POINT_TARGET, AOE]
+target_team: ENEMY
+cast_point: 0.45
+cooldown: [7, 7, 7, 7]
+mana_cost: [100, 110, 120, 130]
+cast_range: 625
+ability_special:
+  damage:         [120, 160, 200, 240]
+  stun_duration:  [1.6, 1.9, 2.2, 2.5]
+  radius:         [250, 250, 250, 250]
+  delay:          [0.5, 0.5, 0.5, 0.5]
