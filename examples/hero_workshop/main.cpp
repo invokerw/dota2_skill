@@ -150,7 +150,7 @@ void load_ability_doc(State& s) {
 
 void scan_heroes(State& s, const std::string& select_stem = {}) {
     try {
-        s.hero_catalog.scan(fs::path(data_dir()) / "heroes");
+        s.hero_catalog.scan((fs::path(data_dir()) / "heroes").string());
     } catch (const std::exception& e) {
         set_status(s, std::string("hero scan failed: ") + e.what());
         s.hero_doc.reset();
