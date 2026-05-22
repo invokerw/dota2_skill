@@ -138,9 +138,24 @@ void draw_delete_modal(ModifierPanelState& s,
 }
 
 void open_in_editor(const fs::path& path) {
+    // EDITOR 优先, 否则用各平台默认的 "用关联程序打开" 命令.
     const char* editor = std::getenv("EDITOR");
-    const std::string cmd = std::string(editor ? editor : "open") +
-                            " \"" + path.string() + "\" &";
+    std::string cmd;
+    if (editor && *editor) {
+        cmd = std::string(editor) + " \"" + path.string() + "\"";
+#if !defined(_WIN32)
+        cmd += " &";
+#endif
+    } else {
+#if defined(_WIN32)
+        // Windows 上用 cmd /c start "" 才能调系统默认关联程序, 而且非阻塞.
+        cmd = "cmd /c start \"\" \"" + path.string() + "\"";
+#elif defined(__APPLE__)
+        cmd = "open \"" + path.string() + "\" &";
+#else
+        cmd = "xdg-open \"" + path.string() + "\" &";
+#endif
+    }
     std::system(cmd.c_str());
 }
 

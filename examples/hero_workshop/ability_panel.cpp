@@ -316,9 +316,23 @@ AbilityPanelResult draw_ability_form(YAML::Node a, AbilityPanelState& s,
         const fs::path full = data_root / "scripts" / script;
         ImGui::Text("path: %s", full.string().c_str());
         if (ImGui::Button("Open in $EDITOR")) {
+            // EDITOR 优先, 否则按平台调系统默认关联程序.
             const char* editor = std::getenv("EDITOR");
-            const std::string cmd = std::string(editor ? editor : "open") +
-                                     " \"" + full.string() + "\" &";
+            std::string cmd;
+            if (editor && *editor) {
+                cmd = std::string(editor) + " \"" + full.string() + "\"";
+#if !defined(_WIN32)
+                cmd += " &";
+#endif
+            } else {
+#if defined(_WIN32)
+                cmd = "cmd /c start \"\" \"" + full.string() + "\"";
+#elif defined(__APPLE__)
+                cmd = "open \"" + full.string() + "\" &";
+#else
+                cmd = "xdg-open \"" + full.string() + "\" &";
+#endif
+            }
             std::system(cmd.c_str());
         }
     }
