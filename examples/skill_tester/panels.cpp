@@ -512,11 +512,14 @@ void draw_abilities_panel(Scene& scene, AppState& app) {
             const char* tag = is_orb ? "ORB"
                             : is_pure_passive ? "PAS"
                                               : behavior_label(ab->behavior());
+            // QWER 4 槽对应的按键字母 (与 input.cpp::process_keyboard 一致).
+            static const char kSlotKey[] = {'Q', 'W', 'E', 'R'};
+            const char slot_key = (i >= 0 && i < 4) ? kSlotKey[i] : '?';
             char label[128];
             if (is_orb) {
                 std::snprintf(label, sizeof(label),
-                              "[%d] %s\n%s  AC %s  MP %d",
-                              i + 1, ab->name().c_str(), tag,
+                              "[%c] %s\n%s  AC %s  MP %d",
+                              slot_key, ab->name().c_str(), tag,
                               ab->autocast_on() ? "ON" : "OFF",
                               static_cast<int>(mp));
             } else if (is_pure_passive) {
@@ -525,8 +528,8 @@ void draw_abilities_panel(Scene& scene, AppState& app) {
                               ab->name().c_str(), tag, ab->level());
             } else {
                 std::snprintf(label, sizeof(label),
-                              "[%d] %s\n%s  CD %.1fs  MP %d",
-                              i + 1, ab->name().c_str(), tag, cd,
+                              "[%c] %s\n%s  CD %.1fs  MP %d",
+                              slot_key, ab->name().c_str(), tag, cd,
                               static_cast<int>(mp));
             }
             if (is_pure_passive) {

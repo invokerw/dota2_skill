@@ -131,7 +131,8 @@ void process_keyboard(Scene& scene, AppState& app, InputContext& ctx) {
     if (!ctx.gui_wants_keyboard && app.aim == AimMode::None && IsKeyPressed(KEY_SPACE)) {
         app.paused = !app.paused;
     }
-    if (!ctx.gui_wants_keyboard && IsKeyPressed(KEY_R)) {
+    // F5 重建当前英雄场景 (Dota 风格 QWER 占了 R 槽, 不再用 R 做 rebuild).
+    if (!ctx.gui_wants_keyboard && IsKeyPressed(KEY_F5)) {
         scene.rebuild_with_hero(scene.hero_index());
         app.selected_unit_id = scene.caster() ? scene.caster()->id() : kInvalidEntityId;
         app.selected_ability = -1;
@@ -152,11 +153,11 @@ void process_keyboard(Scene& scene, AppState& app, InputContext& ctx) {
 
     const bool queue_mod = queue_modifier_held();
 
-    // 数字键 1-4 选中技能槽: 第一次按 = 选并进入瞄准; 已在该槽瞄准时, 对
+    // QWER 选中技能槽 (Dota 标准): 第一次按 = 选并进入瞄准; 已在该槽瞄准时, 对
     // NoTarget 触发释放, 其他类型保持选中 (无变化). 法球 (is_orb) 不是主动技能,
     // 按键直接 toggle autocast, 不进入瞄准. 纯被动 (Passive 非 orb) 槽只展示,
-    // 数字键忽略.
-    const int key_slots[] = {KEY_ONE, KEY_TWO, KEY_THREE, KEY_FOUR};
+    // QWER 忽略.
+    const int key_slots[] = {KEY_Q, KEY_W, KEY_E, KEY_R};
     const int slot_count = std::min<int>(
         kAbilitySlotMax, static_cast<int>(scene.caster_abilities().size()));
     for (int i = 0; i < slot_count && !ctx.gui_wants_keyboard; ++i) {
