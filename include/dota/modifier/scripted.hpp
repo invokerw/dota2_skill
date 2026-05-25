@@ -61,6 +61,11 @@ public:
     Unit*    source() const;
     Ability* ability() const { return ability_; }
 
+    // 实例 self 表. 给绑定层在 attach 之前往里塞快照参数 (e.g. add_modifier
+    // 第 5 个 params 表里的自定义 key), 让 OnCreated / dynamic Properties 钩子
+    // 可以直接读 self.<key>. 不要拿来跨钩子保存 C++ 端的临时句柄.
+    sol::table& self_table() { return table_; }
+
 private:
     void apply_compiled_flags(const LuaModifierRegistry::CompiledSpec& spec);
 

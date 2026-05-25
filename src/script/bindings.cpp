@@ -205,7 +205,11 @@ void register_bindings(sol::state& lua, LuaState* owner) {
             CastTarget t; t.point = point; t.has_point = true;
             return a->trigger_cast(t, *caster.world()) == CastError::None;
         },
-        // 通过名字应用注册过的 Lua 修饰器. 第 4 个 params 表可选地携带 duration / stacks.
+        // 通过名字应用注册过的 Lua 修饰器.
+        // 第 5 个 params 表保留 `duration` / `stacks` 两个特殊键; 其它 key 会被拷到
+        // ScriptedModifier 的 self 表里, 这样 debuff 端可以在挂载瞬间快照 caster
+        // ability 的级别相关数值 (slow_pct, dot_dps 等), 不再依赖 caster 是否
+        // 还活着 / 是否还持有那个 ability.
         "add_modifier",
         [owner](Unit& u, const std::string& mod_name,
                 sol::optional<Unit*> source, sol::object /*ability*/,
@@ -231,6 +235,19 @@ void register_bindings(sol::state& lua, LuaState* owner) {
             auto mod = std::make_unique<ScriptedModifier>(
                 u, mod_name, duration, *spec, *owner, src_id, /*ability=*/nullptr);
             if (stacks > 1) mod->set_stack_count(stacks);
+            // 把 params 里 duration/stacks 之外的 key 透传到 self 表. 必须在
+            // attach() 之前完成, 因为 attach 内部会调 on_created, OnCreated 钩子
+            // 应该看到这些初始值.
+            if (params) {
+                sol::table p = *params;
+                sol::table self = mod->self_table();
+                for (auto& kv : p) {
+                    if (!kv.first.is<std::string>()) continue;
+                    const std::string key = kv.first.as<std::string>();
+                    if (key == "duration" || key == "stacks") continue;
+                    self[key] = kv.second;
+                }
+            }
             return u.modifiers().attach(std::move(mod));
         });
 

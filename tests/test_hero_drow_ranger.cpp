@@ -108,3 +108,29 @@ TEST_F(HeroDrowTest, FrostArrowDegradesWithoutMana) {
     EXPECT_TRUE(target_->modifiers().find("modifier_drow_ranger_frost_arrows_slow")
                 == nullptr);
 }
+
+// ability_special slow_pct: lvl1=15, lvl4=60. debuff 自身拿不到 caster 的
+// ability, 走 add_modifier 的 params 快照. 这里直接读 target.move_speed 验证
+// 减速量按 ability 等级正确生效.
+TEST_F(HeroDrowTest, FrostArrowSlowScalesWithLevel) {
+    const double base_ms = target_->move_speed();
+    drow_->set_mana(100.0);
+
+    // lvl1: 15% 减速.
+    drow_->issue_order(OrderAttackTarget{target_->id()});
+    world_.advance(0.5);
+    ASSERT_NE(target_->modifiers().find("modifier_drow_ranger_frost_arrows_slow"),
+              nullptr);
+    EXPECT_NEAR(target_->move_speed(), base_ms * 0.85, 1e-6);
+
+    // 切到 lvl4: 60% 减速. 直接 remove 旧 debuff 让下一次普攻重新挂.
+    target_->modifiers().remove("modifier_drow_ranger_frost_arrows_slow");
+    ability_->set_level(4);
+    drow_->set_mana(100.0);
+    drow_->issue_order(OrderAttackTarget{target_->id()});
+    // 第二次普攻要等 BAT (1.0s) 走完, 加上投射物飞行时间.
+    world_.advance(1.5);
+    ASSERT_NE(target_->modifiers().find("modifier_drow_ranger_frost_arrows_slow"),
+              nullptr);
+    EXPECT_NEAR(target_->move_speed(), base_ms * 0.40, 1e-6);
+}
