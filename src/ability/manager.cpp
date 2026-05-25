@@ -1,5 +1,8 @@
 #include "dota/ability/manager.hpp"
 
+#include "dota/core/unit.hpp"
+#include "dota/modifier/manager.hpp"
+
 #include <algorithm>
 
 namespace dota {
@@ -24,6 +27,13 @@ const Ability* AbilityManager::find(const std::string& name) const {
 
 bool AbilityManager::remove_at(std::size_t index) {
     if (index >= abilities_.size()) return false;
+    // 先清掉这个 ability 在 instantiate 时挂上的 intrinsic modifier, 否则它内部
+    // 持有的 ability_ 指针会随 ability 析构而悬空, 后续 OnRefresh / 属性聚合
+    // 调用 self.ability:get_special() 会崩.
+    const std::string& intrinsic = abilities_[index]->intrinsic_modifier_name();
+    if (!intrinsic.empty()) {
+        owner_.modifiers().remove(intrinsic);
+    }
     abilities_.erase(abilities_.begin() + static_cast<std::ptrdiff_t>(index));
     return true;
 }

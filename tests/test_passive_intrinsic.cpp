@@ -2,6 +2,7 @@
 // set_level 触发 OnRefresh 钩子.
 #include "dota/ability/ability.hpp"
 #include "dota/ability/datadriven.hpp"
+#include "dota/ability/manager.hpp"
 #include "dota/ability/registry.hpp"
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
@@ -111,6 +112,25 @@ TEST(PassiveIntrinsic, MissingModifierReportsErrorAndDoesNotCrash) {
     ASSERT_NE(a, nullptr);
     EXPECT_EQ(hero->modifiers().find("modifier_does_not_exist"), nullptr);
     EXPECT_TRUE(saw_error);
+}
+
+TEST(PassiveIntrinsic, RemoveAbilityCleansUpIntrinsicModifier) {
+    // 删除 ability 时, intrinsic_modifier 必须一起清理: 否则 modifier 内部持有的
+    // ability_ 指针会随 ability 析构而悬空.
+    LuaState lua;
+    AbilityRegistry reg;
+    reg.set_lua(&lua);
+
+    register_intrinsic_test_modifier(lua);
+    reg.register_def(make_passive_def());
+
+    World w;
+    auto* hero = w.spawn("hero", Team::Radiant, stats(), {0.0, 0.0});
+    ASSERT_NE(reg.instantiate("test_passive", *hero), nullptr);
+    ASSERT_NE(hero->modifiers().find("modifier_intrinsic_test"), nullptr);
+
+    EXPECT_TRUE(hero->abilities().remove_at(0));
+    EXPECT_EQ(hero->modifiers().find("modifier_intrinsic_test"), nullptr);
 }
 
 TEST(PassiveIntrinsic, NonPassiveAbilityCanAlsoDeclareIntrinsic) {
