@@ -16,12 +16,14 @@
 
 namespace dota::skill_tester {
 
-// 瞄准状态机. None = 未选技能 / 已选 passive; 其余三种对应 ability behavior.
+// 瞄准状态机. None = 未选技能 / 已选 passive; 其余对应 ability behavior 或
+// AwaitAttackTarget = 普攻待选目标 (A 键触发, 不绑定到 ability slot).
 enum class AimMode {
     None,
     AwaitUnitTarget,
     AwaitPointTarget,
     AwaitConfirmNoTarget,
+    AwaitAttackTarget,
 };
 
 inline AimMode aim_for_behavior(std::uint32_t b) {

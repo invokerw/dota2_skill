@@ -6,6 +6,8 @@
 //   * UnitTarget: 鼠标 hover 一个 dummy, 左键释放; 距离过远显示红圈.
 //   * PointTarget: 鼠标移动时画从 caster 到指针的线 + width / radius 提示, 左键释放.
 //   * NoTarget: 进入待确认状态, 再次按数字键 / SPACE / 左键释放.
+//   * 法球 (orb, is_orb): 点击 / 按数字键 = toggle autocast, 不进入瞄准.
+//   A: 普攻待选目标, 左键点中敌方单位派 OrderAttackTarget.
 //   ESC 或右键取消瞄准.
 //   R 重置当前英雄, SPACE 暂停 (非瞄准时), ESC 退出 (无瞄准时).
 //   Shift 修饰键 = 队尾追加 (Shift+RMB 走点 / Shift+LMB 释放都会进队列).
@@ -83,6 +85,20 @@ void draw_battlefield(Scene& scene,
                          ctx.mouse_world, ctx.mouse_in_field);
     }
 
+    // 普攻瞄准: 高亮 hover 敌方单位.
+    if (app.aim == AimMode::AwaitAttackTarget && ctx.hover_unit && scene.caster()) {
+        Unit* h = ctx.hover_unit;
+        const bool enemy = h->team() != scene.caster()->team();
+        const Vector2 us = cam.to_screen(h->position());
+        const float r_px = std::max(visual::kMinUnitRadiusPx,
+                                    cam.scalar(h->hull_radius()));
+        const Color c = enemy ? Color{255, 90, 90, 255} : Color{160, 160, 160, 200};
+        DrawCircleLines(static_cast<int>(us.x), static_cast<int>(us.y),
+                        r_px + 4.0f, c);
+        DrawCircleLines(static_cast<int>(us.x), static_cast<int>(us.y),
+                        r_px + 6.0f, c);
+    }
+
     draw_move_marker(cam, scene.caster());
     draw_order_waypoints(cam, scene.caster(), scene.world());
     EndScissorMode();
@@ -94,10 +110,11 @@ void draw_help_line(AimMode aim, const FieldRect& field) {
         case AimMode::AwaitUnitTarget:      aim_hint = "  [aim: click a target]"; break;
         case AimMode::AwaitPointTarget:     aim_hint = "  [aim: click a point]"; break;
         case AimMode::AwaitConfirmNoTarget: aim_hint = "  [confirm: SPACE / number / left-click]"; break;
+        case AimMode::AwaitAttackTarget:    aim_hint = "  [attack: click an enemy]"; break;
         default: break;
     }
     DrawText(TextFormat(
-                 "1-4 / click to select   LMB cast   RMB move / cancel   "
+                 "1-4 / click to select   A attack   LMB cast   RMB move / cancel   "
                  "Shift queue   S stop   ESC cancel   R reset   SPACE pause%s",
                  aim_hint),
              kSidePanelW + 12, kWindowH - kAbilityBarH - 22,

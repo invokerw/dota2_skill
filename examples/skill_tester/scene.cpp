@@ -129,8 +129,11 @@ std::vector<Unit*> Scene::units() const {
 void Scene::sync_caster_abilities() {
     caster_abilities_.clear();
     if (!caster_) return;
+    // 法球 (orb) 同时带 Passive + Attack 标志, 它们没有主动施放但需要在快捷栏
+    // 显示并支持 autocast toggle, 因此放行.
     for (const auto& a : caster_->abilities().all()) {
-        if (a && !a->is_passive()) caster_abilities_.push_back(a.get());
+        if (!a) continue;
+        if (!a->is_passive() || a->is_orb()) caster_abilities_.push_back(a.get());
     }
 }
 

@@ -446,27 +446,54 @@ void draw_abilities_panel(Scene& scene, AppState& app) {
         for (int i = 0; i < slots; ++i) {
             if (i > 0) ImGui::SameLine();
             Ability* ab = scene.caster_abilities()[i];
-            const bool selected = (app.selected_ability == i);
+            const bool is_orb = ab->is_orb();
+            // 法球槽 = autocast 状态; 主动槽 = 选中态.
+            const bool highlight = is_orb ? ab->autocast_on()
+                                          : (app.selected_ability == i);
             ImGui::PushID(i);
-            if (selected) {
-                ImGui::PushStyleColor(ImGuiCol_Button,
-                    ImVec4(0.95f, 0.78f, 0.25f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                    ImVec4(1.0f, 0.85f, 0.35f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                    ImVec4(0.85f, 0.7f, 0.2f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0,0,0,1));
+            if (highlight) {
+                if (is_orb) {
+                    ImGui::PushStyleColor(ImGuiCol_Button,
+                        ImVec4(0.30f, 0.60f, 0.95f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                        ImVec4(0.40f, 0.70f, 1.00f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                        ImVec4(0.20f, 0.50f, 0.85f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,1,1));
+                } else {
+                    ImGui::PushStyleColor(ImGuiCol_Button,
+                        ImVec4(0.95f, 0.78f, 0.25f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                        ImVec4(1.0f, 0.85f, 0.35f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                        ImVec4(0.85f, 0.7f, 0.2f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0,0,0,1));
+                }
             }
             const double cd = ab->cooldown_remaining();
             const double mp = ab->mana_cost_for_level();
-            const char* tag = behavior_label(ab->behavior());
+            const char* tag = is_orb ? "ORB" : behavior_label(ab->behavior());
             char label[128];
-            std::snprintf(label, sizeof(label),
-                          "[%d] %s\n%s  CD %.1fs  MP %d",
-                          i + 1, ab->name().c_str(), tag, cd,
-                          static_cast<int>(mp));
-            if (ImGui::Button(label, slot_sz)) app.selected_ability = i;
-            if (selected) ImGui::PopStyleColor(4);
+            if (is_orb) {
+                std::snprintf(label, sizeof(label),
+                              "[%d] %s\n%s  AC %s  MP %d",
+                              i + 1, ab->name().c_str(), tag,
+                              ab->autocast_on() ? "ON" : "OFF",
+                              static_cast<int>(mp));
+            } else {
+                std::snprintf(label, sizeof(label),
+                              "[%d] %s\n%s  CD %.1fs  MP %d",
+                              i + 1, ab->name().c_str(), tag, cd,
+                              static_cast<int>(mp));
+            }
+            if (ImGui::Button(label, slot_sz)) {
+                if (is_orb) {
+                    ab->set_autocast_on(!ab->autocast_on());
+                } else {
+                    app.selected_ability = i;
+                }
+            }
+            if (highlight) ImGui::PopStyleColor(4);
             ImGui::PopID();
         }
     }

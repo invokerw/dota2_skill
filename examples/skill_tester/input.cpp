@@ -149,13 +149,22 @@ void process_keyboard(Scene& scene, AppState& app, InputContext& ctx) {
     const bool queue_mod = queue_modifier_held();
 
     // 数字键 1-4 选中技能槽: 第一次按 = 选并进入瞄准; 已在该槽瞄准时, 对
-    // NoTarget 触发释放, 其他类型保持选中 (无变化).
+    // NoTarget 触发释放, 其他类型保持选中 (无变化). 法球 (is_orb) 不是主动技能,
+    // 按键直接 toggle autocast, 不进入瞄准.
     const int key_slots[] = {KEY_ONE, KEY_TWO, KEY_THREE, KEY_FOUR};
     const int slot_count = std::min<int>(
         kAbilitySlotMax, static_cast<int>(scene.caster_abilities().size()));
     for (int i = 0; i < slot_count && !ctx.gui_wants_keyboard; ++i) {
         if (!IsKeyPressed(key_slots[i])) continue;
         Ability* ab = scene.caster_abilities()[i];
+        if (ab->is_orb()) {
+            const bool turn_on = !ab->autocast_on();
+            ab->set_autocast_on(turn_on);
+            app.show_toast(std::string("Autocast ") + (turn_on ? "ON: " : "OFF: ") +
+                               ab->name(),
+                           Color{200, 200, 80, 255}, scene.world()->time());
+            continue;
+        }
         const AimMode want = aim_for_behavior(ab->behavior());
         if (app.selected_ability == i && app.aim == AimMode::AwaitConfirmNoTarget) {
             CastTarget tgt;
@@ -165,6 +174,13 @@ void process_keyboard(Scene& scene, AppState& app, InputContext& ctx) {
             app.selected_ability = i;
             app.aim = want;
         }
+    }
+
+    // A 键: 普攻. 进入待选目标模式, 下一次左键点中敌方单位即派 OrderAttackTarget.
+    if (!ctx.gui_wants_keyboard && IsKeyPressed(KEY_A) &&
+        scene.caster() && scene.caster()->alive()) {
+        app.selected_ability = -1;
+        app.aim = AimMode::AwaitAttackTarget;
     }
 
     // SPACE 在 NoTarget 待确认时也可释放
@@ -200,6 +216,20 @@ void process_mouse(Scene& scene, AppState& app, const InputContext& ctx) {
     if (ctx.mouse_in_field && app.aim == AimMode::None &&
         IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && ctx.inspect_hover_unit) {
         app.selected_unit_id = ctx.inspect_hover_unit->id();
+    }
+
+    // A 键普攻: 待选目标模式下, 左键点中敌方 hover 单位即派 OrderAttackTarget.
+    if (ctx.mouse_in_field && app.aim == AimMode::AwaitAttackTarget &&
+        IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+        scene.caster() && scene.caster()->alive()) {
+        Unit* tgt = ctx.hover_unit;
+        if (tgt && tgt->alive() && tgt->team() != scene.caster()->team()) {
+            scene.caster()->issue_order(OrderAttackTarget{tgt->id()}, queue_mod);
+            app.show_toast(std::string(queue_mod ? "Queue attack: " : "Attack: ") +
+                               tgt->name(),
+                           Color{120, 230, 120, 255}, scene.world()->time());
+        }
+        app.reset_aim();
     }
 
     // 左键 -- 仅在战场内有效, 且当前选了技能槽
