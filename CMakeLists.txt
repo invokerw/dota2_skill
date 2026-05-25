@@ -300,6 +300,7 @@ add_executable(dota_tests
     tests/test_attack_projectile_name.cpp
     tests/test_hero_drow_ranger.cpp
     tests/test_hero_luna.cpp
+    tests/test_hero_luna_moon_glaive.cpp
     tests/test_hero_sven_cleave.cpp
     tests/test_hero_viper.cpp
     tests/test_hero_obsidian_destroyer.cpp

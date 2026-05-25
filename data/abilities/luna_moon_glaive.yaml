@@ -1,0 +1,13 @@
+name: luna_moon_glaive
+base_class: ability_datadriven
+behavior: [PASSIVE]
+target_team: ENEMY
+cast_point: 0.0
+cooldown: [0]
+mana_cost: [0]
+intrinsic_modifier: modifier_luna_moon_glaive
+ability_special:
+  bounces:           [3, 4, 5, 6]
+  damage_reduction:  [52, 46, 40, 34]   # 每次弹跳的伤害减免百分比
+  bounce_radius:     [500, 500, 500, 500]
+  bounce_speed:      [900, 900, 900, 900]
