@@ -21,6 +21,7 @@
 - `include/dota/combat/`, `src/combat/`: `deal_damage` 和 `deal_heal` 分阶段战斗管线.
 - `include/dota/projectile/`, `src/projectile/`: 直线和追踪投射物, `ProjectileManager`.
 - `include/dota/replay/`, `src/replay/`: JSONL 录像写入和回放.
+- `include/dota/log/`, `src/log/`: `CombatLog`. 旁观订阅 World 上的 Damage / Heal / Modifier / Cast / Attack / Death 事件, 缓冲成结构化条目, 供 skill_tester 浮动窗口或外部观察者展示. 不影响游戏逻辑.
 - `include/dota/tools/`, `src/tools/`: 编辑器/迁移用工具层. `HeroDoc`/`HeroCatalog`, `AbilityDoc`/`AbilityCatalog`, `*_ops` 文件级 CRUD, `ModifierScanner`, `Trash`.
 - `src/script/`: sol2 绑定, 枚举表, `register_modifier`.
 - `data/heroes/*.yaml`: 英雄定义, 只含 `hero:` 元字段和 `abilities: [name1, ...]` 引用列表.
@@ -29,7 +30,7 @@
 - `data/scripts/modifiers/*.lua`: Lua modifier 脚本.
 - `examples/skill_tester/`: raylib + imgui 交互式技能测试器.
 - `examples/hero_workshop/`: raylib + imgui 数据编辑器. 左侧 Heroes / Abilities / Modifiers 三 tab, 各自管列表 + 详情 + dirty.
-- `tests/`: GoogleTest 测试. 当前构建有 228 个测试, 最近一次全量 `ctest` 通过.
+- `tests/`: GoogleTest 测试. 当前构建有 277 个测试, 最近一次全量 `ctest` 通过.
 
 ## 构建和测试
 

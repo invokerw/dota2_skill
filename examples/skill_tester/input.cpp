@@ -145,6 +145,10 @@ void process_keyboard(Scene& scene, AppState& app, InputContext& ctx) {
         scene.caster()->issue_order(OrderStop{});
         app.reset_aim();
     }
+    // L: toggle combat log 浮动窗口.
+    if (!ctx.gui_wants_keyboard && IsKeyPressed(KEY_L)) {
+        app.show_combat_log = !app.show_combat_log;
+    }
 
     const bool queue_mod = queue_modifier_held();
 

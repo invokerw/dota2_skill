@@ -23,6 +23,8 @@ void Scene::rebuild_with_hero(std::size_t idx) {
     // 销毁顺序: World 持有的 ScriptedAbility 内部 sol::table / sol::function
     // 引用了 lua_ 拥有的 lua_State. 必须先销毁 world_ (连带 reg_), 再销毁
     // lua_, 否则 sol 析构时会对已销毁的 state 调 luaL_unref 触发 segfault.
+    // CombatLog 订阅 world_->events(), 必须早于 world_ 析构.
+    combat_log_.reset();
     world_.reset();
     reg_.reset();
     lua_.reset();
@@ -36,6 +38,7 @@ void Scene::rebuild_with_hero(std::size_t idx) {
     }
 
     world_ = std::make_unique<World>();
+    combat_log_ = std::make_unique<CombatLog>(*world_);
     texts_.clear();
 
     const HeroEntry& h = catalog_.heroes()[hero_index_];

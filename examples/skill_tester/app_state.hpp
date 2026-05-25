@@ -37,6 +37,16 @@ struct AppState {
     double      toast_t0{-10.0};
     Color       toast_color{255, 200, 80, 255};
 
+    // Combat log 浮动窗口. 默认开启, 可拖拽 / 缩放, L 键 toggle.
+    bool show_combat_log{true};
+    bool log_show_damage     {true};
+    bool log_show_heal       {true};
+    bool log_show_modifier   {true};
+    bool log_show_cast       {true};
+    bool log_show_attack     {true};
+    bool log_show_death      {true};
+    bool log_autoscroll      {true};
+
     void show_toast(std::string text, Color c, double now) {
         toast_text = std::move(text);
         toast_t0 = now;

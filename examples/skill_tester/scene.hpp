@@ -9,6 +9,7 @@
 #include "dota/core/types.hpp"
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
+#include "dota/log/combat_log.hpp"
 #include "dota/script/lua_state.hpp"
 #include "dota/tools/hero_catalog.hpp"
 
@@ -72,6 +73,7 @@ public:
     const DummyOverride& dummy_override() const     { return dummy_override_; }
     const std::vector<AbilityChoice>& ability_choices() const { return ability_choices_; }
     LuaState* lua_state() const { return lua_.get(); }
+    CombatLog* combat_log() const { return combat_log_.get(); }
 
     Unit* find_unit(EntityId id) const;
     std::vector<Unit*> units() const;
@@ -92,6 +94,7 @@ private:
     std::unique_ptr<LuaState>        lua_;
     std::unique_ptr<AbilityRegistry> reg_;
     std::unique_ptr<World>           world_;
+    std::unique_ptr<CombatLog>       combat_log_;
     Unit*                            caster_{nullptr};
     std::vector<Unit*>               dummies_;
     std::vector<Ability*>            caster_abilities_;

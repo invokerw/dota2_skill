@@ -8,6 +8,7 @@
 #include "dota/ability/behavior.hpp"
 #include "dota/core/unit.hpp"
 #include "dota/core/world.hpp"
+#include "dota/log/combat_log.hpp"
 #include "dota/modifier/manager.hpp"
 #include "dota/modifier/modifier.hpp"
 
@@ -400,10 +401,30 @@ void draw_scenario_tab(Scene& scene, AppState& app) {
 
 } // namespace
 
-void draw_heroes_panel(const tools::HeroCatalog& catalog, Scene& scene, AppState& app) {
-    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
+float draw_main_menu_bar(AppState& app) {
+    float h = 0.0f;
+    if (ImGui::BeginMainMenuBar()) {
+        if (ImGui::BeginMenu("Window")) {
+            ImGui::MenuItem("Combat Log", "L", &app.show_combat_log);
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Help")) {
+            ImGui::TextDisabled("dota2_skill -- skill tester");
+            ImGui::TextDisabled("1-4 / click 选技能, A 普攻, LMB 释放, RMB 走 / 取消.");
+            ImGui::TextDisabled("Shift 队尾追加, S 全停, R 重置, SPACE 暂停, L 日志.");
+            ImGui::EndMenu();
+        }
+        h = ImGui::GetWindowSize().y;
+        ImGui::EndMainMenuBar();
+    }
+    return h;
+}
+
+void draw_heroes_panel(const tools::HeroCatalog& catalog, Scene& scene,
+                       AppState& app, float menu_h) {
+    ImGui::SetNextWindowPos(ImVec2(0.0f, menu_h));
     ImGui::SetNextWindowSize(ImVec2(static_cast<float>(kSidePanelW),
-                                    static_cast<float>(kWindowH - kAbilityBarH)));
+                                    static_cast<float>(kWindowH - kAbilityBarH) - menu_h));
     if (ImGui::Begin("Heroes", nullptr, kFixedFlags)) {
         const int prev_active = app.hero_active;
         for (std::size_t i = 0; i < catalog.heroes().size(); ++i) {
@@ -500,10 +521,10 @@ void draw_abilities_panel(Scene& scene, AppState& app) {
     ImGui::End();
 }
 
-void draw_inspector_panel(Scene& scene, AppState& app) {
-    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(kWindowW - kTunePanelW), 0.0f));
+void draw_inspector_panel(Scene& scene, AppState& app, float menu_h) {
+    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(kWindowW - kTunePanelW), menu_h));
     ImGui::SetNextWindowSize(ImVec2(static_cast<float>(kTunePanelW),
-                                    static_cast<float>(kWindowH)));
+                                    static_cast<float>(kWindowH) - menu_h));
     if (ImGui::Begin("Inspector", nullptr, kFixedFlags)) {
         Unit* selected = scene.find_unit(app.selected_unit_id);
         if (!selected && scene.caster()) {
@@ -548,6 +569,264 @@ void draw_inspector_panel(Scene& scene, AppState& app) {
             ImGui::EndTabBar();
         }
     }
+    ImGui::End();
+}
+
+namespace {
+
+// 类别 -> AppState 复选框的映射 + 行颜色. 颜色仿 dota 客户端 combat log:
+//   红=伤害, 绿=治疗, 黄=modifier+/橙=modifier-, 蓝=施法, 灰=普攻, 暗红=死亡.
+//   类型 tag 与该行内的 [名字] 共用同一颜色, 其他文字保持默认色.
+struct LogKindStyle {
+    bool       AppState::*toggle;
+    ImVec4     color;
+    const char* label;
+};
+
+const LogKindStyle& style_for(CombatLogKind k) {
+    static const LogKindStyle damage   {&AppState::log_show_damage,
+        ImVec4(1.00f, 0.55f, 0.55f, 1.0f), "DMG"};
+    static const LogKindStyle heal     {&AppState::log_show_heal,
+        ImVec4(0.55f, 0.95f, 0.55f, 1.0f), "HEAL"};
+    static const LogKindStyle mod_add  {&AppState::log_show_modifier,
+        ImVec4(0.95f, 0.85f, 0.40f, 1.0f), "MOD+"};
+    static const LogKindStyle mod_rem  {&AppState::log_show_modifier,
+        ImVec4(0.95f, 0.65f, 0.30f, 1.0f), "MOD-"};
+    static const LogKindStyle cast     {&AppState::log_show_cast,
+        ImVec4(0.55f, 0.80f, 1.00f, 1.0f), "CAST"};
+    static const LogKindStyle attack   {&AppState::log_show_attack,
+        ImVec4(0.85f, 0.85f, 0.85f, 1.0f), "ATK"};
+    static const LogKindStyle death    {&AppState::log_show_death,
+        ImVec4(0.95f, 0.40f, 0.40f, 1.0f), "DIE"};
+    switch (k) {
+        case CombatLogKind::Damage:              return damage;
+        case CombatLogKind::Heal:                return heal;
+        case CombatLogKind::ModifierAdded:       return mod_add;
+        case CombatLogKind::ModifierRemoved:     return mod_rem;
+        case CombatLogKind::AbilityCastStarted:
+        case CombatLogKind::AbilityCastFinished: return cast;
+        case CombatLogKind::AttackLanded:        return attack;
+        case CombatLogKind::UnitDied:            return death;
+    }
+    return damage;
+}
+
+bool kind_visible(const AppState& app, CombatLogKind k) {
+    return app.*(style_for(k).toggle);
+}
+
+// 名字回退: 名字为空时显示 #id, 全空时显示 ?. 跟 CombatLog::format 内部规则一致.
+std::string entity_label(const std::string& name, EntityId id) {
+    if (!name.empty()) return name;
+    if (id == kInvalidEntityId) return "?";
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "#%u", id);
+    return buf;
+}
+
+const char* dtype_text(DamageType t) {
+    switch (t) {
+        case DamageType::Physical: return "physical";
+        case DamageType::Magical:  return "magical";
+        case DamageType::Pure:     return "pure";
+    }
+    return "?";
+}
+
+// SameLine 紧贴 (无额外间距). 中间靠手动空格控制可读性.
+void same_line_tight() { ImGui::SameLine(0.0f, 0.0f); }
+
+// 输出 "[text]" 用 col 染色.
+void draw_bracketed(const ImVec4& col, const char* text) {
+    ImGui::PushStyleColor(ImGuiCol_Text, col);
+    ImGui::Text("[%s]", text);
+    ImGui::PopStyleColor();
+}
+
+void draw_plain(const char* text) {
+    ImGui::TextUnformatted(text);
+}
+
+// 渲染一行 entry 的"内容段" (时间和类型 tag 由调用方画). col 是当前 kind 颜色,
+// 用来给 [单位名] / [modifier 名] / [ability 名] 染色.
+void draw_entry_content(const CombatLogEntry& e, const ImVec4& col) {
+    const std::string s = entity_label(e.source_name, e.source);
+    const std::string t = entity_label(e.target_name, e.target);
+    char num[64];
+    switch (e.kind) {
+        case CombatLogKind::Damage:
+            draw_bracketed(col, s.c_str()); same_line_tight();
+            draw_plain(" hits ");           same_line_tight();
+            draw_bracketed(col, t.c_str()); same_line_tight();
+            std::snprintf(num, sizeof(num), " for %.0f %s (pre %.0f)",
+                          e.amount, dtype_text(e.dtype), e.amount_pre);
+            draw_plain(num);
+            break;
+        case CombatLogKind::Heal:
+            draw_bracketed(col, s.c_str()); same_line_tight();
+            draw_plain(" heals ");          same_line_tight();
+            draw_bracketed(col, t.c_str()); same_line_tight();
+            std::snprintf(num, sizeof(num), " for %.0f", e.amount);
+            draw_plain(num);
+            break;
+        case CombatLogKind::ModifierAdded:
+            draw_bracketed(col, t.c_str());          same_line_tight();
+            draw_plain(" gains ");                   same_line_tight();
+            draw_bracketed(col, e.name.c_str());     same_line_tight();
+            if (e.flag) {
+                std::snprintf(num, sizeof(num), " (permanent, %d stack%s)",
+                              e.stacks, e.stacks == 1 ? "" : "s");
+            } else {
+                std::snprintf(num, sizeof(num), " (%.1fs, %d stack%s)",
+                              e.amount, e.stacks, e.stacks == 1 ? "" : "s");
+            }
+            draw_plain(num);
+            break;
+        case CombatLogKind::ModifierRemoved:
+            draw_bracketed(col, t.c_str());      same_line_tight();
+            draw_plain(" loses ");               same_line_tight();
+            draw_bracketed(col, e.name.c_str());
+            break;
+        case CombatLogKind::AbilityCastStarted:
+            draw_bracketed(col, s.c_str());      same_line_tight();
+            draw_plain(" casts ");               same_line_tight();
+            draw_bracketed(col, e.name.c_str());
+            if (e.target != kInvalidEntityId) {
+                same_line_tight();
+                draw_plain(" on ");              same_line_tight();
+                draw_bracketed(col, t.c_str());
+            }
+            break;
+        case CombatLogKind::AbilityCastFinished:
+            draw_bracketed(col, s.c_str());      same_line_tight();
+            draw_plain(e.flag ? " interrupted " : " finished ");
+            same_line_tight();
+            draw_bracketed(col, e.name.c_str());
+            break;
+        case CombatLogKind::AttackLanded:
+            draw_bracketed(col, s.c_str());      same_line_tight();
+            draw_plain(" attacks ");             same_line_tight();
+            draw_bracketed(col, t.c_str());      same_line_tight();
+            if (e.flag) {
+                draw_plain(" -- missed");
+            } else {
+                std::snprintf(num, sizeof(num), " for %.0f", e.amount);
+                draw_plain(num);
+            }
+            break;
+        case CombatLogKind::UnitDied:
+            draw_bracketed(col, t.c_str());      same_line_tight();
+            draw_plain(" died");
+            if (e.source != kInvalidEntityId) {
+                same_line_tight();
+                draw_plain(" (killer: ");        same_line_tight();
+                draw_bracketed(col, s.c_str());  same_line_tight();
+                draw_plain(")");
+            }
+            break;
+    }
+}
+
+} // namespace
+
+void draw_combat_log_window(Scene& scene, AppState& app) {
+    if (!app.show_combat_log) return;
+    CombatLog* log = scene.combat_log();
+    if (!log) return;
+
+    // 默认右下角弹出, 之后由用户拖拽 + imgui.ini 记位.
+    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(kWindowW - kTunePanelW - 460),
+                                   static_cast<float>(kWindowH - kAbilityBarH - 320)),
+                            ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(440.0f, 300.0f), ImGuiCond_FirstUseEver);
+
+    if (!ImGui::Begin("Combat Log", &app.show_combat_log)) {
+        ImGui::End();
+        return;
+    }
+
+    // 顶部工具行: 类别 toggle + 自动滚动 + 清空.
+    ImGui::Checkbox("DMG",  &app.log_show_damage);   ImGui::SameLine();
+    ImGui::Checkbox("HEAL", &app.log_show_heal);     ImGui::SameLine();
+    ImGui::Checkbox("MOD",  &app.log_show_modifier); ImGui::SameLine();
+    ImGui::Checkbox("CAST", &app.log_show_cast);     ImGui::SameLine();
+    ImGui::Checkbox("ATK",  &app.log_show_attack);   ImGui::SameLine();
+    ImGui::Checkbox("DIE",  &app.log_show_death);
+    ImGui::Checkbox("Autoscroll", &app.log_autoscroll);
+    ImGui::SameLine();
+    if (ImGui::Button("Clear")) log->clear();
+    ImGui::SameLine();
+    ImGui::TextDisabled("(%zu / %zu)", log->size(), log->capacity());
+    ImGui::Separator();
+
+    // 滚动区. 行格式: [时间] [类型 tag] [内容]. 类型 tag 与内容里的 [name]
+    // 共用 kind 颜色, 时间用暗灰色.
+    if (ImGui::BeginChild("##log_scroll", ImVec2(0, 0), false,
+                          ImGuiWindowFlags_HorizontalScrollbar)) {
+        const auto& entries = log->entries();
+        std::vector<const CombatLogEntry*> visible;
+        visible.reserve(entries.size());
+        for (const auto& e : entries) {
+            if (kind_visible(app, e.kind)) visible.push_back(&e);
+        }
+        const ImVec4 time_col(0.55f, 0.55f, 0.55f, 1.0f);
+        ImGuiListClipper clipper;
+        clipper.Begin(static_cast<int>(visible.size()));
+        while (clipper.Step()) {
+            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
+                const CombatLogEntry& e = *visible[i];
+                const LogKindStyle& st = style_for(e.kind);
+                ImGui::PushID(i);
+
+                // 让整行点击可选中单位: 用一个跨行的 InvisibleButton 占位,
+                // 然后 SameLine 退回起点叠加文字.
+                const ImVec2 row_min = ImGui::GetCursorScreenPos();
+                const float  row_w   = ImGui::GetContentRegionAvail().x;
+                const float  row_h   = ImGui::GetTextLineHeightWithSpacing();
+                ImGui::InvisibleButton("##row", ImVec2(row_w, row_h));
+                if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+                    EntityId pick = e.source != kInvalidEntityId ? e.source : e.target;
+                    if (ImGui::IsMouseDoubleClicked(0)) {
+                        pick = e.target != kInvalidEntityId ? e.target : e.source;
+                    }
+                    if (pick != kInvalidEntityId) app.selected_unit_id = pick;
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::GetWindowDrawList()->AddRectFilled(
+                        row_min,
+                        ImVec2(row_min.x + row_w, row_min.y + row_h),
+                        ImGui::GetColorU32(ImGuiCol_HeaderHovered));
+                }
+
+                // 在 InvisibleButton 顶上绘制文字: 时间 -> 类型 -> 内容.
+                ImGui::SetCursorScreenPos(row_min);
+                char tbuf[16];
+                std::snprintf(tbuf, sizeof(tbuf), "%6.2fs", e.time);
+                ImGui::PushStyleColor(ImGuiCol_Text, time_col);
+                ImGui::TextUnformatted(tbuf);
+                ImGui::PopStyleColor();
+
+                ImGui::SameLine(80.0f);
+                ImGui::PushStyleColor(ImGuiCol_Text, st.color);
+                ImGui::TextUnformatted(st.label);
+                ImGui::PopStyleColor();
+
+                ImGui::SameLine(130.0f);
+                draw_entry_content(e, st.color);
+
+                ImGui::PopID();
+            }
+        }
+        clipper.End();
+
+        // 自动滚到底, 但用户手动上滚后停止.
+        if (app.log_autoscroll &&
+            ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 4.0f) {
+            ImGui::SetScrollHereY(1.0f);
+        }
+    }
+    ImGui::EndChild();
+
     ImGui::End();
 }
 

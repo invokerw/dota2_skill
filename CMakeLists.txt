@@ -191,6 +191,7 @@ add_library(dota_core
     src/ability/scripted.cpp
     src/script/lua_state.cpp
     src/script/bindings.cpp
+    src/log/combat_log.cpp
     src/replay/recorder.cpp
     src/replay/player.cpp
     src/tools/hero_catalog.cpp
@@ -222,6 +223,10 @@ if(BUILD_VISUAL)
     target_link_libraries(skill_tester PRIVATE dota_core raylib rlImGui)
     target_compile_definitions(skill_tester PRIVATE
         DOTA_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data\")
+    if(DOTA_CJK_FONT_PATH)
+        target_compile_definitions(skill_tester PRIVATE
+            DOTA_CJK_FONT_PATH=\"${DOTA_CJK_FONT_PATH}\")
+    endif()
 
     # --- Example: hero_workshop (英雄/技能/Modifier 编辑器) ---
     add_executable(hero_workshop
@@ -276,6 +281,7 @@ add_executable(dota_tests
     tests/test_hero_pudge.cpp
     tests/test_event_emission.cpp
     tests/test_recorder.cpp
+    tests/test_combat_log.cpp
     tests/test_replay_player.cpp
     tests/test_hero_catalog.cpp
     tests/test_skill_tester_smoke.cpp

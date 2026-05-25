@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <string>
 
 using namespace dota;
@@ -42,6 +43,29 @@ namespace {
 std::string data_dir() {
     if (const char* d = std::getenv("DOTA_DATA_DIR")) return d;
     return DOTA_DATA_DIR;
+}
+
+// 加载 CJK 字体. 路径解析: 运行期 env DOTA_CJK_FONT_PATH 优先, 否则用 CMake
+// 烤进去的 DOTA_CJK_FONT_PATH 宏 (DOWNLOAD_CJK_FONT=ON 时拉的). 找不到就保持
+// imgui 默认字体, 中文显示成方块但不影响功能.
+void load_cjk_font() {
+    namespace fs = std::filesystem;
+    std::string path;
+    if (const char* env = std::getenv("DOTA_CJK_FONT_PATH"); env && *env) {
+        path = env;
+    } else {
+#ifdef DOTA_CJK_FONT_PATH
+        path = DOTA_CJK_FONT_PATH;
+#endif
+    }
+    if (path.empty() || !fs::exists(path)) return;
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->Clear();
+    const ImWchar* ranges = io.Fonts->GetGlyphRangesChineseFull();
+    ImFont* font = io.Fonts->AddFontFromFileTTF(
+        path.c_str(), 16.0f, nullptr, ranges);
+    if (!font) io.Fonts->AddFontDefault();
+    rlImGuiReloadFonts();
 }
 
 visual::ViewCamera make_camera(const FieldRect& field) {
@@ -115,7 +139,7 @@ void draw_help_line(AimMode aim, const FieldRect& field) {
     }
     DrawText(TextFormat(
                  "1-4 / click to select   A attack   LMB cast   RMB move / cancel   "
-                 "Shift queue   S stop   ESC cancel   R reset   SPACE pause%s",
+                 "Shift queue   S stop   L log   ESC cancel   R reset   SPACE pause%s",
                  aim_hint),
              kSidePanelW + 12, kWindowH - kAbilityBarH - 22,
              14, Color{160, 160, 160, 255});
@@ -130,7 +154,7 @@ void draw_toast(const AppState& app, const FieldRect& field, double now) {
     tc.a = static_cast<unsigned char>(std::clamp(alpha, 0.0f, 1.0f) * 255.0f);
     const int tw = MeasureText(app.toast_text.c_str(), 22);
     const int tx = field.x0 + (field.w() - tw) / 2;
-    const int ty = 38;
+    const int ty = field.y0 + 38;
     DrawText(app.toast_text.c_str(), tx, ty, 22, tc);
 }
 
@@ -154,23 +178,34 @@ int main() {
     // 我们自己处理 ESC: 优先取消瞄准, 其次退出. 不让 raylib 直接 set close.
     SetExitKey(KEY_NULL);
     rlImGuiSetup(true);
+    load_cjk_font();
 
     Scene scene(catalog);
 
     AppState app;
     app.selected_unit_id = scene.caster() ? scene.caster()->id() : kInvalidEntityId;
 
-    const FieldRect field{
+    // 战场矩形的 y0 与 camera 在主循环里随 menu_h 重算; 初值用 0 占位.
+    FieldRect field{
         kSidePanelW, 0,
         kWindowW - kTunePanelW, kWindowH - kAbilityBarH,
     };
-    const visual::ViewCamera cam = make_camera(field);
+    visual::ViewCamera cam = make_camera(field);
+    int last_menu_h = -1;
 
     bool quit = false;
     while (!quit && !WindowShouldClose()) {
         // imgui 在每帧开始时消费 raylib 事件, 之后通过 io.WantCapture* 告诉我们
         // 输入是否被 GUI 截获. 必须在 rlImGuiBegin 之后再 query.
         rlImGuiBegin();
+
+        // 顶部主菜单栏先画, 拿到实际高度再算其余面板的 y0.
+        const int menu_h = static_cast<int>(draw_main_menu_bar(app));
+        if (menu_h != last_menu_h) {
+            field.y0 = menu_h;
+            cam = make_camera(field);
+            last_menu_h = menu_h;
+        }
 
         InputContext ctx = compute_input_context(cam, field, scene);
         process_keyboard(scene, app, ctx);
@@ -193,11 +228,12 @@ int main() {
                             catalog.heroes()[scene.hero_index()].yaml_name.c_str(),
                             scene.world()->time(),
                             app.paused ? "  [PAUSED]" : ""),
-                 field.x0 + 12, 10, 20, RAYWHITE);
+                 field.x0 + 12, field.y0 + 10, 20, RAYWHITE);
 
-        draw_heroes_panel(catalog, scene, app);
+        draw_heroes_panel(catalog, scene, app, static_cast<float>(menu_h));
         draw_abilities_panel(scene, app);
-        draw_inspector_panel(scene, app);
+        draw_inspector_panel(scene, app, static_cast<float>(menu_h));
+        draw_combat_log_window(scene, app);
 
         draw_help_line(app.aim, field);
         draw_toast(app, field, scene.world()->time());
