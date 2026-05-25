@@ -48,6 +48,21 @@ bool draw_hero_meta(YAML::Node hero_node) {
     changed |= drag_double("base_magic_resist", hero_node, 0.01f, 0.0,    1.0,   "%.2f");
     changed |= drag_double("hull_radius",       hero_node, 1.0f,  0.0,  200.0,  "%.0f");
 
+    // attack_type: melee / ranged 二选一. yaml 里写枚举字符串, 内部映射到
+    // UnitStats.ranged. 缺省视为 melee.
+    const std::string cur_at =
+        hero_node["attack_type"] ? hero_node["attack_type"].as<std::string>() : "melee";
+    int at_idx = (cur_at == "ranged") ? 1 : 0;
+    const char* at_items[] = {"melee", "ranged"};
+    if (ImGui::Combo("attack_type", &at_idx, at_items, 2)) {
+        hero_node["attack_type"] = std::string(at_items[at_idx]);
+        changed = true;
+    }
+    changed |= drag_double("attack_range",     hero_node, 5.0f,  0.0,  2000.0, "%.0f");
+    if (at_idx == 1) {
+        changed |= drag_double("projectile_speed", hero_node, 10.0f, 0.0,  3000.0, "%.0f");
+    }
+
     return changed;
 }
 

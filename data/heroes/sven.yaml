@@ -5,6 +5,8 @@ hero:
   base_armor: 2
   base_magic_resist: 0.25
   hull_radius: 27
+  attack_type: melee
+  attack_range: 150
 
 abilities:
   - sven_storm_hammer

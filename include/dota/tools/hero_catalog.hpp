@@ -29,6 +29,11 @@ struct HeroEntry {
     double      base_armor   = 0.0;
     double      magic_resist = 0.25;
     double      hull_radius  = 24.0;
+    // attack_type: "ranged" 写 true; 默认 "melee" 即 false. 远程时 attack_range
+    // 应给 >150 的合理值, projectile_speed 决定弹道飞行速度.
+    bool        ranged           = false;
+    double      attack_range     = 150.0;
+    double      projectile_speed = 900.0;
     std::vector<AbilityMeta> abilities;  // 按 yaml 顺序
 };
 

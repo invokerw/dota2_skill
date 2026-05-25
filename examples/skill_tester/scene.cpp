@@ -51,6 +51,9 @@ void Scene::rebuild_with_hero(std::size_t idx) {
     cs.magic_resist     = h.magic_resist;
     cs.hull_radius      = h.hull_radius;
     cs.base_attack_time = 1.7;
+    cs.ranged           = h.ranged;
+    cs.attack_range     = h.attack_range;
+    cs.projectile_speed = h.projectile_speed;
     caster_ = world_->spawn(h.yaml_name, Team::Radiant, cs, {-600.0, 0.0});
 
     // 被动 ability 也要 instantiate, 因为 intrinsic_modifier 是在
@@ -132,11 +135,10 @@ std::vector<Unit*> Scene::units() const {
 void Scene::sync_caster_abilities() {
     caster_abilities_.clear();
     if (!caster_) return;
-    // 法球 (orb) 同时带 Passive + Attack 标志, 它们没有主动施放但需要在快捷栏
-    // 显示并支持 autocast toggle, 因此放行.
+    // 全部 ability 都进快捷栏 -- 主动可点, 法球 toggle autocast, 纯被动只展示
+    // (灰色不可交互), 这样像 Luna 这种全被动英雄也不会出现 "no active abilities".
     for (const auto& a : caster_->abilities().all()) {
-        if (!a) continue;
-        if (!a->is_passive() || a->is_orb()) caster_abilities_.push_back(a.get());
+        if (a) caster_abilities_.push_back(a.get());
     }
 }
 

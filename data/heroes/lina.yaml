@@ -4,6 +4,9 @@ hero:
   base_mana: 351
   base_armor: 1
   base_magic_resist: 0.25
+  attack_type: ranged
+  attack_range: 650
+  projectile_speed: 1100
 
 abilities:
   - lina_dragon_slave

@@ -81,6 +81,9 @@ hero:
   base_mana: 300
   base_armor: 1
   base_magic_resist: 0.25
+  attack_type: ranged       # melee | ranged, 缺省 melee
+  attack_range: 600         # 普攻射程, 远程必填; 近战通常 150
+  projectile_speed: 1200    # 远程普攻投射物速度, 近战可省略
 
 abilities:
   - example_spell

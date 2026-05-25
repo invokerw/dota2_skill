@@ -4,6 +4,8 @@ hero:
   base_mana: 290
   base_armor: 1
   base_magic_resist: 0.25
+  attack_type: melee
+  attack_range: 150
 
 abilities:
   - earthshaker_fissure

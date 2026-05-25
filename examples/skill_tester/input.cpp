@@ -154,7 +154,8 @@ void process_keyboard(Scene& scene, AppState& app, InputContext& ctx) {
 
     // 数字键 1-4 选中技能槽: 第一次按 = 选并进入瞄准; 已在该槽瞄准时, 对
     // NoTarget 触发释放, 其他类型保持选中 (无变化). 法球 (is_orb) 不是主动技能,
-    // 按键直接 toggle autocast, 不进入瞄准.
+    // 按键直接 toggle autocast, 不进入瞄准. 纯被动 (Passive 非 orb) 槽只展示,
+    // 数字键忽略.
     const int key_slots[] = {KEY_ONE, KEY_TWO, KEY_THREE, KEY_FOUR};
     const int slot_count = std::min<int>(
         kAbilitySlotMax, static_cast<int>(scene.caster_abilities().size()));
@@ -169,6 +170,7 @@ void process_keyboard(Scene& scene, AppState& app, InputContext& ctx) {
                            Color{200, 200, 80, 255}, scene.world()->time());
             continue;
         }
+        if (ab->is_passive()) continue;
         const AimMode want = aim_for_behavior(ab->behavior());
         if (app.selected_ability == i && app.aim == AimMode::AwaitConfirmNoTarget) {
             CastTarget tgt;

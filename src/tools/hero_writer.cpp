@@ -27,6 +27,9 @@ const std::vector<std::string>& hero_order() {
         "base_armor",
         "base_magic_resist",
         "hull_radius",
+        "attack_type",
+        "attack_range",
+        "projectile_speed",
     };
     return v;
 }

@@ -82,6 +82,12 @@ std::size_t HeroCatalog::scan(const std::string& directory) {
         if (hero["base_armor"])        h.base_armor   = hero["base_armor"].as<double>();
         if (hero["base_magic_resist"]) h.magic_resist = hero["base_magic_resist"].as<double>();
         if (hero["hull_radius"])       h.hull_radius  = hero["hull_radius"].as<double>();
+        if (hero["attack_type"]) {
+            const std::string at = hero["attack_type"].as<std::string>();
+            h.ranged = (at == "ranged" || at == "Ranged" || at == "RANGED");
+        }
+        if (hero["attack_range"])      h.attack_range     = hero["attack_range"].as<double>();
+        if (hero["projectile_speed"])  h.projectile_speed = hero["projectile_speed"].as<double>();
 
         if (root["abilities"] && root["abilities"].IsSequence()) {
             for (const auto& a : root["abilities"]) {

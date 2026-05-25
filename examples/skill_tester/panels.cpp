@@ -468,10 +468,14 @@ void draw_abilities_panel(Scene& scene, AppState& app) {
             if (i > 0) ImGui::SameLine();
             Ability* ab = scene.caster_abilities()[i];
             const bool is_orb = ab->is_orb();
-            // 法球槽 = autocast 状态; 主动槽 = 选中态.
+            // 纯被动 (Passive 且非 orb): 只在槽里展示, 不响应点击.
+            const bool is_pure_passive = ab->is_passive() && !is_orb;
+            // 法球槽 = autocast 状态; 主动槽 = 选中态; 纯被动无高亮.
             const bool highlight = is_orb ? ab->autocast_on()
-                                          : (app.selected_ability == i);
+                                 : is_pure_passive ? false
+                                                   : (app.selected_ability == i);
             ImGui::PushID(i);
+            int style_pops = 0;
             if (highlight) {
                 if (is_orb) {
                     ImGui::PushStyleColor(ImGuiCol_Button,
@@ -490,10 +494,24 @@ void draw_abilities_panel(Scene& scene, AppState& app) {
                         ImVec4(0.85f, 0.7f, 0.2f, 1.0f));
                     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0,0,0,1));
                 }
+                style_pops = 4;
+            } else if (is_pure_passive) {
+                // 灰色 + 暗化文字, 视觉上明确"不可点".
+                ImGui::PushStyleColor(ImGuiCol_Button,
+                    ImVec4(0.22f, 0.22f, 0.22f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                    ImVec4(0.22f, 0.22f, 0.22f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                    ImVec4(0.22f, 0.22f, 0.22f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text,
+                    ImVec4(0.65f, 0.65f, 0.65f, 1.0f));
+                style_pops = 4;
             }
             const double cd = ab->cooldown_remaining();
             const double mp = ab->mana_cost_for_level();
-            const char* tag = is_orb ? "ORB" : behavior_label(ab->behavior());
+            const char* tag = is_orb ? "ORB"
+                            : is_pure_passive ? "PAS"
+                                              : behavior_label(ab->behavior());
             char label[128];
             if (is_orb) {
                 std::snprintf(label, sizeof(label),
@@ -501,20 +519,27 @@ void draw_abilities_panel(Scene& scene, AppState& app) {
                               i + 1, ab->name().c_str(), tag,
                               ab->autocast_on() ? "ON" : "OFF",
                               static_cast<int>(mp));
+            } else if (is_pure_passive) {
+                std::snprintf(label, sizeof(label),
+                              "%s\n%s  Lv %d",
+                              ab->name().c_str(), tag, ab->level());
             } else {
                 std::snprintf(label, sizeof(label),
                               "[%d] %s\n%s  CD %.1fs  MP %d",
                               i + 1, ab->name().c_str(), tag, cd,
                               static_cast<int>(mp));
             }
-            if (ImGui::Button(label, slot_sz)) {
+            if (is_pure_passive) {
+                // 用 Button 保持视觉一致, 但忽略点击.
+                ImGui::Button(label, slot_sz);
+            } else if (ImGui::Button(label, slot_sz)) {
                 if (is_orb) {
                     ab->set_autocast_on(!ab->autocast_on());
                 } else {
                     app.selected_ability = i;
                 }
             }
-            if (highlight) ImGui::PopStyleColor(4);
+            if (style_pops > 0) ImGui::PopStyleColor(style_pops);
             ImGui::PopID();
         }
     }

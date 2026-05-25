@@ -4,6 +4,9 @@ hero:
   base_mana: 380
   base_armor: 1
   base_magic_resist: 0.25
+  attack_type: ranged
+  attack_range: 400
+  projectile_speed: 900
 
 abilities:
   - obsidian_destroyer_arcane_orb

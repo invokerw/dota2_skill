@@ -4,6 +4,8 @@ hero:
   base_mana: 255
   base_armor: 2
   base_magic_resist: 0.25
+  attack_type: melee
+  attack_range: 150
 
 abilities:
   - juggernaut_blade_fury

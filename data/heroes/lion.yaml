@@ -4,6 +4,9 @@ hero:
   base_mana: 291
   base_armor: 0
   base_magic_resist: 0.25
+  attack_type: ranged
+  attack_range: 600
+  projectile_speed: 1200
 
 abilities:
   - lion_earth_spike
