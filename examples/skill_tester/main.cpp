@@ -129,20 +129,21 @@ void draw_battlefield(Scene& scene,
 }
 
 void draw_help_line(AimMode aim, const FieldRect& field) {
-    const char* aim_hint = "";
+    // 全量按键说明只保留在 Help 菜单里. 这里仅保留瞄准 / 待确认提示, 帮助玩家
+    // 知道当前应该点哪里 / 按什么确认.
+    const char* aim_hint = nullptr;
     switch (aim) {
-        case AimMode::AwaitUnitTarget:      aim_hint = "  [aim: click a target]"; break;
-        case AimMode::AwaitPointTarget:     aim_hint = "  [aim: click a point]"; break;
-        case AimMode::AwaitConfirmNoTarget: aim_hint = "  [confirm: SPACE / number / left-click]"; break;
-        case AimMode::AwaitAttackTarget:    aim_hint = "  [attack: click an enemy]"; break;
+        case AimMode::AwaitUnitTarget:      aim_hint = "[aim: click a target]"; break;
+        case AimMode::AwaitPointTarget:     aim_hint = "[aim: click a point]"; break;
+        case AimMode::AwaitConfirmNoTarget: aim_hint = "[confirm: SPACE / QWER / left-click]"; break;
+        case AimMode::AwaitAttackTarget:    aim_hint = "[attack: click an enemy]"; break;
         default: break;
     }
-    DrawText(TextFormat(
-                 "1-4 / click to select   A attack   LMB cast   RMB move / cancel   "
-                 "Shift queue   S stop   L log   ESC cancel   R reset   SPACE pause%s",
-                 aim_hint),
-             kSidePanelW + 12, kWindowH - kAbilityBarH - 22,
-             14, Color{160, 160, 160, 255});
+    if (aim_hint) {
+        DrawText(aim_hint,
+                 kSidePanelW + 12, kWindowH - kAbilityBarH - 22,
+                 14, Color{200, 200, 120, 255});
+    }
     (void)field;
 }
 

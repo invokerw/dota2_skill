@@ -410,8 +410,8 @@ float draw_main_menu_bar(AppState& app) {
         }
         if (ImGui::BeginMenu("Help")) {
             ImGui::TextDisabled("dota2_skill -- skill tester");
-            ImGui::TextDisabled("1-4 / click 选技能, A 普攻, LMB 释放, RMB 走 / 取消.");
-            ImGui::TextDisabled("Shift 队尾追加, S 全停, R 重置, SPACE 暂停, L 日志.");
+            ImGui::TextDisabled("QWER / click 选技能, A 普攻, LMB 释放, RMB 走 / 取消.");
+            ImGui::TextDisabled("Shift 队尾追加, S 全停, F5 重建场景, SPACE 暂停, L 日志.");
             ImGui::EndMenu();
         }
         h = ImGui::GetWindowSize().y;
@@ -470,30 +470,19 @@ void draw_abilities_panel(Scene& scene, AppState& app) {
             const bool is_orb = ab->is_orb();
             // 纯被动 (Passive 且非 orb): 只在槽里展示, 不响应点击.
             const bool is_pure_passive = ab->is_passive() && !is_orb;
-            // 法球槽 = autocast 状态; 主动槽 = 选中态; 纯被动无高亮.
-            const bool highlight = is_orb ? ab->autocast_on()
-                                 : is_pure_passive ? false
-                                                   : (app.selected_ability == i);
+            // 只有法球用 autocast 状态着色; 主动槽点击不变色 (瞄准/取消已由
+            // 鼠标光标和地面 indicator 反馈, 槽位无需额外高亮).
+            const bool highlight = is_orb && ab->autocast_on();
             ImGui::PushID(i);
             int style_pops = 0;
             if (highlight) {
-                if (is_orb) {
-                    ImGui::PushStyleColor(ImGuiCol_Button,
-                        ImVec4(0.30f, 0.60f, 0.95f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                        ImVec4(0.40f, 0.70f, 1.00f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                        ImVec4(0.20f, 0.50f, 0.85f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,1,1));
-                } else {
-                    ImGui::PushStyleColor(ImGuiCol_Button,
-                        ImVec4(0.95f, 0.78f, 0.25f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                        ImVec4(1.0f, 0.85f, 0.35f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                        ImVec4(0.85f, 0.7f, 0.2f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0,0,0,1));
-                }
+                ImGui::PushStyleColor(ImGuiCol_Button,
+                    ImVec4(0.30f, 0.60f, 0.95f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                    ImVec4(0.40f, 0.70f, 1.00f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                    ImVec4(0.20f, 0.50f, 0.85f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,1,1));
                 style_pops = 4;
             } else if (is_pure_passive) {
                 // 灰色 + 暗化文字, 视觉上明确"不可点".
