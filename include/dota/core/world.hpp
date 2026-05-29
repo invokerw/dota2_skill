@@ -15,15 +15,10 @@ namespace dota {
 class ProjectileManager;
 class LuaState;
 
-// 静态地形寻路接口. 默认 World 不挂 Pathfinder, issue_move 退化为单航点
-// {target}. A* 实现是后续阶段的事; 此处仅留接口.
-class Pathfinder {
-public:
-    virtual ~Pathfinder() = default;
-    // 返回从 start 到 target 的航点序列. 第一个航点应是首个有意义的中转点
-    // (不必包含 start). 失败时返回空 vector, World 会回退到 {target}.
-    virtual std::vector<Vec2> find_path(Vec2 start, Vec2 target) = 0;
-};
+namespace pathfinding {
+class NavGrid;
+class WallTracer;
+}
 
 // --- 标准事件(阶段 1)---
 
@@ -179,13 +174,14 @@ public:
     // 前进 `dt` 秒. 内部细分为 kTickDt 切片.
     void advance(double dt);
 
-    // --- Pathfinder 接口(目前仅留 hook, A* 后续实现)
-    void set_pathfinder(std::unique_ptr<Pathfinder> p) { pathfinder_ = std::move(p); }
-    Pathfinder* pathfinder() const { return pathfinder_.get(); }
-
-    // 由 Unit::issue_move 回调; 把 pathfinder 与 fallback 逻辑集中在 World.
-    // 公开是因为 Unit 持有 World*, 不希望把策略散落到 unit.cpp.
-    void fill_move_path(Unit& u, Vec2 target, MovePath& out);
+    // --- 静态地形寻路 ---
+    // 默认 World 持有一个空 NavGrid (无 blocked cell, 无 circle obstacle), 既能
+    // 让所有 ShapeCast / WallTracer 调用统一从 World 取上下文, 也保证不挂网格的
+    // 测试场景行为退化为"只看 unit 碰撞". 调用方可重新 set_nav_grid 注入带障碍
+    // 的网格 (比如 pathfinding_demo).
+    void set_nav_grid(std::shared_ptr<pathfinding::NavGrid> g);
+    pathfinding::NavGrid&       nav_grid()       { return *nav_grid_; }
+    const pathfinding::NavGrid& nav_grid() const { return *nav_grid_; }
 
     // 普通攻击结算 (闪避 + 物理伤害管线 + 设置 attack_cd). 由 OrderAttackTarget
     // 在 dispatch_front 检距通过, 攻击 cd 归零, 双方存活时调用. 公开是因为派发
@@ -218,7 +214,7 @@ private:
     std::uint64_t tick_count_{0};
     Rng      rng_;
     std::unique_ptr<ProjectileManager> projectiles_;
-    std::unique_ptr<Pathfinder>        pathfinder_;
+    std::shared_ptr<pathfinding::NavGrid>   nav_grid_;
 };
 
 } // namespace dota

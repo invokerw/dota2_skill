@@ -202,6 +202,9 @@ add_library(dota_core
     src/tools/modifier_scanner.cpp
     src/tools/modifier_ops.cpp
     src/tools/trash.cpp
+    src/pathfinding/nav_grid.cpp
+    src/pathfinding/shape_cast.cpp
+    src/pathfinding/wall_tracer.cpp
 )
 target_include_directories(dota_core PUBLIC include)
 target_compile_features(dota_core PUBLIC cxx_std_20)
@@ -227,6 +230,12 @@ if(BUILD_VISUAL)
         target_compile_definitions(skill_tester PRIVATE
             DOTA_CJK_FONT_PATH=\"${DOTA_CJK_FONT_PATH}\")
     endif()
+
+    # --- Example: pathfinding_demo (NavGrid + WallTracer 可视化) ---
+    add_executable(pathfinding_demo
+        examples/pathfinding_demo/main.cpp
+    )
+    target_link_libraries(pathfinding_demo PRIVATE dota_core raylib)
 
     # --- Example: hero_workshop (英雄/技能/Modifier 编辑器) ---
     add_executable(hero_workshop
@@ -272,7 +281,6 @@ add_executable(dota_tests
     tests/test_motion_knockback.cpp
     tests/test_movement_basic.cpp
     tests/test_order_queue.cpp
-    tests/test_movement_wall_trace.cpp
     tests/test_movement_motion_controller.cpp
     tests/test_projectile.cpp
     tests/test_thinker.cpp
@@ -304,6 +312,11 @@ add_executable(dota_tests
     tests/test_hero_sven_cleave.cpp
     tests/test_hero_viper.cpp
     tests/test_hero_obsidian_destroyer.cpp
+    tests/test_nav_grid.cpp
+    tests/test_shape_cast.cpp
+    tests/test_wall_tracer.cpp
+    tests/test_pathfinding_world.cpp
+    tests/test_pathfinding_demo_smoke.cpp
 )
 target_link_libraries(dota_tests PRIVATE dota_core GTest::gtest_main)
 target_compile_definitions(dota_tests PRIVATE

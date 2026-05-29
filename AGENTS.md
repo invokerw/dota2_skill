@@ -20,6 +20,7 @@
 - `include/dota/modifier/`, `src/modifier/`: 属性 aggregation (聚合), 状态位掩码, 生命周期和伤害/治疗事件钩子, Lua modifier registry.
 - `include/dota/combat/`, `src/combat/`: `deal_damage` 和 `deal_heal` 分阶段战斗管线.
 - `include/dota/projectile/`, `src/projectile/`: 直线和追踪投射物, `ProjectileManager`.
+- `include/dota/pathfinding/`, `src/pathfinding/`: 寻路与避障. `NavGrid` 持网格 cell + 圆形障碍, 8 方向 A*, line-of-sight 简化; `ShapeCast` 解析 swept-circle (Minkowski 圆角矩形, 全闭式不采样); `WallTracer` Bug2 双向局部绕障; `MovementConfig` 全局可调参数; `CollisionGroups` 位掩码 (Terrain=1, Unit=2, All=3). `World::tick_movement` 每 tick 用 A* 出 rough 路径 + WallTracer 出 smooth 段 + ShapeCast 检测落点驱动单位推进.
 - `include/dota/replay/`, `src/replay/`: JSONL 录像写入和回放.
 - `include/dota/log/`, `src/log/`: `CombatLog`. 旁观订阅 World 上的 Damage / Heal / Modifier / Cast / Attack / Death 事件, 缓冲成结构化条目, 供 skill_tester 浮动窗口或外部观察者展示. 不影响游戏逻辑.
 - `include/dota/tools/`, `src/tools/`: 编辑器/迁移用工具层. `HeroDoc`/`HeroCatalog`, `AbilityDoc`/`AbilityCatalog`, `*_ops` 文件级 CRUD, `ModifierScanner`, `Trash`.
@@ -30,7 +31,8 @@
 - `data/scripts/modifiers/*.lua`: Lua modifier 脚本.
 - `examples/skill_tester/`: raylib + imgui 交互式技能测试器.
 - `examples/hero_workshop/`: raylib + imgui 数据编辑器. 左侧 Heroes / Abilities / Modifiers 三 tab, 各自管列表 + 详情 + dirty.
-- `tests/`: GoogleTest 测试. 当前构建有 277 个测试, 最近一次全量 `ctest` 通过.
+- `examples/pathfinding_demo/`: raylib 寻路可视化. 默认 8 unit + 3 圆障碍演示 A* + WallTracer + 头对头避让, 支持运行时加 cell / 圆障碍.
+- `tests/`: GoogleTest 测试.
 
 ## 构建和测试
 
@@ -68,6 +70,7 @@ ctest --test-dir build --output-on-failure
 - 伤害入口优先使用 `deal_damage(DamageInstance)` 或 Lua 的 `Unit:apply_damage(...)`, 不要绕过战斗管线调用 `apply_raw_damage`, 除非实现自毁/测试等明确需要原始扣血.
 - Lua 回调通过 `sol::protected_function` 做错误隔离. 新增 Lua 调用路径也应报告错误而不是让主循环崩溃.
 - 录像事件不影响游戏逻辑, schema 维护在 `doc/recording_schema.md`.
+- 移动指令通过 `Unit::issue_order(OrderMoveToPoint)` 进 OrderQueue. 每 tick `World::tick_movement` 推进 `MoveState` (rough = `A*` 输出, smooth = WallTracer 当前段); 落点 `shape_cast_circle` 命中 unit -> 等若干帧重做 trace, 命中 terrain -> 累积 seg_block / seg_miss, 阈值后跳 waypoint 或 full `A*` replan. `World` 默认持空 `NavGrid`, 不挂障碍时退化为只看 unit 碰撞.
 
 ## 数据和脚本约定
 

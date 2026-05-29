@@ -7,6 +7,10 @@
 #include "dota/modifier/modifier.hpp"
 #include "dota/modifier/registry.hpp"
 #include "dota/modifier/scripted.hpp"
+#include "dota/pathfinding/movement_config.hpp"
+#include "dota/pathfinding/nav_grid.hpp"
+#include "dota/pathfinding/shape_cast.hpp"
+#include "dota/pathfinding/wall_tracer.hpp"
 #include "dota/projectile/manager.hpp"
 #include "dota/projectile/projectile.hpp"
 #include "dota/script/lua_state.hpp"
@@ -16,10 +20,17 @@
 
 namespace dota {
 
-World::World() : projectiles_(std::make_unique<ProjectileManager>()) {
+World::World()
+    : projectiles_(std::make_unique<ProjectileManager>())
+    , nav_grid_(std::make_shared<pathfinding::NavGrid>(
+          0.0, 0.0, 1.0, 1.0, pathfinding::MovementConfig::cell_size)) {
     projectiles_->set_world(this);
 }
 World::~World() = default;
+
+void World::set_nav_grid(std::shared_ptr<pathfinding::NavGrid> g) {
+    if (g) nav_grid_ = std::move(g);
+}
 
 ProjectileManager& World::projectiles() {
     return *projectiles_;
@@ -150,23 +161,6 @@ double point_to_segment_dist_sq(Vec2 p, Vec2 a, Vec2 b) {
     const Vec2 proj{a.x + ab.x * t, a.y + ab.y * t};
     return distance_sq(p, proj);
 }
-
-// wall tracing 用: 找出 desired 位置上与 self 重叠(圆心距 < hull 之和)的
-// 第一个其他单位. 过滤规则与 resolve_unit_collisions 保持一致 -- 否则会出现
-// "wall trace 挡了, 分离 pass 又不挡"的不一致.
-Unit* first_blocker(const std::vector<std::unique_ptr<Unit>>& units,
-                     const Unit& self, Vec2 desired, double self_hull) {
-    for (const auto& up : units) {
-        Unit* u = up.get();
-        if (!u || u == &self) continue;
-        if (!u->alive()) continue;
-        if (u->team() == Team::Neutral) continue;
-        if (u->modifiers().has_state(ModifierState::NoUnitCollision)) continue;
-        const double r = self_hull + u->hull_radius();
-        if (distance_sq(desired, u->position()) < r * r) return u;
-    }
-    return nullptr;
-}
 } // namespace
 
 std::vector<Unit*> World::find_enemies_in_cone(Vec2 origin, Vec2 direction, double length,
@@ -209,85 +203,310 @@ std::vector<Unit*> World::find_enemies_in_cone(Vec2 origin, Vec2 direction, doub
     return out;
 }
 
-void World::fill_move_path(Unit& u, Vec2 target, MovePath& out) {
-    out.waypoints.clear();
-    out.index = 0;
-    if (pathfinder_) {
-        auto pts = pathfinder_->find_path(u.position(), target);
-        if (!pts.empty()) {
-            out.waypoints = std::move(pts);
-            return;
-        }
+namespace {
+
+using namespace dota::pathfinding;
+
+// 收集所有"参与碰撞的"动态圆 body. 过滤 Neutral / NoUnitCollision / 死亡, 与
+// resolve_unit_collisions 保持一致.
+//
+// 与 Unity MoveDemo SetMoving 对齐: 正在移动且非阻挡等待的单位 group=Unit (其它
+// 单位的 WallTracer 查 Terrain 时绕不到它), 静止 / 阻挡等待中的单位 group=All
+// (会被绕开). 这样头碰头时一方进入 block_wait -> 升级为 Terrain group, 对方
+// 重算 smooth 时 WallTracer 看到它并自然绕路.
+std::vector<DynamicCircle> collect_dynamics(
+    const std::vector<std::unique_ptr<Unit>>& units) {
+    std::vector<DynamicCircle> out;
+    out.reserve(units.size());
+    for (const auto& up : units) {
+        Unit* u = up.get();
+        if (!u || !u->alive()) continue;
+        if (u->team() == Team::Neutral) continue;
+        if (u->modifiers().has_state(ModifierState::NoUnitCollision)) continue;
+        const auto& ms = u->move_state();
+        const bool moving = ms.active && ms.block_wait == 0;
+        const std::uint32_t g = moving ? CollisionGroups::Unit
+                                        : CollisionGroups::All;
+        out.push_back(DynamicCircle{
+            u->position(), u->hull_radius(), g, u->id()});
     }
-    out.waypoints.push_back(target);
+    return out;
 }
+
+} // namespace
 
 void World::tick_movement(double dt) {
     if (dt <= 0.0) return;
-    constexpr double kEps = 1e-6;
-    // 同 tick_once 中的 tick_units 模式: 用索引迭代避免 set_position 触发的 Lua
-    // 钩子在 vector 扩容时让 reference 悬挂.
+    using namespace dota::pathfinding;
+
+    NavGrid& grid = *nav_grid_;
+    // dynamics 每个单位前重建一次. unit 数量量级不大, 本身就是 O(N), 重建外
+    // 加包了一层 O(N) -> O(N^2), 仍然便宜; 换来可以读到本 tick 中先动单位的
+    // 新位置, 头碰头场景里两边能看到彼此真实距离而不是 stale snapshot.
     const std::size_t n = units_.size();
     for (std::size_t i = 0; i < n; ++i) {
+        const auto dynamics_snapshot = collect_dynamics(units_);
         Unit* u = units_[i].get();
         if (!u || !u->alive()) continue;
-        if (u->move_path().empty()) continue;
+        MoveState& ms = u->move_state_mut();
+        if (!ms.active) continue;
         if (!u->can_move()) continue;
-        // 任何 motion controller 正在驱动 -> 暂停指令式移动. KB / Hook 仍按其
-        // 优先级生效, 结束后玩家原指令自然续走.
+
+        // 任何 motion controller 正在驱动 -> 暂停指令式移动.
         bool has_mc = false;
         for (const auto& m : u->modifiers().all()) {
             if (m && m->is_motion_controller()) { has_mc = true; break; }
         }
         if (has_mc) continue;
 
-        const double speed = u->move_speed();
+        const double speed  = u->move_speed();
         if (speed <= 0.0) continue;
-        const double step = speed * dt;
+        const double step   = speed * dt;
         if (step <= 0.0) continue;
 
-        const Vec2 pos    = u->position();
-        const Vec2 wp     = u->move_path().current();
-        const Vec2 to_wp  = wp - pos;
-        const double remain = length(to_wp);
+        const double radius = u->hull_radius();
+        const EntityId self_id = u->id();
+        const int rid          = static_cast<int>(self_id);
+        const double waypoint_eps =
+            MovementConfig::arrival_epsilon * MovementConfig::cell_size;
+        const double waypoint_thr = std::max(waypoint_eps, 0.3);
 
-        // 到达当前航点 -> 切到下一个(或清空 path).
-        if (remain <= step + kEps) {
-            u->set_position(wp);
-            u->advance_move_waypoint();
-            if (u->move_path().empty()) u->clear_move_path();
+        // 移动期间临时把自身从 dynamics 中"剥离" (传 ignore_id 即可).
+        // 当前 dynamics_snapshot 是本 tick 起始的快照; 用 ignore_id 跳过.
+
+        // --- 1. 阻挡等待倒计时 ---
+        if (ms.block_wait > 0) {
+            --ms.block_wait;
+            if (ms.block_wait > 0) continue;
+            ++ms.seg_block;
+            ms.smooth.clear();
+            ms.smooth_index = 0;
+        }
+
+        // --- 2. 子路径走完 ---
+        if (!ms.smooth.empty() && ms.smooth_index >= ms.smooth.size()) {
+            if (ms.rough_index < ms.rough.size()) {
+                const Vec2 seg_end = ms.rough[ms.rough_index];
+                const double dx = seg_end.x - u->position().x;
+                const double dy = seg_end.y - u->position().y;
+                if (dx * dx + dy * dy < waypoint_thr * waypoint_thr) {
+                    ++ms.rough_index;
+                    ms.seg_block = 0;
+                    ms.seg_miss  = 0;
+                } else {
+                    ++ms.seg_miss;
+                }
+            }
+            ms.smooth.clear();
+            ms.smooth_index = 0;
+        }
+
+        // --- 3. 阻挡 / 偏移过多 -> skip 或 full replan ---
+        if (ms.seg_block > MovementConfig::replan_threshold ||
+            ms.seg_miss  > MovementConfig::replan_threshold) {
+            ms.rough.clear();
+            ms.rough_index = 0;
+            ms.seg_block   = 0;
+            ms.seg_miss    = 0;
+        } else if ((ms.seg_block >= MovementConfig::waypoint_skip_threshold ||
+                    ms.seg_miss  >= MovementConfig::waypoint_skip_threshold) &&
+                   ms.smooth.empty()) {
+            // SkipOrReplan: 优先跳到下一 waypoint, 没有则 full replan.
+            if (ms.rough_index + 1 < ms.rough.size()) {
+                ++ms.rough_index;
+                ms.seg_block = 0;
+                ms.seg_miss  = 0;
+            } else {
+                ms.rough.clear();
+                ms.rough_index = 0;
+                ms.seg_block   = 0;
+                ms.seg_miss    = 0;
+            }
+        }
+
+        // --- 4. 计算 rough path (A*) ---
+        if (ms.rough.empty()) {
+            ms.rough = grid.find_path(u->position(), ms.destination);
+            if (ms.rough.empty()) {
+                ms = MoveState{};   // 不可达 -> 视为完成, pump_orders 衔接下一条
+                continue;
+            }
+            ms.rough.back() = ms.destination;
+            ms.rough_index = ms.rough.size() > 1 ? 1u : 0u;
+            ms.smooth.clear();
+            ms.smooth_index = 0;
+            ms.closest_stall = 0;
+        }
+
+        // --- 5. 计算 smooth (WallTracer) ---
+        if (ms.smooth.empty()) {
+            if (ms.rough_index >= ms.rough.size()) {
+                ms = MoveState{};
+                continue;
+            }
+            const Vec2 seg_end = ms.rough[ms.rough_index];
+            WallTracer tracer(radius);
+            std::vector<Vec2> path;
+            const PathResult pr = tracer.find_path(
+                grid, dynamics_snapshot, self_id,
+                u->position(), seg_end, path,
+                CollisionGroups::Terrain);
+
+            if (pr != PathResult::Reached) {
+                const bool is_last = ms.rough_index + 1 >= ms.rough.size();
+                if (is_last && !path.empty()) {
+                    // 最后一段: 截到距 dest 最近的点
+                    const Vec2 cur = u->position();
+                    double best_d2 = (cur.x - seg_end.x) * (cur.x - seg_end.x) +
+                                      (cur.y - seg_end.y) * (cur.y - seg_end.y);
+                    int best_idx = -1;
+                    for (std::size_t k = 0; k < path.size(); ++k) {
+                        const double dx = path[k].x - seg_end.x;
+                        const double dy = path[k].y - seg_end.y;
+                        const double d2 = dx * dx + dy * dy;
+                        if (d2 < best_d2) {
+                            best_d2  = d2;
+                            best_idx = static_cast<int>(k);
+                        }
+                    }
+                    if (best_idx < 0) {
+                        ++ms.closest_stall;
+                        if (ms.closest_stall > MovementConfig::closest_stall_threshold) {
+                            ms = MoveState{};
+                            continue;
+                        }
+                        ms.block_wait = (ms.block_seed + rid) %
+                                        MovementConfig::max_block_wait_frames + 1;
+                        ms.smooth.clear();
+                        ms.smooth_index = 0;
+                        continue;
+                    }
+                    path.resize(static_cast<std::size_t>(best_idx) + 1);
+                    tracer.simplify(grid, dynamics_snapshot, self_id, path,
+                                    CollisionGroups::Terrain);
+                    ms.smooth      = std::move(path);
+                    ms.smooth_index = 0;
+                } else {
+                    ++ms.seg_block;
+                    ms.block_wait = (ms.block_seed + rid) %
+                                    MovementConfig::max_block_wait_frames + 1;
+                    ms.smooth.clear();
+                    ms.smooth_index = 0;
+                    continue;
+                }
+            } else {
+                if (path.empty()) path.push_back(seg_end);
+                if (ms.rough_index + 1 >= ms.rough.size()) {
+                    tracer.simplify(grid, dynamics_snapshot, self_id, path,
+                                    CollisionGroups::Terrain);
+                    ms.smooth      = std::move(path);
+                    ms.smooth_index = 0;
+                } else {
+                    // 跨段 simplify: 把后续 rough waypoint 拼接做整体优化
+                    std::vector<Vec2> combined;
+                    combined.reserve(path.size() + 4);
+                    combined.push_back(u->position());
+                    for (auto& p : path) combined.push_back(p);
+                    const std::size_t lookahead = std::min(
+                        ms.rough_index + 1 + 3, ms.rough.size());
+                    for (std::size_t r = ms.rough_index + 1; r < lookahead; ++r) {
+                        combined.push_back(ms.rough[r]);
+                    }
+                    tracer.simplify(grid, dynamics_snapshot, self_id, combined,
+                                    CollisionGroups::Terrain);
+
+                    // 找第一个仍存在于 simplified 中的 rough waypoint
+                    auto approx_eq = [](Vec2 a, Vec2 b) {
+                        const double dx = a.x - b.x;
+                        const double dy = a.y - b.y;
+                        return dx * dx + dy * dy < 1e-12;
+                    };
+                    std::size_t new_rough_idx = ms.rough.size() - 1;
+                    std::size_t cut_idx       = combined.size() - 1;
+                    std::size_t search_from   = 1;
+                    for (std::size_t ri = ms.rough_index + 1;
+                         ri < ms.rough.size(); ++ri) {
+                        bool found = false;
+                        for (std::size_t si = search_from;
+                             si < combined.size(); ++si) {
+                            if (approx_eq(combined[si], ms.rough[ri])) {
+                                new_rough_idx = ri;
+                                cut_idx       = si;
+                                found         = true;
+                                break;
+                            }
+                        }
+                        if (found) break;
+                    }
+                    ms.rough_index = new_rough_idx;
+
+                    ms.smooth.clear();
+                    ms.smooth.reserve(cut_idx);
+                    for (std::size_t k = 1; k <= cut_idx; ++k) {
+                        ms.smooth.push_back(combined[k]);
+                    }
+                    ms.smooth_index = 0;
+                }
+            }
+        }
+
+        // --- 6. 沿 smooth 推进 ---
+        if (ms.smooth.empty() || ms.smooth_index >= ms.smooth.size()) continue;
+
+        ++ms.block_seed;
+
+        const Vec2 wp     = ms.smooth[ms.smooth_index];
+        const Vec2 pos    = u->position();
+        const double dx   = wp.x - pos.x;
+        const double dy   = wp.y - pos.y;
+        const double dist = std::sqrt(dx * dx + dy * dy);
+        if (dist < waypoint_eps) {
+            ++ms.smooth_index;
+            continue;
+        }
+        const Vec2 dir{dx / dist, dy / dist};
+        const bool arriving = step >= dist;
+        const double mv     = arriving ? dist : step;
+
+        // 检查 mv 距离上是否撞到 unit / terrain. 自身从 dynamics 中跳过.
+        const auto hit = shape_cast_circle(
+            grid, dynamics_snapshot, self_id, pos, dir, mv, radius,
+            CollisionGroups::All);
+
+        if (hit.hit) {
+            if (hit.kind == ShapeCastHit::Kind::Unit) {
+                // 最后一段且距 dest 已经够近 -> 视为到达停下.
+                const bool is_last = ms.rough_index + 1 >= ms.rough.size();
+                if (is_last) {
+                    const double ddx = ms.destination.x - pos.x;
+                    const double ddy = ms.destination.y - pos.y;
+                    const double dd  = std::sqrt(ddx * ddx + ddy * ddy);
+                    if (dd < radius * MovementConfig::arrival_tolerance_multiplier) {
+                        ms = MoveState{};
+                        continue;
+                    }
+                }
+            } else {
+                // 地形阻挡 -> rough 失效, full replan
+                ms.rough.clear();
+                ms.smooth.clear();
+                ms.rough_index  = 0;
+                ms.smooth_index = 0;
+                ms.seg_block    = 0;
+                ms.seg_miss     = 0;
+            }
+            ms.block_wait = (ms.block_seed + rid) %
+                            MovementConfig::max_block_wait_frames + 1;
             continue;
         }
 
-        const Vec2 dir = to_wp * (1.0 / remain);
-        Vec2 desired = pos + dir * step;
-
-        // Wall tracing 切线滑动: 路径上有其他单位阻挡时, 沿连心线垂直方向
-        // 滑动 step 长度(不缩短步长, 视觉速度连续), 朝目标方向那一侧.
-        // 楔形夹角内卡住 -> 本 tick 放弃, 下 tick 再尝试.
-        constexpr int kMaxSlideIters = 3;
-        Vec2 try_pos = desired;
-        for (int iter = 0; iter < kMaxSlideIters; ++iter) {
-            Unit* b = first_blocker(units_, *u, try_pos, u->hull_radius());
-            if (!b) break;
-            const Vec2 to_b = b->position() - pos;
-            Vec2 tangent{-to_b.y, to_b.x};
-            // 选朝目标推进的一侧
-            if (dot(tangent, to_wp) < 0.0) {
-                tangent.x = -tangent.x;
-                tangent.y = -tangent.y;
-            }
-            const double tlen = length(tangent);
-            if (tlen <= kEps) { try_pos = pos; break; }
-            const Vec2 tn{tangent.x / tlen, tangent.y / tlen};
-            try_pos = pos + tn * step;
+        // 推进
+        if (arriving) {
+            u->set_position(wp);
+            ++ms.smooth_index;
+        } else {
+            u->set_position({pos.x + dir.x * step, pos.y + dir.y * step});
         }
-        // 迭代用尽仍重叠 -> 不动
-        if (first_blocker(units_, *u, try_pos, u->hull_radius()) != nullptr) {
-            try_pos = pos;
-        }
-        desired = try_pos;
-        u->set_position(desired);
     }
 }
 

@@ -11,6 +11,7 @@
 - Modifier 系统: 支持属性 aggregation (聚合), 状态位掩码, 生命周期钩子和战斗事件钩子.
 - 战斗管线: 统一处理伤害, 治疗, amplification (增幅), resistance (抗性), absorption (吸收), reflect (反射/反伤).
 - 世界模拟: 30Hz 固定 tick, 事件总线, 移动, 软碰撞, 空间查询, thinker 实体.
+- 寻路与避障: A* 长程网格 + Bug2 双向 wall trace 局部绕障 + 解析 swept-circle ShapeCast, 支持矩形 cell 阻挡和圆形障碍.
 - 投射物: 支持直线投射物, 追踪投射物, 命中和结束回调.
 - Motion Controller: 通过 modifier 驱动击退, 勾拉等位移效果, 按 priority 抢占.
 - Lua 集成: 暴露 `Unit`, `World`, `Vec2`, `Projectile`, 常用枚举和 `register_modifier`.
@@ -45,12 +46,14 @@ cmake --build build -j
 | `include/dota/modifier/`, `src/modifier/` | modifier 生命周期, 属性聚合, 状态位, Lua modifier registry |
 | `include/dota/combat/`, `src/combat/` | `deal_damage`, `deal_heal`, 战斗管线 |
 | `include/dota/projectile/`, `src/projectile/` | 直线和追踪投射物 |
+| `include/dota/pathfinding/`, `src/pathfinding/` | NavGrid + A*, ShapeCast (swept-circle), Bug2 WallTracer |
 | `include/dota/replay/`, `src/replay/` | JSONL 录像写入和回放 |
 | `src/script/` | sol2 绑定和 Lua API |
 | `data/heroes/` | 英雄和技能 YAML 数据 |
 | `data/scripts/abilities/` | Lua 技能脚本 |
 | `data/scripts/modifiers/` | Lua modifier 脚本 |
 | `examples/skill_tester/` | 交互式技能测试器 |
+| `examples/pathfinding_demo/` | 寻路 / 避障可视化 |
 | `tests/` | GoogleTest 测试 |
 
 ## 数据入口

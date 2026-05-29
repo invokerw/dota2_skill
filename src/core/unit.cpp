@@ -5,6 +5,7 @@
 #include "dota/core/world.hpp"
 #include "dota/modifier/manager.hpp"
 #include "dota/modifier/modifier.hpp"
+#include "dota/pathfinding/movement_config.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -219,16 +220,26 @@ Ability* lookup_ability(Unit& self, int idx) {
     return abs[static_cast<std::size_t>(idx)].get();
 }
 
-// 派生内部跟随 move_path. 走 fill_move_path 但不入 OrderQueue, 用于 Cast/Attack
-// 派发时的"自动靠近". 调用前可能 path 已存在 -- 我们直接覆盖.
-void set_internal_move_path(Unit& self, MovePath& path, World* world, Vec2 target) {
-    path.waypoints.clear();
-    path.index = 0;
-    if (world) {
-        world->fill_move_path(self, target, path);
-    } else {
-        path.waypoints.push_back(target);
+// 派发内部跟随 move_state. 用于 Cast/Attack 派发时的"自动靠近", 不入 OrderQueue.
+// 调用前可能 state 已存在 -- 我们直接覆盖.
+//
+// target 与起点的距离 < arrival_epsilon * cell_size 时视为"已到达", 不激活
+// 移动状态. 调用方据此决定是否立即 consume 当前 Order.
+void set_internal_move_path(Unit& self, MoveState& state, World* world, Vec2 target) {
+    (void)world;
+    state             = MoveState{};
+    const double dx = target.x - self.position().x;
+    const double dy = target.y - self.position().y;
+    const double eps = pathfinding::MovementConfig::arrival_epsilon *
+                        pathfinding::MovementConfig::cell_size;
+    if (dx * dx + dy * dy <= eps * eps) {
+        // 已经在终点附近, 不进入 active 状态; activate_front 会 consume 此 order.
+        state.active = false;
+        return;
     }
+    state.destination = target;
+    state.active      = true;
+    // rough / smooth 留空 -> tick_movement 第一帧 A* 填充.
 }
 
 // cast 范围合法判定. point cast: distance <= range. unit cast: 加上目标 hull,
@@ -263,7 +274,7 @@ bool in_attack_range(const Unit& attacker, const Unit& target) {
 // 距离判定 + 派生 move 与 issue_order 路径都需要. activate_front 只负责
 // "刚入队那一刻的初始动作".
 static void activate_front(Unit& self, std::deque<Order>& orders,
-                            MovePath& move_path, World* world) {
+                            MoveState& move_path, World* world) {
     while (!orders.empty()) {
         Order& front = orders.front();
         bool consumed = false;
@@ -291,7 +302,7 @@ static void activate_front(Unit& self, std::deque<Order>& orders,
 //
 // 返回 true 表示队首应该被 pop (异常路径, 例如 ability_index 越界 / target 死亡).
 static bool dispatch_front(Unit& self, std::deque<Order>& orders,
-                            MovePath& move_path, World* world) {
+                            MoveState& move_path, World* world) {
     if (orders.empty() || world == nullptr) return false;
     Order& front = orders.front();
     bool pop = false;
@@ -361,7 +372,7 @@ static bool dispatch_front(Unit& self, std::deque<Order>& orders,
 // 检测当前队首是否已完成. MoveTo 看 path 走完; Cast 看 dispatched 后 phase
 // 是否离开 Casting/Channelling.
 static bool front_complete(Unit& self, std::deque<Order>& orders,
-                            MovePath& move_path) {
+                            MoveState& move_path) {
     if (orders.empty()) return false;
     Order& front = orders.front();
     bool done = false;
@@ -389,7 +400,7 @@ static bool front_complete(Unit& self, std::deque<Order>& orders,
 void Unit::issue_order(Order o, bool queue) {
     if (!queue) {
         orders_.clear();
-        move_path_ = {};
+        move_state_ = {};
     }
     // 覆盖模式 + OrderStop: 整队已清, 不入队.
     if (!queue && std::holds_alternative<OrderStop>(o)) return;
@@ -397,7 +408,7 @@ void Unit::issue_order(Order o, bool queue) {
     orders_.push_back(std::move(o));
     // 队列原本为空 (或刚被覆盖清掉) -> 立即激活新队首; 否则等队首走完后衔接.
     if (was_empty) {
-        activate_front(*this, orders_, move_path_, world_);
+        activate_front(*this, orders_, move_state_, world_);
         // 入队即派发一次, 让 NoTarget cast 在同一 tick 内立刻施放 (与现有
         // ability::order_cast 行为对齐). 距离不够的 Cast/Target 会派生 move,
         // 等待下个 tick 的 pump_orders. AttackTarget 不在此走 -- 与原
@@ -405,10 +416,10 @@ void Unit::issue_order(Order o, bool queue) {
         // 测试在 issue 后再 subscribe events 仍能收到全部 attack_landed).
         if (!orders_.empty() &&
             !std::holds_alternative<OrderAttackTarget>(orders_.front())) {
-            const bool pop = dispatch_front(*this, orders_, move_path_, world_);
+            const bool pop = dispatch_front(*this, orders_, move_state_, world_);
             if (pop) {
                 orders_.pop_front();
-                activate_front(*this, orders_, move_path_, world_);
+                activate_front(*this, orders_, move_state_, world_);
             }
         }
     }
@@ -416,7 +427,7 @@ void Unit::issue_order(Order o, bool queue) {
 
 void Unit::clear_orders() {
     orders_.clear();
-    move_path_ = {};
+    move_state_ = {};
 }
 
 void Unit::pump_orders() {
@@ -427,15 +438,15 @@ void Unit::pump_orders() {
     //   3. 异常 pop (ability_index 越界, target 死亡) 后衔接下一条
     constexpr int kMaxIters = 8;
     for (int i = 0; i < kMaxIters && !orders_.empty(); ++i) {
-        const bool pop_dispatch = dispatch_front(*this, orders_, move_path_, world_);
+        const bool pop_dispatch = dispatch_front(*this, orders_, move_state_, world_);
         if (pop_dispatch) {
             orders_.pop_front();
-            activate_front(*this, orders_, move_path_, world_);
+            activate_front(*this, orders_, move_state_, world_);
             continue;
         }
-        if (front_complete(*this, orders_, move_path_)) {
+        if (front_complete(*this, orders_, move_state_)) {
             orders_.pop_front();
-            activate_front(*this, orders_, move_path_, world_);
+            activate_front(*this, orders_, move_state_, world_);
             continue;
         }
         break;  // 队首仍在推进
@@ -451,8 +462,8 @@ void Unit::stop_move() {
 }
 
 std::optional<Vec2> Unit::move_target() const {
-    if (move_path_.empty()) return std::nullopt;
-    return move_path_.final_point();
+    if (move_state_.empty()) return std::nullopt;
+    return move_state_.final_point();
 }
 
 } // namespace dota

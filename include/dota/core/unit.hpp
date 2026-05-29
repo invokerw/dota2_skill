@@ -6,8 +6,10 @@
 #include "dota/modifier/enums.hpp"
 #include "dota/modifier/manager.hpp"
 #include "dota/modifier/modifier.hpp"  // for DamageType used in apply_damage
+#include "dota/pathfinding/collision_groups.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <memory>
 #include <optional>
@@ -18,15 +20,32 @@ namespace dota {
 
 class World;
 
-// 移动指令路径. v1 仅使用单一航点(vector size == 1); 预留 vector + index
-// 以便未来 A* 一次返回多个航点, 走完一个再切到下一个.
-struct MovePath {
-    std::vector<Vec2> waypoints;
-    std::size_t       index{0};
+// 移动指令状态. 参考 Unity MoveDemo UnitMovement: 双层路径 + 阻挡计数.
+//
+//   rough  : A* 一次性输出, 网格中心航点, 第一个点已跳过, 最后一个被替换为
+//            实际目的地.
+//   smooth : 当前 rough 段的 WallTracer 子路径. 走完后切到 rough 下一段.
+//
+// counters 控制重新规划: 同段被 unit 阻挡 / wall trace 失败次数累积到阈值时,
+// 先尝试 skip 当前 waypoint, 再升级到 full A* 重新寻路.
+struct MoveState {
+    Vec2  destination{};
+    bool  active{false};
 
-    bool empty() const { return index >= waypoints.size(); }
-    Vec2 current()     const { return waypoints[index]; }
-    Vec2 final_point() const { return waypoints.back(); }
+    std::vector<Vec2> rough;
+    std::size_t       rough_index{0};
+
+    std::vector<Vec2> smooth;
+    std::size_t       smooth_index{0};
+
+    int block_wait{0};      // > 0 时本 tick 不动, 自减
+    int block_seed{0};      // FollowPath 每 tick 自增, 用作随机等待源
+    int seg_block{0};       // 当前 rough 段被 unit 阻挡次数
+    int seg_miss{0};        // 当前 rough 段子路径计算失败次数
+    int closest_stall{0};   // 最后一段距目标已最近时的失败计数
+
+    bool empty() const { return !active; }
+    Vec2 final_point() const { return destination; }
 };
 
 // 可控实体(英雄或小兵)的基础属性和战斗状态
@@ -159,12 +178,18 @@ public:
     void stop_move();
     // 当前最终目的地; 没有指令时 nullopt.
     std::optional<Vec2> move_target() const;
-    // 当前路径只读视图(供 World::tick_movement 与调试 UI 用).
-    const MovePath& move_path() const { return move_path_; }
-    // 内部: tick_movement 在到达终点航点后清空.
-    void clear_move_path()       { move_path_ = {}; }
-    // 内部: 推进到下个航点.
-    void advance_move_waypoint() { ++move_path_.index; }
+    // 当前移动状态只读视图(供 World::tick_movement 与调试 UI 用).
+    const MoveState& move_state() const { return move_state_; }
+    // 内部: 由 World::tick_movement / Order 派发使用.
+    MoveState&        move_state_mut()  { return move_state_; }
+    // 内部: 取消当前移动指令(派生 path 也一并清).
+    void clear_move_path() { move_state_ = {}; }
+
+    // --- 碰撞组 (CollisionGroups). 默认 Terrain | Unit, 静止时其它 unit 的
+    // WallTracer 会绕开. tick_movement 在推进自己时, 临时设为 Unit 让自身不阻
+    // 挡 ShapeCast, 用于和 Unity MoveDemo SetMoving 对齐. 公开以便测试 mock.
+    std::uint32_t collision_group() const { return collision_group_; }
+    void set_collision_group(std::uint32_t g) { collision_group_ = g; }
 
     // 应用原始生命值/魔法值变化. 由伤害管线在抗性计算后使用.
     void heal(double amount);
@@ -223,7 +248,8 @@ private:
     std::unique_ptr<AbilityManager>  abilities_;
     World* world_{nullptr};
 
-    MovePath move_path_{};
+    MoveState     move_state_{};
+    std::uint32_t collision_group_{pathfinding::CollisionGroups::All};
     std::deque<Order> orders_{};
 };
 
