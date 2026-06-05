@@ -1,0 +1,89 @@
+server:
+  # 网络配置
+  bind_address: "0.0.0.0"
+  port: 7777
+  max_players: 8
+
+  # 性能配置
+  tick_rate: 30          # 游戏逻辑帧率 (Hz)
+  snapshot_rate: 20      # 快照发送频率 (Hz)
+
+  # 连接管理
+  timeout: 30            # 客户端超时时间 (秒)
+  heartbeat_interval: 5  # 心跳间隔 (秒)
+
+  # KCP 配置
+  kcp:
+    nodelay: 1           # 1=快速模式
+    interval: 10         # 内部 flush 间隔 (ms)
+    resend: 2            # 快速重传阈值
+    nc: 1                # 1=关闭流控
+    sndwnd: 128          # 发送窗口大小
+    rcvwnd: 128          # 接收窗口大小
+    mtu: 1400            # 最大传输单元
+
+game:
+  # 游戏模式
+  mode: survivor
+
+  # 地图配置
+  map_size: 2000         # 地图尺寸 (单位)
+  spawn_distance: 1200   # 敌人刷新距离
+
+  # 生存模式配置
+  survivor:
+    # 初始状态
+    starting_level: 1
+    starting_gold: 0
+
+    # 经验系统
+    exp_curve: "exponential"  # linear / exponential
+    exp_base: 100             # 基础经验需求
+    exp_multiplier: 1.5       # 每级倍率
+
+    # 刷怪配置
+    spawn:
+      initial_interval: 2.0   # 初始刷怪间隔 (秒)
+      min_interval: 0.5       # 最小刷怪间隔
+      difficulty_scale: 1.1   # 每分钟难度倍率
+      max_enemies: 500        # 同屏最大敌人数
+
+    # 敌人类型权重
+    enemy_types:
+      - name: "melee_basic"
+        weight: 100
+        min_time: 0
+      - name: "ranged_basic"
+        weight: 50
+        min_time: 60      # 1 分钟后出现
+      - name: "tank"
+        weight: 20
+        min_time: 180     # 3 分钟后出现
+      - name: "elite"
+        weight: 5
+        min_time: 300     # 5 分钟后出现
+
+    # 技能池
+    skill_pool:
+      initial_skills: 3       # 初始可选技能数
+      skill_choices: 3        # 每次升级选项数
+      max_skill_level: 5      # 技能最大等级
+
+# 日志配置
+logging:
+  level: "info"           # trace / debug / info / warn / error
+  file: "logs/server.log"
+  console: true
+  max_size: 100           # MB
+  max_files: 10
+
+# 性能监控
+monitoring:
+  enabled: true
+  stats_interval: 10      # 统计输出间隔 (秒)
+  metrics:
+    - cpu_usage
+    - memory_usage
+    - client_count
+    - tick_time
+    - network_bandwidth

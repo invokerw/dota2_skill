@@ -1,0 +1,293 @@
+// proto/messages.proto
+// 网络消息定义
+
+syntax = "proto3";
+
+package dota.network;
+
+import "common.proto";
+
+// ============ 消息包装 ============
+
+message Packet {
+  uint32 sequence = 1;      // 序列号
+  uint64 timestamp = 2;     // 时间戳 (毫秒)
+
+  oneof payload {
+    // 连接管理 (10-19)
+    C2S_Connect connect = 10;
+    S2C_Welcome welcome = 11;
+    C2S_Disconnect disconnect = 12;
+
+    // 游戏输入 (20-29)
+    C2S_Input input = 20;
+
+    // 状态同步 (30-39)
+    S2C_Snapshot snapshot = 30;
+    S2C_DeltaSnapshot delta_snapshot = 31;
+
+    // 游戏事件 (40-49)
+    S2C_GameEvent game_event = 40;
+    S2C_LevelUp level_up = 41;
+    C2S_ChooseSkill choose_skill = 42;
+    S2C_SkillLearned skill_learned = 43;
+    S2C_GameOver game_over = 44;
+
+    // 心跳 (90-99)
+    C2S_Ping ping = 90;
+    S2C_Pong pong = 91;
+  }
+}
+
+// ============ 连接管理 ============
+
+message C2S_Connect {
+  string player_name = 1;
+  string version = 2;       // 客户端版本
+  string token = 3;         // 可选: 认证令牌
+}
+
+message S2C_Welcome {
+  uint32 player_id = 1;
+  uint32 session_id = 2;
+  uint32 server_tick = 3;
+
+  repeated PlayerInfo players = 4;  // 房间内现有玩家
+
+  message PlayerInfo {
+    uint32 player_id = 1;
+    string player_name = 2;
+    uint32 level = 3;
+  }
+}
+
+message C2S_Disconnect {
+  string reason = 1;
+}
+
+// ============ 游戏输入 ============
+
+message C2S_Input {
+  uint32 client_tick = 1;   // 客户端 tick
+  uint32 ack_tick = 2;      // 确认收到的服务器 tick
+
+  repeated InputCommand commands = 3;
+}
+
+message InputCommand {
+  oneof command {
+    MoveCommand move = 1;
+    UseAbilityCommand use_ability = 2;
+    StopCommand stop = 3;
+  }
+}
+
+message MoveCommand {
+  Vec2 target = 1;
+}
+
+message UseAbilityCommand {
+  uint32 ability_slot = 1;  // 0-5
+  oneof target {
+    Vec2 point = 2;
+    uint32 unit = 3;
+  }
+}
+
+message StopCommand {
+  // 停止当前动作
+}
+
+// ============ 状态同步 ============
+
+message S2C_Snapshot {
+  uint32 tick = 1;
+  float game_time = 2;
+
+  repeated EntityState entities = 3;
+  repeated PlayerState players = 4;
+}
+
+message EntityState {
+  uint32 id = 1;
+  EntityType type = 2;
+  Vec2 position = 3;
+  Vec2 velocity = 4;
+  float rotation = 5;
+  float health = 6;
+  float max_health = 7;
+  Team team = 8;
+
+  // 可选字段 (根据类型)
+  optional uint32 owner_id = 10;    // 投射物的施法者
+  optional uint32 ability_id = 11;  // 关联的技能 ID
+  optional PickupType pickup_type = 12;  // 拾取物类型
+  optional uint32 pickup_value = 13;     // 拾取物数值
+}
+
+message PlayerState {
+  uint32 player_id = 1;
+  uint32 unit_id = 2;       // 控制的单位 ID
+  uint32 exp = 3;
+  uint32 level = 4;
+  uint32 gold = 5;
+
+  repeated uint32 learned_skills = 6;
+  repeated AbilityState abilities = 7;
+}
+
+message AbilityState {
+  uint32 slot = 1;
+  uint32 ability_id = 2;
+  uint32 level = 3;
+  float cooldown_remaining = 4;
+  uint32 charges = 5;
+  uint32 max_charges = 6;
+}
+
+// 增量快照 (优化带宽)
+message S2C_DeltaSnapshot {
+  uint32 tick = 1;
+  uint32 base_tick = 2;  // 基于哪个快照
+
+  repeated uint32 removed_entities = 3;
+  repeated EntityState updated_entities = 4;
+  repeated PlayerState updated_players = 5;
+}
+
+// ============ 游戏事件 ============
+
+message S2C_GameEvent {
+  uint32 tick = 1;
+  repeated Event events = 2;
+}
+
+message Event {
+  oneof event {
+    DamageEvent damage = 1;
+    HealEvent heal = 2;
+    DeathEvent death = 3;
+    SkillCastEvent skill_cast = 4;
+    PickupEvent pickup = 5;
+    ModifierEvent modifier = 6;
+  }
+}
+
+message DamageEvent {
+  uint32 attacker_id = 1;
+  uint32 target_id = 2;
+  float amount = 3;
+  DamageType type = 4;
+  bool is_crit = 5;
+  Vec2 position = 6;
+}
+
+message HealEvent {
+  uint32 healer_id = 1;
+  uint32 target_id = 2;
+  float amount = 3;
+  Vec2 position = 4;
+}
+
+message DeathEvent {
+  uint32 unit_id = 1;
+  uint32 killer_id = 2;
+  Vec2 position = 3;
+  uint32 exp_reward = 4;
+}
+
+message SkillCastEvent {
+  uint32 caster_id = 1;
+  uint32 ability_id = 2;
+  Vec2 position = 3;
+  optional uint32 target_id = 4;
+}
+
+message PickupEvent {
+  uint32 player_id = 1;
+  uint32 pickup_id = 2;
+  PickupType type = 3;
+  uint32 value = 4;
+}
+
+message ModifierEvent {
+  enum Action {
+    ADDED = 0;
+    REMOVED = 1;
+    REFRESHED = 2;
+  }
+
+  Action action = 1;
+  uint32 unit_id = 2;
+  string modifier_name = 3;
+  uint32 stack_count = 4;
+}
+
+// ============ 升级和选技 ============
+
+message S2C_LevelUp {
+  uint32 new_level = 1;
+  repeated SkillOption options = 2;
+}
+
+message SkillOption {
+  uint32 skill_id = 1;
+  string skill_name = 2;
+  string description = 3;
+  uint32 current_level = 4;  // 0 表示未学习
+  uint32 max_level = 5;
+  string icon = 6;           // 图标路径
+
+  // 技能数值 (用于显示)
+  repeated SpecialValue special_values = 7;
+}
+
+message SpecialValue {
+  string key = 1;
+  repeated float values = 2;  // 每级数值
+}
+
+message C2S_ChooseSkill {
+  uint32 skill_id = 1;
+}
+
+message S2C_SkillLearned {
+  uint32 skill_id = 1;
+  uint32 new_level = 2;
+}
+
+// ============ 游戏结束 ============
+
+message S2C_GameOver {
+  enum Result {
+    VICTORY = 0;
+    DEFEAT = 1;
+  }
+
+  Result result = 1;
+  float survival_time = 2;  // 生存时间 (秒)
+
+  repeated PlayerStats player_stats = 3;
+}
+
+message PlayerStats {
+  uint32 player_id = 1;
+  string player_name = 2;
+  uint32 final_level = 3;
+  uint32 kills = 4;
+  uint32 damage_dealt = 5;
+  uint32 damage_taken = 6;
+  uint32 healing_done = 7;
+}
+
+// ============ 心跳 ============
+
+message C2S_Ping {
+  uint64 client_timestamp = 1;
+}
+
+message S2C_Pong {
+  uint64 client_timestamp = 1;
+  uint64 server_timestamp = 2;
+  uint32 server_tick = 3;
+}

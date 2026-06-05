@@ -171,6 +171,50 @@ if(sol2_ADDED)
     target_link_libraries(sol2 INTERFACE lua)
 endif()
 
+# --- Server dependencies (optional) ---
+option(BUILD_SERVER "Build game server (requires libevent, protobuf, kcp)" OFF)
+if(BUILD_SERVER)
+    # 在 macOS 上优先使用 Homebrew 的 protoc
+    if(APPLE AND EXISTS "/opt/homebrew/bin/protoc")
+        set(Protobuf_PROTOC_EXECUTABLE "/opt/homebrew/bin/protoc" CACHE FILEPATH "Protobuf compiler" FORCE)
+    endif()
+
+    find_package(Protobuf REQUIRED)
+
+    # Protobuf 5.x 需要 abseil
+    find_package(absl REQUIRED)
+
+    # Libevent 使用 pkg-config 查找
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LIBEVENT REQUIRED libevent>=2.1)
+
+    # 创建 imported target 以便统一使用
+    add_library(libevent::core INTERFACE IMPORTED)
+    target_include_directories(libevent::core INTERFACE ${LIBEVENT_INCLUDE_DIRS})
+    target_link_libraries(libevent::core INTERFACE ${LIBEVENT_LIBRARIES})
+    target_link_directories(libevent::core INTERFACE ${LIBEVENT_LIBRARY_DIRS})
+
+    add_library(libevent::extra INTERFACE IMPORTED)
+    target_link_libraries(libevent::extra INTERFACE libevent::core)
+
+    # KCP: 使用 third_party/kcp 或从 GitHub 获取
+    if(NOT EXISTS "${CMAKE_SOURCE_DIR}/third_party/kcp/ikcp.c")
+        CPMAddPackage(
+            NAME kcp
+            GITHUB_REPOSITORY skywind3000/kcp
+            GIT_TAG 1.7
+            DOWNLOAD_ONLY YES
+        )
+        if(kcp_ADDED)
+            file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/kcp")
+            file(COPY "${kcp_SOURCE_DIR}/ikcp.h" "${kcp_SOURCE_DIR}/ikcp.c"
+                 DESTINATION "${CMAKE_SOURCE_DIR}/third_party/kcp/")
+        endif()
+    endif()
+
+    add_subdirectory(server)
+endif()
+
 # --- Core library ---
 add_library(dota_core
     src/combat/damage.cpp

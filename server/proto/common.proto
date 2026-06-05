@@ -1,0 +1,42 @@
+// proto/common.proto
+// 通用类型定义
+
+syntax = "proto3";
+
+package dota.network;
+
+// ============ 基础类型 ============
+
+message Vec2 {
+  float x = 1;
+  float y = 2;
+}
+
+// ============ 枚举 ============
+
+enum EntityType {
+  ENTITY_UNKNOWN = 0;
+  ENTITY_PLAYER = 1;
+  ENTITY_ENEMY = 2;
+  ENTITY_PROJECTILE = 3;
+  ENTITY_PICKUP = 4;
+}
+
+enum DamageType {
+  DAMAGE_PHYSICAL = 0;
+  DAMAGE_MAGICAL = 1;
+  DAMAGE_PURE = 2;
+}
+
+enum Team {
+  TEAM_NONE = 0;
+  TEAM_GOOD = 1;
+  TEAM_BAD = 2;
+  TEAM_NEUTRAL = 3;
+}
+
+enum PickupType {
+  PICKUP_EXPERIENCE = 0;
+  PICKUP_HEALTH = 1;
+  PICKUP_GOLD = 2;
+}
