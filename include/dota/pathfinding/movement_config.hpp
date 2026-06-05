@@ -3,11 +3,9 @@
 namespace dota::pathfinding {
 
 // 全局可调参数. 运行时静态修改 (参考 PathfindingConfig.cs).
-// 所有"距离"参数以 cell_size 为基准单位倍数, 便于不同 grid 尺度复用配置.
+// 所有"距离"参数以 NavGrid::cell_size() 为基准单位倍数, 便于不同 grid 尺度复用配置.
+// cell_size 不在此处保存 -- 各 grid 实例自带, 调用方按 grid.cell_size() 取.
 struct MovementConfig {
-    // 网格 cell 大小 (世界单位)
-    static inline double cell_size = 1.0;
-
     // GridNavigation: 起点 / 终点 blocked 时, 螺旋搜索最近通行 cell 的最大半径 (格子数)
     static inline int find_nearest_open_max_radius = 10;
 

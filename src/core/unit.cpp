@@ -6,6 +6,7 @@
 #include "dota/modifier/manager.hpp"
 #include "dota/modifier/modifier.hpp"
 #include "dota/pathfinding/movement_config.hpp"
+#include "dota/pathfinding/nav_grid.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -226,12 +227,11 @@ Ability* lookup_ability(Unit& self, int idx) {
 // target 与起点的距离 < arrival_epsilon * cell_size 时视为"已到达", 不激活
 // 移动状态. 调用方据此决定是否立即 consume 当前 Order.
 void set_internal_move_path(Unit& self, MoveState& state, World* world, Vec2 target) {
-    (void)world;
     state             = MoveState{};
     const double dx = target.x - self.position().x;
     const double dy = target.y - self.position().y;
-    const double eps = pathfinding::MovementConfig::arrival_epsilon *
-                        pathfinding::MovementConfig::cell_size;
+    const double cell = world ? world->nav_grid().cell_size() : 1.0;
+    const double eps = pathfinding::MovementConfig::arrival_epsilon * cell;
     if (dx * dx + dy * dy <= eps * eps) {
         // 已经在终点附近, 不进入 active 状态; activate_front 会 consume 此 order.
         state.active = false;

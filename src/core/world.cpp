@@ -23,7 +23,7 @@ namespace dota {
 World::World()
     : projectiles_(std::make_unique<ProjectileManager>())
     , nav_grid_(std::make_shared<pathfinding::NavGrid>(
-          0.0, 0.0, 1.0, 1.0, pathfinding::MovementConfig::cell_size)) {
+          0.0, 0.0, 1.0, 1.0, 1.0)) {
     projectiles_->set_world(this);
 }
 World::~World() = default;
@@ -268,7 +268,7 @@ void World::tick_movement(double dt) {
         const EntityId self_id = u->id();
         const int rid          = static_cast<int>(self_id);
         const double waypoint_eps =
-            MovementConfig::arrival_epsilon * MovementConfig::cell_size;
+            MovementConfig::arrival_epsilon * grid.cell_size();
         const double waypoint_thr = std::max(waypoint_eps, 0.3);
 
         // 移动期间临时把自身从 dynamics 中"剥离" (传 ignore_id 即可).

@@ -89,7 +89,7 @@ void simulate_step(const NavGrid& grid,
                    EntityId ignore_id,
                    std::uint32_t query_group,
                    double unit_radius, double step_angle, double step_dist,
-                   double waypoint_threshold,
+                   double waypoint_threshold, double cell_size,
                    Vec2 end, TraceState& s) {
     if (s.result.has_value()) return;
 
@@ -115,7 +115,7 @@ void simulate_step(const NavGrid& grid,
         }
 
         // 碰撞前进到接触点稍前
-        const double safe = std::max(0.0, hit.toi - 0.01 * MovementConfig::cell_size);
+        const double safe = std::max(0.0, hit.toi - 0.01 * cell_size);
         s.pos = {s.pos.x + dir.x * safe, s.pos.y + dir.y * safe};
         s.cost += safe;
         s.path.push_back(s.pos);
@@ -167,7 +167,7 @@ void simulate_step(const NavGrid& grid,
         const double wp_dx = s.pos.x - last_wp.x;
         const double wp_dy = s.pos.y - last_wp.y;
         const double wp_dist = std::sqrt(wp_dx * wp_dx + wp_dy * wp_dy);
-        if (wp_dist >= 1e-3 * MovementConfig::cell_size) {
+        if (wp_dist >= 1e-3 * cell_size) {
             const double wp_dir_x = wp_dx / wp_dist;
             const double wp_dir_y = wp_dy / wp_dist;
             const auto wp_hit = shape_cast_circle(grid, dynamics, ignore_id,
@@ -188,13 +188,13 @@ void simulate_step(const NavGrid& grid,
             const double twx = end.x - s.pos.x;
             const double twy = end.y - s.pos.y;
             const double tw_dist = std::sqrt(twx * twx + twy * twy);
-            if (tw_dist > 1e-3 * MovementConfig::cell_size) {
+            if (tw_dist > 1e-3 * cell_size) {
                 const Vec2 tw_dir{twx / tw_dist, twy / tw_dist};
                 const double check = std::min(unit_radius * 4.0, tw_dist);
                 const auto tw_hit = shape_cast_circle(grid, dynamics, ignore_id,
                                                      s.pos, tw_dir, check,
                                                      unit_radius, query_group);
-                if (tw_hit.hit && tw_hit.toi < 0.02 * MovementConfig::cell_size) {
+                if (tw_hit.hit && tw_hit.toi < 0.02 * cell_size) {
                     // 距离虽近但前方仍被堵, 推迟退出, 抬高 min_trace_dist
                     s.min_trace_dist = s.traced_dist +
                                        unit_radius * MovementConfig::min_trace_dist_multiplier;
@@ -207,7 +207,7 @@ void simulate_step(const NavGrid& grid,
     }
 
     // 死循环检测
-    if (s.traced_dist > MovementConfig::max_trace_distance * MovementConfig::cell_size) {
+    if (s.traced_dist > MovementConfig::max_trace_distance * cell_size) {
         s.result = PathResult::Partial;
     }
 }
@@ -257,7 +257,7 @@ PathResult WallTracer::find_path(const NavGrid& grid,
 
         simulate_step(grid, dynamics, ignore_id, query_group,
                       unit_radius_, step_angle_, step_dist_, waypoint_threshold_,
-                      end, states[pick]);
+                      grid.cell_size(), end, states[pick]);
 
         if (!states[pick].result.has_value()) continue;
 
@@ -311,7 +311,7 @@ void WallTracer::simplify(const NavGrid& grid,
             const double dx = path[i].x - path[cur].x;
             const double dy = path[i].y - path[cur].y;
             const double dist = std::sqrt(dx * dx + dy * dy);
-            if (dist < MovementConfig::arrival_epsilon * MovementConfig::cell_size) continue;
+            if (dist < MovementConfig::arrival_epsilon * grid.cell_size()) continue;
             const Vec2 dir{dx / dist, dy / dist};
             const auto hit = shape_cast_circle(grid, dynamics, ignore_id,
                                                path[cur], dir, dist,
