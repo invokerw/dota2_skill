@@ -5,6 +5,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <functional>
 #include <limits>
 #include <optional>
 
@@ -232,9 +235,92 @@ PathResult WallTracer::find_path(const NavGrid& grid,
         return PathResult::Reached;
     }
 
+    // 选 first_dir: 让 states[0] 朝"短边"绕.
+    //   1. 直射 shape_cast 找首个障碍, 取障碍中心 C.
+    //   2. cross = (E-S) × (C-S). C 在 (S->E) 左侧 (cross>0) -> 走右侧 (CW, -1) 短;
+    //      C 在右侧 (cross<0) -> 走左侧 (CCW, +1) 短.
+    //   3. 找不到中心 (例如命中 cell 而非 circle) 退化用 (ignore_id, start, end)
+    //      的 hash 打散对称偏向, 避免清一色右绕.
+    const Vec2 dir_se{dx / total, dy / total};
+    const auto first_hit = shape_cast_circle(grid, dynamics, ignore_id,
+                                             start, dir_se, total,
+                                             unit_radius_, query_group);
+    double first_dir = 0.0;
+    if (first_hit.hit) {
+        Vec2 obstacle_center{};
+        bool found_center = false;
+
+        if (first_hit.kind == ShapeCastHit::Kind::Unit) {
+            for (const auto& d : dynamics) {
+                if (d.id == first_hit.unit) {
+                    obstacle_center = d.center;
+                    found_center = true;
+                    break;
+                }
+            }
+        } else if (first_hit.kind == ShapeCastHit::Kind::Terrain) {
+            // 重跑 circle obstacle swept, 看是否有 toi 与 first_hit.toi 接近的圆;
+            // 接近 -> 用其中心. 命中是 blocked cell 时 toi 不会匹配, 走 hash 兜底.
+            double best_toi = std::numeric_limits<double>::infinity();
+            for (const auto& c : grid.circles()) {
+                const double R = unit_radius_ + c.radius;
+                const double ox = start.x - c.center.x;
+                const double oy = start.y - c.center.y;
+                const double od = ox * dir_se.x + oy * dir_se.y;
+                const double oo = ox * ox + oy * oy;
+                const double cterm = oo - R * R;
+                double t = -1.0;
+                if (cterm <= 0.0) {
+                    t = 0.0;
+                } else if (od < 0.0) {
+                    const double disc = od * od - cterm;
+                    if (disc >= 0.0) {
+                        const double tt = -od - std::sqrt(disc);
+                        if (tt >= 0.0 && tt <= total) t = tt;
+                    }
+                }
+                if (t >= 0.0 && t < best_toi) {
+                    best_toi = t;
+                    obstacle_center = c.center;
+                    found_center = true;
+                }
+            }
+            const double tol = std::max(unit_radius_ * 0.5, grid.cell_size() * 0.5);
+            if (found_center && std::abs(best_toi - first_hit.toi) > tol) {
+                found_center = false;
+            }
+        }
+
+        if (found_center) {
+            const double cross = (end.x - start.x) * (obstacle_center.y - start.y)
+                               - (end.y - start.y) * (obstacle_center.x - start.x);
+            const double eps = 1e-6 * total;
+            if (cross > eps)      first_dir = -1.0;  // C 在左 -> 走右
+            else if (cross < -eps) first_dir = 1.0;  // C 在右 -> 走左
+        }
+    }
+
+    if (first_dir == 0.0) {
+        // 退化: hash (ignore_id, start, end) 打散对称偏向
+        auto hash_combine = [](std::uint64_t seed, std::uint64_t v) {
+            return seed ^ (v + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2));
+        };
+        auto hash_double = [](double v) {
+            std::uint64_t bits = 0;
+            std::memcpy(&bits, &v, sizeof(bits));
+            return std::hash<std::uint64_t>{}(bits);
+        };
+        std::uint64_t seed = std::hash<EntityId>{}(ignore_id);
+        seed = hash_combine(seed, hash_double(start.x));
+        seed = hash_combine(seed, hash_double(start.y));
+        seed = hash_combine(seed, hash_double(end.x));
+        seed = hash_combine(seed, hash_double(end.y));
+        first_dir = (seed & 1ULL) ? 1.0 : -1.0;
+    }
+
     TraceState states[2] = {
-        TraceState(start,  1.0, unit_radius_ * MovementConfig::min_trace_dist_multiplier),
-        TraceState(start, -1.0, unit_radius_ * MovementConfig::min_trace_dist_multiplier),
+        TraceState(start,  first_dir, unit_radius_ * MovementConfig::min_trace_dist_multiplier),
+        TraceState(start, -first_dir, unit_radius_ * MovementConfig::min_trace_dist_multiplier),
     };
 
     int best_idx = -1;
