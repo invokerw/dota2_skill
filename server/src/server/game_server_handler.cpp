@@ -163,19 +163,30 @@ void GameServerHandler::broadcast_snapshot() {
   GameSession* session = server_->default_session();
   if (!session) return;
 
-  // 生成快照
-  dota::network::Packet packet;
-  packet.set_sequence(next_sequence_++);
-  packet.set_timestamp(get_current_time_ms());
+  uint32_t current_tick = session->tick_count();
 
-  auto* snapshot = packet.mutable_snapshot();
-  session->generate_snapshot(snapshot);
+  // 给每个客户端发送增量或完整快照
+  for (auto& [client_id, player] : players_) {
+    if (!player.connected) continue;
 
-  // 广播给所有在线玩家
-  for (const auto& [client_id, player] : players_) {
-    if (player.connected) {
-      server_->send_to_client(client_id, packet);
+    dota::network::Packet packet;
+    packet.set_sequence(next_sequence_++);
+    packet.set_timestamp(get_current_time_ms());
+
+    // 如果客户端刚连接或 tick 差距太大，发送完整快照
+    if (player.last_ack_tick == 0 || (current_tick - player.last_ack_tick) > 10) {
+      auto* snapshot = packet.mutable_snapshot();
+      session->generate_snapshot(snapshot);
+    } else {
+      // 发送增量快照
+      auto* delta = packet.mutable_delta_snapshot();
+      session->generate_delta_snapshot(delta, player.last_ack_tick);
     }
+
+    server_->send_to_client(client_id, packet);
+
+    // 更新客户端的 ack tick (简化: 假设客户端会确认)
+    player.last_ack_tick = current_tick;
   }
 }
 

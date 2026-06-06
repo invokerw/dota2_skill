@@ -84,6 +84,15 @@ target_link_libraries(simple_client PRIVATE
   server_network
 )
 
+# 压力测试客户端
+add_executable(stress_test_client
+  tools/stress_test_client.cpp
+)
+
+target_link_libraries(stress_test_client PRIVATE
+  server_network
+)
+
 # ============ 测试 ============
 if(BUILD_TESTING)
   add_subdirectory(test)

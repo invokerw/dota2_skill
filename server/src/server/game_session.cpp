@@ -162,11 +162,58 @@ void GameSession::generate_delta_snapshot(dota::network::S2C_DeltaSnapshot* delt
   delta->set_base_tick(base_tick);
   delta->set_tick(tick_count_);
 
-  // TODO: 实现增量同步
-  // 比较当前状态和 last_snapshot_，只发送变化的实体
+  // 生成当前完整快照
+  std::map<uint32_t, dota::network::EntityState> current_snapshot;
 
-  std::cout << "[GameSession] Generated delta snapshot base=" << base_tick
-            << " tick=" << tick_count_ << "\n";
+  auto radiant_units = world_->units_on_team(dota::Team::Radiant);
+  auto dire_units = world_->units_on_team(dota::Team::Dire);
+
+  for (dota::Unit* unit : radiant_units) {
+    dota::network::EntityState state;
+    serialize_entity(unit, &state);
+    current_snapshot[unit->id()] = state;
+  }
+
+  for (dota::Unit* unit : dire_units) {
+    dota::network::EntityState state;
+    serialize_entity(unit, &state);
+    current_snapshot[unit->id()] = state;
+  }
+
+  // 比较当前状态和上次快照
+  // 1. 发送新增或变化的实体
+  for (const auto& [id, state] : current_snapshot) {
+    auto it = last_snapshot_.find(id);
+    if (it == last_snapshot_.end()) {
+      // 新实体
+      *delta->add_updated_entities() = state;
+    } else {
+      // 检查是否有变化 (简化: 比较序列化后的字符串)
+      std::string old_data, new_data;
+      it->second.SerializeToString(&old_data);
+      state.SerializeToString(&new_data);
+
+      if (old_data != new_data) {
+        // 实体有变化
+        *delta->add_updated_entities() = state;
+      }
+    }
+  }
+
+  // 2. 发送删除的实体 ID
+  for (const auto& [id, state] : last_snapshot_) {
+    if (current_snapshot.find(id) == current_snapshot.end()) {
+      delta->add_removed_entities(id);
+    }
+  }
+
+  // 更新上次快照
+  last_snapshot_ = std::move(current_snapshot);
+
+  // std::cout << "[GameSession] Generated delta snapshot base=" << base_tick
+  //           << " tick=" << tick_count_
+  //           << " updated=" << delta->updated_entities_size()
+  //           << " removed=" << delta->removed_entities_size() << "\n";
 }
 
 uint32_t GameSession::create_player_unit(const std::string& player_name, const Vec2& spawn_pos) {

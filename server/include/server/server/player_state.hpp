@@ -25,6 +25,7 @@ struct PlayerState {
   uint64_t last_ping_time = 0;
   uint64_t last_activity_time = 0;
   float latency = 0.0f;
+  uint32_t last_ack_tick = 0;  // 客户端确认的最后 tick (用于增量快照)
 
   // 游戏状态
   uint32_t level = 1;
