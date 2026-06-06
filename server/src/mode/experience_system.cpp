@@ -2,6 +2,7 @@
 // 经验系统实现 - Stage 4
 
 #include "server/mode/experience_system.hpp"
+#include <cmath>
 #include <iostream>
 
 namespace dota::server {

@@ -181,8 +181,10 @@ if(BUILD_SERVER)
 
     find_package(Protobuf REQUIRED)
 
-    # Protobuf 5.x 需要 abseil
-    find_package(absl REQUIRED)
+    # Protobuf 5.x 需要 abseil, 3.x 不需要
+    if(Protobuf_VERSION VERSION_GREATER_EQUAL "5.0")
+        find_package(absl REQUIRED)
+    endif()
 
     # Libevent 使用 pkg-config 查找
     find_package(PkgConfig REQUIRED)
