@@ -192,19 +192,31 @@ if(BUILD_SERVER OR BUILD_CLIENT)
         find_package(absl REQUIRED)
     endif()
 
-    # Libevent 使用 pkg-config 查找
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(LIBEVENT REQUIRED libevent>=2.1)
+    # Libevent 查找
+    if(WIN32)
+        # Windows 使用 vcpkg 的 CMake config
+        find_package(Libevent CONFIG REQUIRED)
+        if(NOT TARGET libevent::core)
+            add_library(libevent::core ALIAS libevent::core)
+        endif()
+        if(NOT TARGET libevent::extra)
+            add_library(libevent::extra ALIAS libevent::extra)
+        endif()
+    else()
+        # Linux/macOS 使用 pkg-config
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(LIBEVENT REQUIRED libevent>=2.1)
 
-    # 创建 imported target 以便统一使用
-    if(NOT TARGET libevent::core)
-        add_library(libevent::core INTERFACE IMPORTED)
-        target_include_directories(libevent::core INTERFACE ${LIBEVENT_INCLUDE_DIRS})
-        target_link_libraries(libevent::core INTERFACE ${LIBEVENT_LIBRARIES})
-        target_link_directories(libevent::core INTERFACE ${LIBEVENT_LIBRARY_DIRS})
+        # 创建 imported target 以便统一使用
+        if(NOT TARGET libevent::core)
+            add_library(libevent::core INTERFACE IMPORTED)
+            target_include_directories(libevent::core INTERFACE ${LIBEVENT_INCLUDE_DIRS})
+            target_link_libraries(libevent::core INTERFACE ${LIBEVENT_LIBRARIES})
+            target_link_directories(libevent::core INTERFACE ${LIBEVENT_LIBRARY_DIRS})
 
-        add_library(libevent::extra INTERFACE IMPORTED)
-        target_link_libraries(libevent::extra INTERFACE libevent::core)
+            add_library(libevent::extra INTERFACE IMPORTED)
+            target_link_libraries(libevent::extra INTERFACE libevent::core)
+        endif()
     endif()
 
     # KCP: 使用 third_party/kcp 或从 GitHub 获取
