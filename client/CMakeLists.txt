@@ -78,6 +78,15 @@ target_link_libraries(game_client PRIVATE
   client_game
 )
 
+# Windows 特殊处理：避免 Windows.h 宏污染
+if(WIN32)
+  target_compile_definitions(game_client PRIVATE
+    WIN32_LEAN_AND_MEAN
+    NOGDI
+    NOUSER
+  )
+endif()
+
 # ============ 资源文件复制 ============
 add_custom_command(TARGET game_client POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
