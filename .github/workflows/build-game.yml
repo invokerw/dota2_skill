@@ -53,8 +53,9 @@ jobs:
         if: matrix.name == 'windows-x64'
         shell: pwsh
         run: |
-          # Windows 使用 vcpkg 安装依赖
+          # 使用 vcpkg 安装依赖
           vcpkg install protobuf:x64-windows libevent:x64-windows
+          vcpkg integrate install
 
       # CPM 缓存
       - name: Cache CPM downloads

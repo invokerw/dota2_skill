@@ -324,7 +324,7 @@ class StressTest {
     std::cout << "Clients: " << clients_.size() << "\n";
     std::cout << "Total packets sent: " << total_sent << "\n";
     std::cout << "Total packets received: " << total_received << "\n";
-    std::cout << "Packets per second: " << (total_sent / std::max(1L, duration)) << "\n";
+    std::cout << "Packets per second: " << (duration > 0 ? total_sent / duration : 0) << "\n";
     std::cout << "======================================\n";
   }
 
