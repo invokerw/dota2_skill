@@ -25,9 +25,10 @@ jobs:
           - name: macos-arm64
             os: macos-14
             archive_ext: tar.gz
-          - name: windows-x64
-            os: windows-2022
-            archive_ext: zip
+          # Windows 暂不支持游戏服务器（需要大量跨平台适配）
+          # - name: windows-x64
+          #   os: windows-2022
+          #   archive_ext: zip
 
     steps:
       - name: Checkout
