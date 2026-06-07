@@ -1,0 +1,280 @@
+# 构建游戏服务器、客户端和 pathfinding demo
+# 支持 Linux x64, macOS arm64, Windows x64
+
+name: build-game
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-22.04
+            archive_ext: tar.gz
+          - name: macos-arm64
+            os: macos-14
+            archive_ext: tar.gz
+          - name: windows-x64
+            os: windows-2022
+            archive_ext: zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 安装依赖
+      - name: Install dependencies (Linux)
+        if: matrix.name == 'linux-x64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libprotobuf-dev protobuf-compiler \
+            libevent-dev \
+            libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxi-dev libgl1-mesa-dev
+
+      - name: Install dependencies (macOS)
+        if: matrix.name == 'macos-arm64'
+        run: |
+          brew install protobuf libevent
+
+      - name: Install dependencies (Windows)
+        if: matrix.name == 'windows-x64'
+        shell: pwsh
+        run: |
+          # Windows 使用 vcpkg 安装依赖
+          vcpkg install protobuf:x64-windows libevent:x64-windows
+
+      # CPM 缓存
+      - name: Cache CPM downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/build/_deps
+            ~/.cache/CPM
+          key: cpm-game-${{ matrix.name }}-${{ hashFiles('CMakeLists.txt', 'cmake/CPM.cmake') }}
+          restore-keys: |
+            cpm-game-${{ matrix.name }}-
+
+      # 配置 CMake
+      - name: Configure (Linux)
+        if: matrix.name == 'linux-x64'
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SERVER=ON \
+            -DBUILD_CLIENT=ON \
+            -DBUILD_VISUAL=ON
+
+      - name: Configure (macOS)
+        if: matrix.name == 'macos-arm64'
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DBUILD_SERVER=ON \
+            -DBUILD_CLIENT=ON \
+            -DBUILD_VISUAL=ON
+
+      - name: Configure (Windows)
+        if: matrix.name == 'windows-x64'
+        run: |
+          cmake -B build -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+            -DBUILD_SERVER=ON `
+            -DBUILD_CLIENT=ON `
+            -DBUILD_VISUAL=ON
+
+      # 构建
+      - name: Build game server
+        run: cmake --build build --config Release --target game_server -j
+
+      - name: Build game client
+        run: cmake --build build --config Release --target game_client -j
+
+      - name: Build stress test client
+        run: cmake --build build --config Release --target stress_test_client -j
+
+      - name: Build pathfinding demo
+        run: cmake --build build --config Release --target pathfinding_demo -j
+
+      # 组装产物 (Linux/macOS)
+      - name: Stage artifact (Linux/macOS)
+        if: matrix.name != 'windows-x64'
+        run: |
+          set -e
+          DIST="dist/dota2_skill-game-${{ matrix.name }}"
+          mkdir -p "$DIST/bin"
+
+          # 服务器相关
+          cp build/server/game_server "$DIST/bin/"
+          cp build/server/stress_test_client "$DIST/bin/"
+          mkdir -p "$DIST/server"
+          [ -d server/config ] && cp -R server/config "$DIST/server/"
+
+          # 客户端
+          if [ -f build/client/game_client ]; then
+            cp build/client/game_client "$DIST/bin/"
+            mkdir -p "$DIST/client/assets"
+          fi
+
+          # pathfinding demo
+          if [ -f build/pathfinding_demo ]; then
+            cp build/pathfinding_demo "$DIST/bin/"
+          fi
+
+          # 数据文件
+          cp -R data "$DIST/data"
+
+          # 启动脚本
+          cat > "$DIST/run_server.sh" <<'EOF'
+          #!/usr/bin/env bash
+          HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          cd "$HERE"
+          exec "$HERE/bin/game_server" "$@"
+          EOF
+
+          cat > "$DIST/run_client.sh" <<'EOF'
+          #!/usr/bin/env bash
+          HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          export DOTA_DATA_DIR="$HERE/data"
+          exec "$HERE/bin/game_client" "$@"
+          EOF
+
+          cat > "$DIST/run_pathfinding_demo.sh" <<'EOF'
+          #!/usr/bin/env bash
+          HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          export DOTA_DATA_DIR="$HERE/data"
+          exec "$HERE/bin/pathfinding_demo" "$@"
+          EOF
+
+          cat > "$DIST/README.txt" <<'EOF'
+          Dota2 Skill - Game Build
+          =========================
+
+          Server:
+            ./run_server.sh
+
+          Client:
+            ./run_client.sh [PlayerName] [host] [port]
+            Default: ./run_client.sh Player 127.0.0.1 7777
+
+          Pathfinding Demo:
+            ./run_pathfinding_demo.sh
+
+          Stress Test:
+            ./bin/stress_test_client [num_clients] [duration_sec] [host] [port]
+          EOF
+
+          chmod +x "$DIST"/*.sh
+          tar -C dist -czf "dota2_skill-game-${{ matrix.name }}.tar.gz" \
+            "dota2_skill-game-${{ matrix.name }}"
+
+      # 组装产物 (Windows)
+      - name: Stage artifact (Windows)
+        if: matrix.name == 'windows-x64'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = "dist\dota2_skill-game-${{ matrix.name }}"
+          New-Item -ItemType Directory -Force -Path "$dist\bin" | Out-Null
+
+          # 服务器
+          Copy-Item build\server\Release\game_server.exe "$dist\bin\"
+          Copy-Item build\server\Release\stress_test_client.exe "$dist\bin\"
+          New-Item -ItemType Directory -Force -Path "$dist\server" | Out-Null
+          if (Test-Path server\config) {
+            Copy-Item -Recurse server\config "$dist\server\"
+          }
+
+          # 客户端
+          if (Test-Path build\client\Release\game_client.exe) {
+            Copy-Item build\client\Release\game_client.exe "$dist\bin\"
+            New-Item -ItemType Directory -Force -Path "$dist\client\assets" | Out-Null
+          }
+
+          # pathfinding demo
+          if (Test-Path build\Release\pathfinding_demo.exe) {
+            Copy-Item build\Release\pathfinding_demo.exe "$dist\bin\"
+          }
+
+          # 数据
+          Copy-Item -Recurse data "$dist\data"
+
+          # 启动脚本
+          @'
+          @echo off
+          cd /d "%~dp0"
+          bin\game_server.exe %*
+          '@ | Set-Content -Encoding ASCII "$dist\run_server.bat"
+
+          @'
+          @echo off
+          setlocal
+          set "HERE=%~dp0"
+          set "DOTA_DATA_DIR=%HERE%data"
+          "%HERE%bin\game_client.exe" %*
+          '@ | Set-Content -Encoding ASCII "$dist\run_client.bat"
+
+          @'
+          @echo off
+          setlocal
+          set "HERE=%~dp0"
+          set "DOTA_DATA_DIR=%HERE%data"
+          "%HERE%bin\pathfinding_demo.exe" %*
+          '@ | Set-Content -Encoding ASCII "$dist\run_pathfinding_demo.bat"
+
+          @'
+          Dota2 Skill - Game Build
+          =========================
+
+          Server:
+            run_server.bat
+
+          Client:
+            run_client.bat [PlayerName] [host] [port]
+            Default: run_client.bat Player 127.0.0.1 7777
+
+          Pathfinding Demo:
+            run_pathfinding_demo.bat
+
+          Stress Test:
+            bin\stress_test_client.exe [num_clients] [duration_sec] [host] [port]
+          '@ | Set-Content -Encoding ASCII "$dist\README.txt"
+
+          Compress-Archive -Path "$dist" -DestinationPath "dota2_skill-game-${{ matrix.name }}.zip" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dota2_skill-game-${{ matrix.name }}
+          path: dota2_skill-game-${{ matrix.name }}.${{ matrix.archive_ext }}
+          if-no-files-found: error
+
+  release:
+    name: Attach to release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
