@@ -103,6 +103,72 @@ register_modifier("modifier_test_evasion", {
 - [录像 JSONL schema](doc/recording_schema.md)
 - [skill_tester modifier catalog 设计](doc/skill_tester_modifier_catalog_plan.md)
 
+---
+
+## 🎮 多人游戏服务器和客户端
+
+### 游戏服务器（生存模式）✅
+
+基于核心技能系统的多人在线生存模式服务器：
+
+**功能**:
+- UDP + KCP 可靠传输，支持 10-50 并发玩家
+- 30Hz 游戏逻辑 tick，10Hz 状态同步
+- 波次刷怪系统，经验升级，技能池
+- 增量快照优化（节省 80% 带宽）
+
+**编译**:
+```bash
+cmake -B build -DBUILD_SERVER=ON
+cmake --build build -j
+```
+
+**运行**:
+```bash
+./build/server/game_server
+```
+
+详细文档: [server/PROGRESS.md](server/PROGRESS.md)
+
+### 游戏客户端（raylib）✅
+
+基于 raylib 的 2D 游戏客户端：
+
+**功能**:
+- 实时联网同步，增量快照
+- 相机跟随，60 FPS 渲染
+- 右键移动，QWER 技能使用
+- UI 显示（玩家 ID、延迟、FPS）
+
+**编译**:
+```bash
+cmake -B build -DBUILD_CLIENT=ON -DBUILD_VISUAL=ON
+cmake --build build -j
+```
+
+**运行**:
+```bash
+./build/client/game_client [PlayerName] [host] [port]
+```
+
+详细文档: [client/CLIENT_COMPLETED.md](client/CLIENT_COMPLETED.md)
+
+### 联网测试
+
+1. 启动服务器: `./build/server/game_server`
+2. 启动客户端: `./build/client/game_client`
+3. 右键移动，Q/W/E/R/D/F 使用技能
+
+测试指南: [TESTING.md](TESTING.md)
+
+### 项目进度
+
+- **服务器**: 90% 完成（5 个 Stage 完成）
+- **客户端**: 80% 完成（基础框架完成）
+- **整体**: 85% 完成，可进行游戏测试
+
+---
+
 ## 许可证
 
 MIT
