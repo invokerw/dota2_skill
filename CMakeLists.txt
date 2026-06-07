@@ -172,8 +172,14 @@ if(sol2_ADDED)
 endif()
 
 # --- Server dependencies (optional) ---
+# --- Server (networking, protobuf, kcp) ---
 option(BUILD_SERVER "Build game server (requires libevent, protobuf, kcp)" OFF)
-if(BUILD_SERVER)
+
+# --- Client (raylib + networking) ---
+option(BUILD_CLIENT "Build game client (requires raylib, libevent, protobuf, kcp)" OFF)
+
+# 共享的网络依赖（服务器和客户端都需要）
+if(BUILD_SERVER OR BUILD_CLIENT)
     # 在 macOS 上优先使用 Homebrew 的 protoc
     if(APPLE AND EXISTS "/opt/homebrew/bin/protoc")
         set(Protobuf_PROTOC_EXECUTABLE "/opt/homebrew/bin/protoc" CACHE FILEPATH "Protobuf compiler" FORCE)
@@ -191,13 +197,15 @@ if(BUILD_SERVER)
     pkg_check_modules(LIBEVENT REQUIRED libevent>=2.1)
 
     # 创建 imported target 以便统一使用
-    add_library(libevent::core INTERFACE IMPORTED)
-    target_include_directories(libevent::core INTERFACE ${LIBEVENT_INCLUDE_DIRS})
-    target_link_libraries(libevent::core INTERFACE ${LIBEVENT_LIBRARIES})
-    target_link_directories(libevent::core INTERFACE ${LIBEVENT_LIBRARY_DIRS})
+    if(NOT TARGET libevent::core)
+        add_library(libevent::core INTERFACE IMPORTED)
+        target_include_directories(libevent::core INTERFACE ${LIBEVENT_INCLUDE_DIRS})
+        target_link_libraries(libevent::core INTERFACE ${LIBEVENT_LIBRARIES})
+        target_link_directories(libevent::core INTERFACE ${LIBEVENT_LIBRARY_DIRS})
 
-    add_library(libevent::extra INTERFACE IMPORTED)
-    target_link_libraries(libevent::extra INTERFACE libevent::core)
+        add_library(libevent::extra INTERFACE IMPORTED)
+        target_link_libraries(libevent::extra INTERFACE libevent::core)
+    endif()
 
     # KCP: 使用 third_party/kcp 或从 GitHub 获取
     if(NOT EXISTS "${CMAKE_SOURCE_DIR}/third_party/kcp/ikcp.c")
@@ -213,8 +221,19 @@ if(BUILD_SERVER)
                  DESTINATION "${CMAKE_SOURCE_DIR}/third_party/kcp/")
         endif()
     endif()
+endif()
 
+if(BUILD_SERVER)
     add_subdirectory(server)
+endif()
+
+if(BUILD_CLIENT)
+    # 客户端需要 raylib (已在 BUILD_VISUAL 中添加)
+    if(NOT TARGET raylib)
+        message(FATAL_ERROR "BUILD_CLIENT requires raylib. Please enable BUILD_VISUAL or provide raylib manually.")
+    endif()
+
+    add_subdirectory(client)
 endif()
 
 # --- Core library ---
