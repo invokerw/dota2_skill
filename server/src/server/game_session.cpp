@@ -5,6 +5,11 @@
 #include "server/mode/survivor_mode.hpp"
 #include "dota/core/unit.hpp"
 #include <iostream>
+#include <cmath>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 namespace dota::server {
 
