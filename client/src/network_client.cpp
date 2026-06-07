@@ -2,13 +2,30 @@
 // 网络客户端实现
 
 #include "client/network_client.hpp"
-#include <arpa/inet.h>
-#include <unistd.h>
+
+#ifdef _WIN32
+  #include <winsock2.h>
+  #include <ws2tcpip.h>
+  #pragma comment(lib, "ws2_32.lib")
+#else
+  #include <arpa/inet.h>
+  #include <unistd.h>
+#endif
+
 #include <chrono>
 #include <iostream>
 #include <cstring>
 
 namespace dota::client {
+
+// 跨平台辅助宏
+#ifdef _WIN32
+  #define CLOSE_SOCKET(s) closesocket(s)
+  #define SOCKET_ERROR_CHECK(s) ((s) == INVALID_SOCKET)
+#else
+  #define CLOSE_SOCKET(s) close(s)
+  #define SOCKET_ERROR_CHECK(s) ((s) < 0)
+#endif
 
 NetworkClient::NetworkClient(const std::string& host, uint16_t port)
     : host_(host), port_(port) {}
@@ -20,7 +37,7 @@ NetworkClient::~NetworkClient() {
 bool NetworkClient::connect(const std::string& player_name) {
   // 创建 UDP socket
   socket_ = socket(AF_INET, SOCK_DGRAM, 0);
-  if (socket_ < 0) {
+  if (SOCKET_ERROR_CHECK(socket_)) {
     std::cerr << "[NetworkClient] Failed to create socket\n";
     return false;
   }
@@ -31,20 +48,30 @@ bool NetworkClient::connect(const std::string& player_name) {
   memset(&server_addr_, 0, sizeof(server_addr_));
   server_addr_.sin_family = AF_INET;
   server_addr_.sin_port = htons(port_);
+
+#ifdef _WIN32
+  inet_pton(AF_INET, host_.c_str(), &server_addr_.sin_addr);
+#else
   inet_aton(host_.c_str(), &server_addr_.sin_addr);
+#endif
 
   // 创建 libevent
   ev_base_ = event_base_new();
   if (!ev_base_) {
     std::cerr << "[NetworkClient] Failed to create event base\n";
-    close(socket_);
+    CLOSE_SOCKET(socket_);
     return false;
   }
 
   // KCP 输出回调
   auto output_cb = [this](const char* buf, int len, void*) {
+#ifdef _WIN32
     sendto(socket_, buf, len, 0,
            reinterpret_cast<sockaddr*>(&server_addr_), sizeof(server_addr_));
+#else
+    sendto(socket_, reinterpret_cast<const void*>(buf), len, 0,
+           reinterpret_cast<sockaddr*>(&server_addr_), sizeof(server_addr_));
+#endif
   };
 
   // 创建 KCP 会话（使用随机 conv ID）
@@ -92,10 +119,17 @@ void NetworkClient::disconnect() {
     ev_base_ = nullptr;
   }
 
+#ifdef _WIN32
+  if (socket_ != INVALID_SOCKET) {
+    CLOSE_SOCKET(socket_);
+    socket_ = INVALID_SOCKET;
+  }
+#else
   if (socket_ >= 0) {
-    close(socket_);
+    CLOSE_SOCKET(socket_);
     socket_ = -1;
   }
+#endif
 
   session_.reset();
   connected_ = false;
@@ -186,7 +220,11 @@ void NetworkClient::update() {
 
 void NetworkClient::on_udp_read() {
   uint8_t buffer[65536];
+#ifdef _WIN32
+  int n = recv(socket_, reinterpret_cast<char*>(buffer), sizeof(buffer), 0);
+#else
   ssize_t n = recv(socket_, buffer, sizeof(buffer), 0);
+#endif
   if (n > 0) {
     session_->input(buffer, n);
   }
