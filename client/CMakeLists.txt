@@ -26,6 +26,15 @@ target_link_libraries(client_network PUBLIC
   libevent::core
 )
 
+# Windows 特殊处理：避免 Windows.h 宏污染
+if(WIN32)
+  target_compile_definitions(client_network PRIVATE
+    WIN32_LEAN_AND_MEAN
+    NOGDI
+    NOUSER
+  )
+endif()
+
 # 需要链接 server_network 以获取 KcpSession 实现
 # 但 server_network 不在 BUILD_CLIENT 时构建，所以需要单独编译 KcpSession
 # 简化方案：将 KcpSession 源文件直接添加到 client_network
@@ -50,6 +59,15 @@ target_link_libraries(client_game PUBLIC
   client_network
   raylib
 )
+
+# Windows 特殊处理：避免 Windows.h 宏污染
+if(WIN32)
+  target_compile_definitions(client_game PRIVATE
+    WIN32_LEAN_AND_MEAN
+    NOGDI
+    NOUSER
+  )
+endif()
 
 # ============ 客户端可执行文件 ============
 add_executable(game_client
