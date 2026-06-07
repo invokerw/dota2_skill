@@ -155,8 +155,8 @@ Vec2 Renderer::screen_to_world(Vector2 screen_pos) const {
 
 Vector2 Renderer::world_to_screen(Vec2 world_pos) const {
   return Vector2{
-    world_pos.x + camera_offset_.x,
-    world_pos.y + camera_offset_.y
+    static_cast<float>(world_pos.x + camera_offset_.x),
+    static_cast<float>(world_pos.y + camera_offset_.y)
   };
 }
 

@@ -93,20 +93,22 @@ jobs:
           cmake -B build -A x64 `
             -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
             -DBUILD_SERVER=ON `
-            -DBUILD_CLIENT=ON `
-            -DBUILD_VISUAL=ON
+            -DBUILD_CLIENT=OFF `
+            -DBUILD_VISUAL=OFF
 
       # 构建
       - name: Build game server
         run: cmake --build build --config Release --target game_server -j
 
-      - name: Build game client
+      - name: Build game client (Linux/macOS only)
+        if: matrix.name != 'windows-x64'
         run: cmake --build build --config Release --target game_client -j
 
       - name: Build stress test client
         run: cmake --build build --config Release --target stress_test_client -j
 
-      - name: Build pathfinding demo
+      - name: Build pathfinding demo (Linux/macOS only)
+        if: matrix.name != 'windows-x64'
         run: cmake --build build --config Release --target pathfinding_demo -j
 
       # 组装产物 (Linux/macOS)
