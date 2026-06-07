@@ -32,7 +32,7 @@ jobs:
           - name: windows-x64
             os: windows-2022
             archive_ext: zip
-            build_server: false
+            build_server: true
             build_client: true
 
     steps:
@@ -99,7 +99,7 @@ jobs:
         run: |
           cmake -B build -A x64 `
             -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
-            -DBUILD_SERVER=OFF `
+            -DBUILD_SERVER=ON `
             -DBUILD_CLIENT=ON `
             -DBUILD_VISUAL=ON
 
@@ -205,16 +205,35 @@ jobs:
           $dist = "dist\dota2_skill-game-${{ matrix.name }}"
           New-Item -ItemType Directory -Force -Path "$dist\bin" | Out-Null
 
+          # 服务器
+          Copy-Item build\server\Release\game_server.exe "$dist\bin\"
+          Copy-Item build\server\Release\stress_test_client.exe "$dist\bin\"
+          New-Item -ItemType Directory -Force -Path "$dist\server" | Out-Null
+          if (Test-Path server\config) {
+            Copy-Item -Recurse server\config "$dist\server\"
+          }
+
           # 客户端
           if (Test-Path build\client\Release\game_client.exe) {
             Copy-Item build\client\Release\game_client.exe "$dist\bin\"
             New-Item -ItemType Directory -Force -Path "$dist\client\assets" | Out-Null
           }
 
+          # pathfinding demo
+          if (Test-Path build\Release\pathfinding_demo.exe) {
+            Copy-Item build\Release\pathfinding_demo.exe "$dist\bin\"
+          }
+
           # 数据
           Copy-Item -Recurse data "$dist\data"
 
           # 启动脚本
+          @'
+          @echo off
+          cd /d "%~dp0"
+          bin\game_server.exe %*
+          '@ | Set-Content -Encoding ASCII "$dist\run_server.bat"
+
           @'
           @echo off
           setlocal
@@ -224,15 +243,29 @@ jobs:
           '@ | Set-Content -Encoding ASCII "$dist\run_client.bat"
 
           @'
-          Dota2 Skill - Game Client (Windows)
+          @echo off
+          setlocal
+          set "HERE=%~dp0"
+          set "DOTA_DATA_DIR=%HERE%data"
+          "%HERE%bin\pathfinding_demo.exe" %*
+          '@ | Set-Content -Encoding ASCII "$dist\run_pathfinding_demo.bat"
+
+          @'
+          Dota2 Skill - Game Build (Windows)
           ====================================
+
+          Server:
+            run_server.bat
 
           Client:
             run_client.bat [PlayerName] [host] [port]
             Default: run_client.bat Player 127.0.0.1 7777
 
-          Note: Windows server is not supported yet.
-          Use WSL2 or Linux VM to run the server.
+          Pathfinding Demo:
+            run_pathfinding_demo.bat
+
+          Stress Test:
+            bin\stress_test_client.exe [num_clients] [duration_sec] [host] [port]
           '@ | Set-Content -Encoding ASCII "$dist\README.txt"
 
           Compress-Archive -Path "$dist" -DestinationPath "dota2_skill-game-${{ matrix.name }}.zip" -Force
