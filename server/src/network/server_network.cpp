@@ -18,6 +18,15 @@
 
 namespace dota::network {
 
+// 跨平台辅助宏
+#ifdef _WIN32
+  #define CLOSE_SOCKET(s) closesocket(s)
+  #define SOCKET_ERROR_CHECK(s) ((s) == INVALID_SOCKET)
+#else
+  #define CLOSE_SOCKET(s) close(s)
+  #define SOCKET_ERROR_CHECK(s) ((s) < 0)
+#endif
+
 ServerNetwork::ServerNetwork(uint16_t port) : port_(port) {}
 
 ServerNetwork::~ServerNetwork() {
@@ -27,7 +36,7 @@ ServerNetwork::~ServerNetwork() {
 bool ServerNetwork::start() {
   // 创建 UDP socket
   udp_socket_ = socket(AF_INET, SOCK_DGRAM, 0);
-  if (udp_socket_ < 0) {
+  if (SOCKET_ERROR_CHECK(udp_socket_)) {
     std::cerr << "[ServerNetwork] Failed to create socket\n";
     return false;
   }
@@ -36,7 +45,11 @@ bool ServerNetwork::start() {
 
   // 允许地址重用
   int opt = 1;
+#ifdef _WIN32
+  setsockopt(udp_socket_, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&opt), sizeof(opt));
+#else
   setsockopt(udp_socket_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+#endif
 
   // 绑定端口
   sockaddr_in addr{};
@@ -46,7 +59,7 @@ bool ServerNetwork::start() {
 
   if (bind(udp_socket_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
     std::cerr << "[ServerNetwork] Failed to bind port " << port_ << "\n";
-    close(udp_socket_);
+    CLOSE_SOCKET(udp_socket_);
     return false;
   }
 
@@ -54,7 +67,7 @@ bool ServerNetwork::start() {
   ev_base_ = event_base_new();
   if (!ev_base_) {
     std::cerr << "[ServerNetwork] Failed to create event base\n";
-    close(udp_socket_);
+    CLOSE_SOCKET(udp_socket_);
     return false;
   }
 
@@ -86,10 +99,17 @@ void ServerNetwork::stop() {
     ev_base_ = nullptr;
   }
 
+#ifdef _WIN32
+  if (udp_socket_ != INVALID_SOCKET) {
+    CLOSE_SOCKET(udp_socket_);
+    udp_socket_ = INVALID_SOCKET;
+  }
+#else
   if (udp_socket_ >= 0) {
-    close(udp_socket_);
+    CLOSE_SOCKET(udp_socket_);
     udp_socket_ = -1;
   }
+#endif
 
   sessions_.clear();
   endpoint_to_client_.clear();
@@ -117,12 +137,22 @@ void ServerNetwork::on_udp_read(int fd, short events) {
   sockaddr_in remote_addr;
   socklen_t addr_len = sizeof(remote_addr);
 
+#ifdef _WIN32
+  int n = recvfrom(fd, reinterpret_cast<char*>(buffer), sizeof(buffer), 0,
+                   reinterpret_cast<sockaddr*>(&remote_addr), reinterpret_cast<int*>(&addr_len));
+#else
   ssize_t n = recvfrom(fd, buffer, sizeof(buffer), 0,
                        reinterpret_cast<sockaddr*>(&remote_addr), &addr_len);
+#endif
+
   if (n <= 0) return;
 
+  // 将 IP 地址转换为字符串
+  char ip_str[INET_ADDRSTRLEN];
+  inet_ntop(AF_INET, &remote_addr.sin_addr, ip_str, INET_ADDRSTRLEN);
+
   RemoteEndpoint endpoint{
-    inet_ntoa(remote_addr.sin_addr),
+    ip_str,
     ntohs(remote_addr.sin_port)
   };
 
@@ -161,10 +191,16 @@ void ServerNetwork::create_session(const RemoteEndpoint& endpoint, uint32_t conv
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(endpoint.port);
-    inet_aton(endpoint.address.c_str(), &addr.sin_addr);
 
+#ifdef _WIN32
+    inet_pton(AF_INET, endpoint.address.c_str(), &addr.sin_addr);
     sendto(udp_socket_, buf, len, 0,
            reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+#else
+    inet_aton(endpoint.address.c_str(), &addr.sin_addr);
+    sendto(udp_socket_, reinterpret_cast<const void*>(buf), len, 0,
+           reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+#endif
   };
 
   auto session = std::make_unique<KcpSession>(conv, ev_base_, output_cb);
