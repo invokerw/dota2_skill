@@ -37,21 +37,35 @@ jobs:
           path: |
             ${{ github.workspace }}/build/_deps
             ${{ github.workspace }}/build/cjk_font
+            ~/.cache/CPM
+            ~/Library/Caches/CPM
+            %LOCALAPPDATA%\CPM
           key: cpm-${{ matrix.name }}-${{ hashFiles('CMakeLists.txt', 'cmake/CPM.cmake') }}
           restore-keys: |
             cpm-${{ matrix.name }}-
 
       - name: Configure (macOS arm64)
         if: matrix.name == 'macos-arm64'
-        run: |
-          cmake -B build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DBUILD_VISUAL=ON
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 15
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: |
+            cmake -B build \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_OSX_ARCHITECTURES=arm64 \
+              -DBUILD_VISUAL=ON
 
       - name: Configure (Windows x64)
         if: matrix.name == 'windows-x64'
-        run: cmake -B build -A x64 -DBUILD_VISUAL=ON
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 15
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: pwsh
+          command: cmake -B build -A x64 -DBUILD_VISUAL=ON
 
       - name: Build skill_tester + hero_workshop
         run: cmake --build build --config Release --target skill_tester hero_workshop -j
