@@ -106,9 +106,9 @@ jobs:
         if: matrix.name == 'linux-x64'
         uses: nick-fields/retry@v3
         with:
-          timeout_minutes: 15
-          max_attempts: 3
-          retry_wait_seconds: 30
+          timeout_minutes: 20
+          max_attempts: 5
+          retry_wait_seconds: 60
           command: |
             cmake -B build \
               -DCMAKE_BUILD_TYPE=Release \
@@ -120,9 +120,9 @@ jobs:
         if: matrix.name == 'macos-arm64'
         uses: nick-fields/retry@v3
         with:
-          timeout_minutes: 15
-          max_attempts: 3
-          retry_wait_seconds: 30
+          timeout_minutes: 20
+          max_attempts: 5
+          retry_wait_seconds: 60
           command: |
             cmake -B build \
               -DCMAKE_BUILD_TYPE=Release \
@@ -135,9 +135,9 @@ jobs:
         if: matrix.name == 'windows-x64'
         uses: nick-fields/retry@v3
         with:
-          timeout_minutes: 15
-          max_attempts: 3
-          retry_wait_seconds: 30
+          timeout_minutes: 25
+          max_attempts: 5
+          retry_wait_seconds: 120
           shell: pwsh
           command: |
             cmake -B build -A x64 `
