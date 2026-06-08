@@ -48,11 +48,14 @@ bool Renderer::should_close() const {
 }
 
 void Renderer::draw(const GameState& state) {
-  // 相机跟随玩家
+  // 相机平滑跟随玩家
   const ClientEntity* player = state.get_player();
   if (player) {
-    camera_offset_.x = width_ / 2.0f - player->position.x;
-    camera_offset_.y = height_ / 2.0f - player->position.y;
+    float target_x = width_ / 2.0f - player->position.x;
+    float target_y = height_ / 2.0f - player->position.y;
+    float smoothing = 0.15f;
+    camera_offset_.x += (target_x - camera_offset_.x) * smoothing;
+    camera_offset_.y += (target_y - camera_offset_.y) * smoothing;
   }
 
   // 绘制网格背景

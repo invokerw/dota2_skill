@@ -28,6 +28,16 @@ struct ClientEntity {
   Vec2 move_target{0, 0};
   bool has_move_target = false;
   float move_speed = 350.0f;
+
+  // 插值 (非玩家实体)
+  Vec2 prev_position{0, 0};
+  Vec2 target_position{0, 0};
+  float interp_t = 1.0f;
+
+  // 服务器权威位置 (本地玩家校正用)
+  Vec2 server_position{0, 0};
+  bool has_server_position = false;
+
 };
 
 /**

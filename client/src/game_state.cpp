@@ -34,23 +34,46 @@ void GameState::apply_delta_snapshot(const network::S2C_DeltaSnapshot& delta) {
 }
 
 void GameState::apply_entity_state(const network::EntityState& state) {
-  ClientEntity entity;
-  entity.id = state.id();
-  entity.position.x = state.position().x();
-  entity.position.y = state.position().y();
-  entity.health = state.health();
-  entity.max_health = state.max_health();
+  Vec2 server_pos{state.position().x(), state.position().y()};
 
-  // TEAM_NONE=0, TEAM_GOOD=1 (Radiant/玩家方), TEAM_BAD=2 (Dire/敌方)
-  if (state.team() == dota::network::TEAM_GOOD) {
-    entity.is_player = true;
-    entity.radius = 40.0f;
-  } else if (state.team() == dota::network::TEAM_BAD) {
-    entity.is_enemy = true;
-    entity.radius = 32.0f;
+  auto it = entities_.find(state.id());
+  if (it != entities_.end()) {
+    // 已有实体: 更新非位置字段
+    ClientEntity& entity = it->second;
+    entity.health = state.health();
+    entity.max_health = state.max_health();
+
+    if (state.id() == player_id_ && entity.has_move_target) {
+      // 本地玩家正在预测移动中, 不覆盖位置, 只记录服务器权威位置用于校正
+      entity.server_position = server_pos;
+      entity.has_server_position = true;
+    } else {
+      // 非玩家实体或玩家静止: 插值目标设为服务器位置
+      entity.prev_position = entity.position;
+      entity.target_position = server_pos;
+      entity.interp_t = 0.0f;
+    }
+  } else {
+    // 新实体
+    ClientEntity entity;
+    entity.id = state.id();
+    entity.position = server_pos;
+    entity.prev_position = server_pos;
+    entity.target_position = server_pos;
+    entity.interp_t = 1.0f;
+    entity.health = state.health();
+    entity.max_health = state.max_health();
+
+    if (state.team() == dota::network::TEAM_GOOD) {
+      entity.is_player = true;
+      entity.radius = 40.0f;
+    } else if (state.team() == dota::network::TEAM_BAD) {
+      entity.is_enemy = true;
+      entity.radius = 32.0f;
+    }
+
+    entities_[entity.id] = entity;
   }
-
-  entities_[entity.id] = entity;
 }
 
 const ClientEntity* GameState::get_entity(uint32_t id) const {
@@ -59,11 +82,45 @@ const ClientEntity* GameState::get_entity(uint32_t id) const {
 }
 
 void GameState::predict(float dt) {
-  // 对本地玩家做移动预测: 按 move_speed 向 move_target 移动
+  // 插值所有非玩家实体
+  for (auto& [id, entity] : entities_) {
+    if (id == player_id_) continue;
+    if (entity.interp_t < 1.0f) {
+      entity.interp_t += dt * 30.0f;  // 一个 tick (1/30s) 内完成插值
+      if (entity.interp_t > 1.0f) entity.interp_t = 1.0f;
+      float t = entity.interp_t;
+      entity.position.x = entity.prev_position.x + (entity.target_position.x - entity.prev_position.x) * t;
+      entity.position.y = entity.prev_position.y + (entity.target_position.y - entity.prev_position.y) * t;
+    }
+  }
+
+  // 本地玩家移动预测
   auto it = entities_.find(player_id_);
   if (it == entities_.end()) return;
 
   ClientEntity& player = it->second;
+
+  // 服务器位置校正
+  if (player.has_server_position) {
+    float correction_dx = player.server_position.x - player.position.x;
+    float correction_dy = player.server_position.y - player.position.y;
+    float correction_dist = std::sqrt(correction_dx * correction_dx + correction_dy * correction_dy);
+
+    // 偏差过大: 直接 snap 到服务器位置 (碰到阻挡时客户端会跑偏)
+    constexpr float snap_threshold = 50.0f;
+    if (correction_dist > snap_threshold) {
+      player.position = player.server_position;
+      player.has_server_position = false;
+    } else if (correction_dist > 1.0f) {
+      // 小偏差: 平滑校正
+      float blend = std::min(1.0f, dt * 10.0f);
+      player.position.x += correction_dx * blend;
+      player.position.y += correction_dy * blend;
+    } else {
+      player.has_server_position = false;
+    }
+  }
+
   if (!player.has_move_target) return;
 
   float dx = player.move_target.x - player.position.x;

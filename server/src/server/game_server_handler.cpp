@@ -160,10 +160,8 @@ void GameServerHandler::tick() {
   // 检查客户端超时
   check_client_timeouts();
 
-  // 每 3 个 tick 广播一次快照（10Hz）
-  if (server_tick_ % 3 == 0) {
-    broadcast_snapshot();
-  }
+  // 每 tick 广播一次快照（30Hz, 与服务器 tick 频率一致）
+  broadcast_snapshot();
 }
 
 void GameServerHandler::broadcast_snapshot() {
