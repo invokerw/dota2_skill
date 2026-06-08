@@ -111,11 +111,7 @@ void GameSession::handle_move_command(uint32_t player_id, const dota::network::M
   const auto& target_vec = cmd.target();
   Vec2 target{target_vec.x(), target_vec.y()};
 
-  // TODO: 发出移动指令
-  // unit->move_to_position(target);
-
-  std::cout << "[GameSession] Player " << player_id << " move to ("
-            << target.x << ", " << target.y << ") [not implemented]\n";
+  unit->issue_order(OrderMoveToPoint{target});
 }
 
 void GameSession::handle_use_ability_command(uint32_t player_id, const dota::network::UseAbilityCommand& cmd) {
@@ -126,9 +122,25 @@ void GameSession::handle_use_ability_command(uint32_t player_id, const dota::net
   if (!unit) return;
 
   uint32_t slot = cmd.ability_slot();
+  const auto& abilities = unit->abilities().all();
+  if (slot >= abilities.size()) return;
 
-  // TODO: 根据目标类型使用技能
-  std::cout << "[GameSession] Player " << player_id << " use ability slot=" << slot << " [not implemented]\n";
+  int idx = static_cast<int>(slot);
+
+  switch (cmd.target_case()) {
+    case dota::network::UseAbilityCommand::kPoint: {
+      const auto& p = cmd.point();
+      unit->issue_order(OrderCastPoint{idx, Vec2{p.x(), p.y()}});
+      break;
+    }
+    case dota::network::UseAbilityCommand::kUnit: {
+      unit->issue_order(OrderCastTarget{idx, cmd.unit()});
+      break;
+    }
+    default:
+      unit->issue_order(OrderCastNoTarget{idx});
+      break;
+  }
 }
 
 void GameSession::handle_stop_command(uint32_t player_id) {
@@ -138,8 +150,7 @@ void GameSession::handle_stop_command(uint32_t player_id) {
   dota::Unit* unit = world_->find(unit_id);
   if (!unit) return;
 
-  // TODO: 停止指令
-  std::cout << "[GameSession] Player " << player_id << " stop [not implemented]\n";
+  unit->issue_order(OrderStop{});
 }
 
 void GameSession::generate_snapshot(dota::network::S2C_Snapshot* snapshot) {
@@ -241,32 +252,22 @@ void GameSession::serialize_entity(const dota::Unit* unit, dota::network::Entity
   state->set_id(unit->id());
   state->set_type(dota::network::ENTITY_PLAYER);
 
-  // 位置 (暂时使用固定位置)
   auto* pos = state->mutable_position();
-  pos->set_x(0.0);
-  pos->set_y(0.0);
+  pos->set_x(unit->position().x);
+  pos->set_y(unit->position().y);
 
-  // 速度
   auto* vel = state->mutable_velocity();
   vel->set_x(0.0);
   vel->set_y(0.0);
 
-  // 旋转
   state->set_rotation(0.0f);
 
-  // 生命值 (暂时使用固定值)
-  state->set_health(1000.0f);
-  state->set_max_health(1000.0f);
+  state->set_health(static_cast<float>(unit->health()));
+  state->set_max_health(static_cast<float>(unit->max_health()));
 
-  // 队伍
   state->set_team(unit->team() == dota::Team::Radiant
     ? dota::network::TEAM_GOOD
     : dota::network::TEAM_BAD);
-
-  // TODO: 添加更多状态
-  // - 从 Unit 获取实际位置和生命值
-  // - 技能冷却
-  // - Modifier 列表
 }
 
 } // namespace dota::server
