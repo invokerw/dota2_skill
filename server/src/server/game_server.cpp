@@ -79,9 +79,15 @@ void GameServer::send_to_client(uint32_t client_id, const dota::network::Packet&
 }
 
 void GameServer::disconnect_client(uint32_t client_id) {
-  // TODO: 实现断开客户端的逻辑
-  // network_->disconnect_client(client_id);
-  std::cout << "[GameServer] Request to disconnect client " << client_id << "\n";
+  // 从游戏会话中移除玩家
+  GameSession* session = default_session();
+  if (session && session->has_player(client_id)) {
+    session->remove_player(client_id);
+  }
+
+  // 断开网络连接
+  network_->disconnect_client(client_id);
+  std::cout << "[GameServer] Disconnected client " << client_id << "\n";
 }
 
 GameSession* GameServer::get_or_create_session(uint32_t session_id) {
@@ -93,6 +99,12 @@ GameSession* GameServer::get_or_create_session(uint32_t session_id) {
   // 创建新会话
   auto session = std::make_unique<GameSession>(session_id, "default_map");
   auto* ptr = session.get();
+
+  // 设置消息发送回调
+  ptr->set_send_callback([this](uint32_t player_id, const dota::network::Packet& packet) {
+    send_to_client(player_id, packet);
+  });
+
   sessions_[session_id] = std::move(session);
 
   std::cout << "[GameServer] Created session " << session_id << "\n";

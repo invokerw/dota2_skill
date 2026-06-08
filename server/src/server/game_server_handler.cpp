@@ -4,6 +4,7 @@
 #include "server/server/game_server_handler.hpp"
 #include "server/server/game_server.hpp"
 #include "server/server/game_session.hpp"
+#include "server/mode/survivor_mode.hpp"
 #include <iostream>
 
 namespace dota::server {
@@ -74,7 +75,7 @@ void GameServerHandler::handle_connect(uint32_t client_id, const dota::network::
   response.set_timestamp(get_current_time_ms());
 
   auto* welcome = response.mutable_welcome();
-  welcome->set_player_id(client_id);
+  welcome->set_player_id(it->second.unit_id);
   welcome->set_session_id(0);  // 默认会话
   welcome->set_server_tick(server_tick_);
 
@@ -142,9 +143,15 @@ void GameServerHandler::handle_disconnect(uint32_t client_id, const dota::networ
 
 void GameServerHandler::handle_choose_skill(uint32_t client_id, const dota::network::C2S_ChooseSkill& msg) {
   std::cout << "[GameServerHandler] Client " << client_id
-            << " choose skill: " << msg.skill_id() << "\n";
+            << " choose skill index: " << msg.skill_id() << "\n";
 
-  // TODO: Stage 4 处理技能选择
+  GameSession* session = server_->default_session();
+  if (!session) return;
+
+  auto* mode = session->game_mode();
+  if (mode) {
+    mode->choose_skill_by_index(client_id, msg.skill_id());
+  }
 }
 
 void GameServerHandler::tick() {

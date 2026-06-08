@@ -46,6 +46,10 @@ GameSession::GameSession(uint32_t session_id, const std::string& map_name)
 
 GameSession::~GameSession() = default;
 
+void GameSession::set_send_callback(SendToPlayerFn fn) {
+  game_mode_->set_send_callback(std::move(fn));
+}
+
 bool GameSession::add_player(uint32_t player_id, const std::string& player_name) {
   if (has_player(player_id)) {
     std::cout << "[GameSession] Player " << player_id << " already in session\n";
@@ -73,9 +77,12 @@ void GameSession::remove_player(uint32_t player_id) {
   // 通知游戏模式
   game_mode_->on_player_left(player_id);
 
-  // TODO: 从 World 移除单位
-  // uint32_t unit_id = it->second;
-  // world_->remove_unit(unit_id);
+  // 将单位生命值置零使其退出游戏逻辑
+  uint32_t unit_id = it->second;
+  dota::Unit* unit = world_->find(unit_id);
+  if (unit) {
+    unit->set_health(0);
+  }
 
   player_units_.erase(it);
 

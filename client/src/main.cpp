@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
   });
 
   // 输入处理器
-  InputHandler input_handler(&client, &renderer);
+  InputHandler input_handler(&client, &renderer, &game_state);
 
   // 主循环
   auto last_ping = std::chrono::steady_clock::now();

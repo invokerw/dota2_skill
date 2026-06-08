@@ -48,6 +48,9 @@ class ServerNetwork {
   void send_to_client(uint32_t client_id, const Packet& packet);
   void broadcast(const Packet& packet, uint32_t exclude_client = 0);
 
+  // 主动断开客户端
+  void disconnect_client(uint32_t client_id);
+
   // 设置消息处理器
   void set_message_handler(std::shared_ptr<MessageHandler> handler) {
     message_handler_ = std::move(handler);

@@ -73,7 +73,7 @@ std::vector<SkillInfo> SkillPool::get_player_skills(uint32_t player_id) const {
   for (const auto& [skill_id, level] : it->second) {
     SkillInfo info;
     info.skill_id = skill_id;
-    info.display_name = skill_id;  // TODO: 从配置读取
+    info.display_name = skill_id;
     info.description = "Skill description";
     info.max_level = 5;
     info.current_level = level;

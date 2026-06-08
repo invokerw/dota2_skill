@@ -6,6 +6,7 @@
 #include "dota/core/world.hpp"
 #include "messages.pb.h"
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <map>
 #include <vector>
@@ -54,6 +55,10 @@ class GameSession {
 
   // 游戏模式访问
   SurvivorGameMode* game_mode() { return game_mode_.get(); }
+
+  // 消息发送回调 (由 GameServer 设置)
+  using SendToPlayerFn = std::function<void(uint32_t player_id, const dota::network::Packet& packet)>;
+  void set_send_callback(SendToPlayerFn fn);
 
   // 会话状态
   uint32_t tick_count() const { return tick_count_; }

@@ -5,8 +5,8 @@
 
 namespace dota::client {
 
-InputHandler::InputHandler(NetworkClient* client, Renderer* renderer)
-    : client_(client), renderer_(renderer) {}
+InputHandler::InputHandler(NetworkClient* client, Renderer* renderer, GameState* game_state)
+    : client_(client), renderer_(renderer), game_state_(game_state) {}
 
 void InputHandler::process() {
   // 右键移动
@@ -14,6 +14,7 @@ void InputHandler::process() {
     Vector2 mouse_pos = GetMousePosition();
     Vec2 world_pos = renderer_->screen_to_world(mouse_pos);
     client_->send_move_command(world_pos);
+    game_state_->set_player_move_target(world_pos);
   }
 
   // 技能按键 Q/W/E/R/D/F
@@ -51,6 +52,7 @@ void InputHandler::process() {
   // 停止
   if (IsKeyPressed(KEY_S)) {
     client_->send_stop_command();
+    game_state_->clear_player_move_target();
   }
 }
 

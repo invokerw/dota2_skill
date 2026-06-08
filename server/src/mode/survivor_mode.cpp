@@ -55,6 +55,9 @@ void SurvivorGameMode::tick(float dt) {
   // Tick 刷怪系统
   wave_spawner_->tick(dt);
 
+  // 处理复活
+  tick_respawns();
+
   // 检查是否需要开始下一波
   if (!wave_spawner_->is_wave_active() && current_wave_ > 0) {
     // 间隔 5 秒后开始下一波
@@ -114,21 +117,12 @@ void SurvivorGameMode::on_unit_killed(uint32_t victim_id, uint32_t killer_id) {
   else if (victim->team() == dota::Team::Radiant) {
     std::cout << "[SurvivorMode] Player unit " << victim_id << " died!\n";
 
-    // TODO: 完整的玩家死亡处理
-    // 可能的选项:
-    //   1. 单人游戏: 游戏结束，发送 GameOver 消息
-    //   2. 多人游戏: 玩家进入观战模式，波次结束后复活
-    //   3. Roguelike 模式: 永久死亡，显示统计数据
-    //   4. 复活机制: N 秒后在出生点复活
+    // 设置 5 秒后复活
+    constexpr float kRespawnDelay = 5.0f;
+    pending_respawns_.push_back({victim_id, game_time_ + kRespawnDelay});
 
-    // 简化实现: 打印死亡消息，游戏继续
-    // 实际应该:
-    //   - 发送 S2C_PlayerDeath 消息给所有客户端
-    //   - 记录死亡统计
-    //   - 根据游戏模式决定是否游戏结束
-    //   - 如果允许复活，设置复活定时器
-
-    std::cout << "[SurvivorMode] Player death handling not fully implemented\n";
+    std::cout << "[SurvivorMode] Player unit " << victim_id
+              << " will respawn in " << kRespawnDelay << "s\n";
   }
 }
 
@@ -142,24 +136,34 @@ void SurvivorGameMode::on_unit_level_up(uint32_t unit_id, uint32_t new_level) {
 void SurvivorGameMode::request_skill_choices(uint32_t player_id) {
   auto choices = skill_pool_->generate_skill_choices(player_id, 3);
 
-  // TODO: 发送技能选择消息给客户端
-  // 需要通过 GameSession 或 GameServerHandler 发送 S2C_LevelUp 消息
-  // 当前架构中 SurvivorGameMode 无法直接访问网络层
-  // 解决方案:
-  //   1. 在 GameSession 中添加 send_to_player(player_id, message) 方法
-  //   2. GameSession 持有 GameServer* 或消息发送回调
-  //   3. 或者在 GameServerHandler 中轮询待发送消息队列
+  // 保存待选列表
+  pending_choices_[player_id] = choices;
 
-  std::cout << "[SurvivorMode] Sending skill choices to player " << player_id << ": ";
+  uint32_t current_level = exp_system_->get_level(player_id);
+
+  // 构造并发送 S2C_LevelUp 消息
+  if (send_to_player_) {
+    dota::network::Packet packet;
+    auto* level_up = packet.mutable_level_up();
+    level_up->set_new_level(current_level);
+
+    for (size_t i = 0; i < choices.size(); ++i) {
+      auto* option = level_up->add_options();
+      option->set_skill_id(static_cast<uint32_t>(i));
+      option->set_skill_name(choices[i]);
+      option->set_description("Skill: " + choices[i]);
+      option->set_current_level(skill_pool_->get_skill_level(player_id, choices[i]));
+      option->set_max_level(5);
+    }
+
+    send_to_player_(player_id, packet);
+  }
+
+  std::cout << "[SurvivorMode] Sent skill choices to player " << player_id << ": ";
   for (const auto& skill_id : choices) {
     std::cout << skill_id << " ";
   }
   std::cout << "\n";
-
-  // 占位: 打印技能选项信息
-  uint32_t current_level = exp_system_->get_level(player_id);
-  std::cout << "[SurvivorMode] Player " << player_id << " reached level "
-            << current_level << ", choose from " << choices.size() << " skills\n";
 }
 
 void SurvivorGameMode::choose_skill(uint32_t player_id, const std::string& skill_id) {
@@ -206,32 +210,51 @@ bool SurvivorGameMode::is_wave_active() const {
 }
 
 void SurvivorGameMode::spawn_experience_orb(const Vec2& position, uint32_t exp_value) {
-  // TODO: 创建真正的拾取物实体
-  // 当前简化实现: 直接给附近的玩家经验
-  // 完整实现需要:
-  //   1. 添加 Pickup 实体类型到 World
-  //   2. 碰撞检测系统检测玩家与拾取物接触
-  //   3. 触发拾取事件，应用效果并销毁拾取物
-  //   4. 拾取物可能需要飞向玩家的动画
-
-  // 简化版: 使用 find_enemies_in_radius 查找附近玩家 (但它查找敌人)
-  // 更简化: 直接在敌人死亡时给击杀者经验，这里只记录日志
-  std::cout << "[SurvivorMode] Spawned exp orb (" << exp_value
-            << " exp) at (" << position.x << ", " << position.y
-            << ") - simplified: exp given to killer directly\n";
+  // 经验已在击杀时直接结算给击杀者, 此处为占位
+  (void)position;
+  (void)exp_value;
 }
 
 void SurvivorGameMode::spawn_gold_coin(const Vec2& position, uint32_t gold_value) {
-  // TODO: 创建金币拾取物
-  // 金币系统需要:
-  //   1. 玩家金币属性 (在 PlayerState 或 ExperienceSystem 中)
-  //   2. 商店/升级系统来消费金币
-  //   3. 与经验球类似的拾取机制
+  // 当前占位实现: 经验已在击杀时直接结算, 金币系统待实现
+  (void)position;
+  (void)gold_value;
+}
 
-  // 当前占位实现: 仅记录日志
-  std::cout << "[SurvivorMode] Spawned gold coin (" << gold_value
-            << " gold) at (" << position.x << ", " << position.y
-            << ") - gold system not yet implemented\n";
+void SurvivorGameMode::choose_skill_by_index(uint32_t player_id, uint32_t index) {
+  auto it = pending_choices_.find(player_id);
+  if (it == pending_choices_.end() || index >= it->second.size()) {
+    std::cout << "[SurvivorMode] Player " << player_id
+              << " invalid skill index " << index << "\n";
+    return;
+  }
+
+  const std::string& skill_id = it->second[index];
+  choose_skill(player_id, skill_id);
+  pending_choices_.erase(it);
+}
+
+const std::vector<std::string>& SurvivorGameMode::get_pending_choices(uint32_t player_id) const {
+  static const std::vector<std::string> empty;
+  auto it = pending_choices_.find(player_id);
+  return (it != pending_choices_.end()) ? it->second : empty;
+}
+
+void SurvivorGameMode::tick_respawns() {
+  for (auto it = pending_respawns_.begin(); it != pending_respawns_.end(); ) {
+    if (game_time_ >= it->respawn_time) {
+      dota::Unit* unit = world_->find(it->unit_id);
+      if (unit) {
+        unit->set_health(unit->max_health());
+        // 重置到地图中心出生点
+        unit->set_position(Vec2{1600.0f, 1600.0f});
+        std::cout << "[SurvivorMode] Unit " << it->unit_id << " respawned\n";
+      }
+      it = pending_respawns_.erase(it);
+    } else {
+      ++it;
+    }
+  }
 }
 
 } // namespace dota::server

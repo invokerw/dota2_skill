@@ -7,8 +7,13 @@
 #include "server/mode/experience_system.hpp"
 #include "server/mode/skill_pool.hpp"
 #include "dota/core/types.hpp"
+#include "messages.pb.h"
 #include <cstdint>
 #include <memory>
+#include <vector>
+#include <map>
+#include <string>
+#include <functional>
 
 namespace dota {
 class World;
@@ -51,6 +56,16 @@ class SurvivorGameMode {
   void request_skill_choices(uint32_t player_id);
   void choose_skill(uint32_t player_id, const std::string& skill_id);
 
+  // 按索引选技能 (proto 传 uint32 索引)
+  void choose_skill_by_index(uint32_t player_id, uint32_t index);
+
+  // 获取玩家待选技能列表
+  const std::vector<std::string>& get_pending_choices(uint32_t player_id) const;
+
+  // 消息发送回调 (由 GameSession 设置)
+  using SendToPlayerFn = std::function<void(uint32_t player_id, const dota::network::Packet& packet)>;
+  void set_send_callback(SendToPlayerFn fn) { send_to_player_ = std::move(fn); }
+
   // 获取状态
   uint32_t current_wave() const { return current_wave_; }
   float wave_time_remaining() const;
@@ -74,6 +89,20 @@ class SurvivorGameMode {
   void start_first_wave();
   void spawn_experience_orb(const Vec2& position, uint32_t exp_value);
   void spawn_gold_coin(const Vec2& position, uint32_t gold_value);
+  void tick_respawns();
+
+  // 复活队列
+  struct RespawnEntry {
+    uint32_t unit_id;
+    float respawn_time;
+  };
+  std::vector<RespawnEntry> pending_respawns_;
+
+  // 玩家待选技能: player_id -> 可选 skill_id 列表
+  std::map<uint32_t, std::vector<std::string>> pending_choices_;
+
+  // 消息发送回调
+  SendToPlayerFn send_to_player_;
 };
 
 } // namespace dota::server

@@ -2,6 +2,7 @@
 // 游戏状态实现
 
 #include "client/game_state.hpp"
+#include <cmath>
 #include <iostream>
 
 namespace dota::client {
@@ -40,12 +41,11 @@ void GameState::apply_entity_state(const network::EntityState& state) {
   entity.health = state.health();
   entity.max_health = state.max_health();
 
-  // 根据 team 判断类型
-  // 假设 team=0 是玩家，team=1 是敌人
-  if (state.team() == 0) {
+  // TEAM_NONE=0, TEAM_GOOD=1 (Radiant/玩家方), TEAM_BAD=2 (Dire/敌方)
+  if (state.team() == dota::network::TEAM_GOOD) {
     entity.is_player = true;
     entity.radius = 40.0f;
-  } else if (state.team() == 1) {
+  } else if (state.team() == dota::network::TEAM_BAD) {
     entity.is_enemy = true;
     entity.radius = 32.0f;
   }
@@ -59,9 +59,40 @@ const ClientEntity* GameState::get_entity(uint32_t id) const {
 }
 
 void GameState::predict(float dt) {
-  // TODO: 客户端预测
-  // 在收到服务器快照之间，根据输入预测玩家位置
-  // 收到快照后进行修正
+  // 对本地玩家做移动预测: 按 move_speed 向 move_target 移动
+  auto it = entities_.find(player_id_);
+  if (it == entities_.end()) return;
+
+  ClientEntity& player = it->second;
+  if (!player.has_move_target) return;
+
+  float dx = player.move_target.x - player.position.x;
+  float dy = player.move_target.y - player.position.y;
+  float dist = std::sqrt(dx * dx + dy * dy);
+
+  float step = player.move_speed * dt;
+  if (dist <= step) {
+    player.position = player.move_target;
+    player.has_move_target = false;
+  } else {
+    player.position.x += dx / dist * step;
+    player.position.y += dy / dist * step;
+  }
+}
+
+void GameState::set_player_move_target(Vec2 target) {
+  auto it = entities_.find(player_id_);
+  if (it == entities_.end()) return;
+
+  it->second.move_target = target;
+  it->second.has_move_target = true;
+}
+
+void GameState::clear_player_move_target() {
+  auto it = entities_.find(player_id_);
+  if (it == entities_.end()) return;
+
+  it->second.has_move_target = false;
 }
 
 } // namespace dota::client

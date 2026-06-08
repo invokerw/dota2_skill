@@ -23,6 +23,11 @@ struct ClientEntity {
   float radius = 32.0f;
   bool is_player = false;
   bool is_enemy = false;
+
+  // 用于客户端预测
+  Vec2 move_target{0, 0};
+  bool has_move_target = false;
+  float move_speed = 350.0f;
 };
 
 /**
@@ -49,8 +54,12 @@ class GameState {
   // 获取所有实体
   const std::map<uint32_t, ClientEntity>& entities() const { return entities_; }
 
-  // 客户端预测 (可选)
+  // 客户端预测
   void predict(float dt);
+
+  // 设置本地玩家移动目标 (用于预测)
+  void set_player_move_target(Vec2 target);
+  void clear_player_move_target();
 
   // 获取服务器 tick
   uint32_t server_tick() const { return server_tick_; }

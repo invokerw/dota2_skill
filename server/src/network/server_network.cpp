@@ -220,6 +220,10 @@ void ServerNetwork::create_session(const RemoteEndpoint& endpoint, uint32_t conv
   }
 }
 
+void ServerNetwork::disconnect_client(uint32_t client_id) {
+  remove_session(client_id);
+}
+
 void ServerNetwork::remove_session(uint32_t client_id) {
   std::cout << "[ServerNetwork] Removing client " << client_id << "\n";
 
