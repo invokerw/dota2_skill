@@ -116,8 +116,8 @@ jobs:
         if: matrix.name == 'windows-x64' && matrix.build_client
         run: cmake --build build --config Release --target game_client -j
 
-      - name: Build stress test client
-        if: matrix.build_server
+      - name: Build stress test client (Linux/macOS only)
+        if: matrix.build_server && matrix.name != 'windows-x64'
         run: cmake --build build --config Release --target stress_test_client -j
 
       - name: Build pathfinding demo (Linux/macOS only)
@@ -207,7 +207,6 @@ jobs:
 
           # 服务器
           Copy-Item build\server\Release\game_server.exe "$dist\bin\"
-          Copy-Item build\server\Release\stress_test_client.exe "$dist\bin\"
           New-Item -ItemType Directory -Force -Path "$dist\server" | Out-Null
           if (Test-Path server\config) {
             Copy-Item -Recurse server\config "$dist\server\"
@@ -264,8 +263,7 @@ jobs:
           Pathfinding Demo:
             run_pathfinding_demo.bat
 
-          Stress Test:
-            bin\stress_test_client.exe [num_clients] [duration_sec] [host] [port]
+          Note: stress_test_client is not available on Windows (Unix/Linux only)
           '@ | Set-Content -Encoding ASCII "$dist\README.txt"
 
           Compress-Archive -Path "$dist" -DestinationPath "dota2_skill-game-${{ matrix.name }}.zip" -Force

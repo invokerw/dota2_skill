@@ -84,14 +84,16 @@ target_link_libraries(simple_client PRIVATE
   server_network
 )
 
-# 压力测试客户端
-add_executable(stress_test_client
-  tools/stress_test_client.cpp
-)
+# 压力测试客户端 (Unix/Linux only, uses arpa/inet.h and POSIX sockets)
+if(NOT WIN32)
+  add_executable(stress_test_client
+    tools/stress_test_client.cpp
+  )
 
-target_link_libraries(stress_test_client PRIVATE
-  server_network
-)
+  target_link_libraries(stress_test_client PRIVATE
+    server_network
+  )
+endif()
 
 # ============ 测试 ============
 if(BUILD_TESTING)
