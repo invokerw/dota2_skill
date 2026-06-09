@@ -23,7 +23,7 @@ class SurvivorGameMode;
  */
 class GameSession {
  public:
-  GameSession(uint32_t session_id, const std::string& map_name);
+  GameSession(uint32_t session_id, const std::string& map_name, const std::string& data_dir);
   ~GameSession();  // 需要在 .cpp 中定义，因为包含不完整类型的 unique_ptr
 
   // 会话 ID

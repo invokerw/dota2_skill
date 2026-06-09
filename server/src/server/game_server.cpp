@@ -17,7 +17,7 @@ constexpr float kTickRate = 30.0f;
 constexpr auto kTickInterval = std::chrono::milliseconds(static_cast<int>(1000.0f / kTickRate));
 }
 
-GameServer::GameServer(uint16_t port) : port_(port) {
+GameServer::GameServer(uint16_t port, const std::string& data_dir) : port_(port), data_dir_(data_dir) {
   // 创建网络层
   network_ = std::make_unique<dota::network::ServerNetwork>(port);
 
@@ -97,7 +97,7 @@ GameSession* GameServer::get_or_create_session(uint32_t session_id) {
   }
 
   // 创建新会话
-  auto session = std::make_unique<GameSession>(session_id, "default_map");
+  auto session = std::make_unique<GameSession>(session_id, "default_map", data_dir_);
   auto* ptr = session.get();
 
   // 设置消息发送回调

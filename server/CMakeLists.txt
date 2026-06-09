@@ -74,6 +74,9 @@ add_executable(game_server
 target_link_libraries(game_server PRIVATE
   server_logic
 )
+target_compile_definitions(game_server PRIVATE
+  DOTA_DATA_DIR="${CMAKE_SOURCE_DIR}/data"
+)
 
 # ============ 工具 ============
 add_executable(simple_client

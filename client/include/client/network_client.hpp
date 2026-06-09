@@ -13,10 +13,12 @@
 
 namespace dota::client {
 
-// 快照回调
+// 回调类型
 using SnapshotCallback = std::function<void(const network::S2C_Snapshot&)>;
 using DeltaSnapshotCallback = std::function<void(const network::S2C_DeltaSnapshot&)>;
 using WelcomeCallback = std::function<void(uint32_t player_id)>;
+using LevelUpCallback = std::function<void(const network::S2C_LevelUp&)>;
+using SkillLearnedCallback = std::function<void(const network::S2C_SkillLearned&)>;
 
 /**
  * 网络客户端
@@ -38,6 +40,7 @@ class NetworkClient {
   void send_move_command(const Vec2& target);
   void send_use_ability(uint32_t ability_slot, const Vec2* target_pos = nullptr);
   void send_stop_command();
+  void send_choose_skill(uint32_t skill_index);
   void send_ping();
 
   // 更新网络（调用 KCP update 和事件循环）
@@ -47,6 +50,8 @@ class NetworkClient {
   void set_snapshot_callback(SnapshotCallback cb) { snapshot_callback_ = cb; }
   void set_delta_snapshot_callback(DeltaSnapshotCallback cb) { delta_snapshot_callback_ = cb; }
   void set_welcome_callback(WelcomeCallback cb) { welcome_callback_ = cb; }
+  void set_level_up_callback(LevelUpCallback cb) { level_up_callback_ = cb; }
+  void set_skill_learned_callback(SkillLearnedCallback cb) { skill_learned_callback_ = cb; }
 
   // 状态查询
   bool is_connected() const { return connected_; }
@@ -78,6 +83,8 @@ class NetworkClient {
   SnapshotCallback snapshot_callback_;
   DeltaSnapshotCallback delta_snapshot_callback_;
   WelcomeCallback welcome_callback_;
+  LevelUpCallback level_up_callback_;
+  SkillLearnedCallback skill_learned_callback_;
 };
 
 } // namespace dota::client

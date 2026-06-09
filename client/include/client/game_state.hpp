@@ -6,9 +6,39 @@
 #include "dota/core/types.hpp"
 #include "messages.pb.h"
 #include <map>
+#include <vector>
+#include <string>
 #include <cstdint>
 
 namespace dota::client {
+
+// 客户端技能槽状态
+struct ClientAbility {
+  uint32_t slot = 0;
+  std::string name;
+  uint32_t level = 0;
+  float cooldown_remaining = 0.0f;
+  bool is_passive = false;
+  float mana_cost = 0.0f;
+  float max_cooldown = 0.0f;
+  float cast_range = 0.0f;
+};
+
+// 技能数值条目
+struct SkillSpecialValue {
+  std::string key;
+  std::vector<float> values;
+};
+
+// 待选技能选项
+struct SkillChoice {
+  uint32_t index = 0;
+  std::string name;
+  std::string description;
+  uint32_t current_level = 0;
+  uint32_t max_level = 0;
+  std::vector<SkillSpecialValue> specials;
+};
 
 /**
  * 客户端实体
@@ -74,12 +104,29 @@ class GameState {
   // 获取服务器 tick
   uint32_t server_tick() const { return server_tick_; }
 
+  // 技能状态
+  void apply_level_up(const network::S2C_LevelUp& msg);
+  void apply_skill_learned(const network::S2C_SkillLearned& msg);
+
+  // 玩家技能列表 (从快照同步)
+  const std::vector<ClientAbility>& abilities() const { return abilities_; }
+
+  // 待选技能
+  bool has_pending_choices() const { return !pending_choices_.empty(); }
+  const std::vector<SkillChoice>& pending_choices() const { return pending_choices_; }
+  void clear_pending_choices() { pending_choices_.clear(); }
+
  private:
   void apply_entity_state(const network::EntityState& state);
+  void apply_player_state(const network::PlayerState& ps);
 
   uint32_t player_id_ = 0;
   uint32_t server_tick_ = 0;
   std::map<uint32_t, ClientEntity> entities_;
+
+  // 技能
+  std::vector<ClientAbility> abilities_;
+  std::vector<SkillChoice> pending_choices_;
 };
 
 } // namespace dota::client

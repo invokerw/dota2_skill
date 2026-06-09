@@ -143,6 +143,11 @@ message AbilityState {
   float cooldown_remaining = 4;
   uint32 charges = 5;
   uint32 max_charges = 6;
+  string name = 7;
+  bool is_passive = 8;
+  float mana_cost = 9;
+  float max_cooldown = 10;
+  float cast_range = 11;
 }
 
 // 增量快照 (优化带宽)

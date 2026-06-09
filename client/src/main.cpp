@@ -57,6 +57,14 @@ int main(int argc, char* argv[]) {
     game_state.apply_delta_snapshot(delta);
   });
 
+  client.set_level_up_callback([&game_state](const dota::network::S2C_LevelUp& msg) {
+    game_state.apply_level_up(msg);
+  });
+
+  client.set_skill_learned_callback([&game_state](const dota::network::S2C_SkillLearned& msg) {
+    game_state.apply_skill_learned(msg);
+  });
+
   // 输入处理器
   InputHandler input_handler(&client, &renderer, &game_state);
 
@@ -83,7 +91,9 @@ int main(int argc, char* argv[]) {
     // 4. 渲染
     renderer.begin_draw();
     renderer.draw(game_state);
+    renderer.draw_ability_hud(game_state);
     renderer.draw_ui(game_state.player_id(), client.latency());
+    renderer.draw_skill_choice(game_state);
     renderer.end_draw();
 
     // 5. 定期发送 Ping

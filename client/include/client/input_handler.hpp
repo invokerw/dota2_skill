@@ -23,6 +23,8 @@ class InputHandler {
   void process();
 
  private:
+  void process_skill_choice();
+
   NetworkClient* client_;
   Renderer* renderer_;
   GameState* game_state_;

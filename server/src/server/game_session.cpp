@@ -4,6 +4,10 @@
 #include "server/server/game_session.hpp"
 #include "server/mode/survivor_mode.hpp"
 #include "dota/core/unit.hpp"
+#include "dota/core/world.hpp"
+#include "dota/ability/ability.hpp"
+#include "dota/ability/behavior.hpp"
+#include "dota/ability/manager.hpp"
 #include <iostream>
 #include <cmath>
 
@@ -30,14 +34,14 @@ Vec2 get_spawn_position(size_t player_index) {
 }
 }
 
-GameSession::GameSession(uint32_t session_id, const std::string& map_name)
+GameSession::GameSession(uint32_t session_id, const std::string& map_name, const std::string& data_dir)
     : session_id_(session_id) {
 
-  // 创建 World（不需要参数，默认构造）
+  // 创建 World
   world_ = std::make_unique<dota::World>();
 
   // 创建游戏模式
-  game_mode_ = std::make_unique<SurvivorGameMode>(this);
+  game_mode_ = std::make_unique<SurvivorGameMode>(this, data_dir);
   game_mode_->initialize();
 
   std::cout << "[GameSession] Created session " << session_id
@@ -132,12 +136,36 @@ void GameSession::handle_use_ability_command(uint32_t player_id, const dota::net
   const auto& abilities = unit->abilities().all();
   if (slot >= abilities.size()) return;
 
+  const auto& ab = abilities[slot];
+  if (ab->is_passive()) return;
+
   int idx = static_cast<int>(slot);
+
+  bool needs_unit_target = has_flag(ab->behavior(), dota::BehaviorFlag::UnitTarget);
 
   switch (cmd.target_case()) {
     case dota::network::UseAbilityCommand::kPoint: {
       const auto& p = cmd.point();
-      unit->issue_order(OrderCastPoint{idx, Vec2{p.x(), p.y()}});
+      Vec2 point{p.x(), p.y()};
+
+      if (needs_unit_target) {
+        // 自动寻找点击位置附近最近的有效目标
+        dota::Unit* best = nullptr;
+        double best_dist = 200.0 * 200.0;  // 200 unit 搜索半径
+        for (auto* enemy : world_->units_on_team(dota::Team::Dire)) {
+          if (!enemy->alive()) continue;
+          double d2 = distance_sq(point, enemy->position());
+          if (d2 < best_dist) {
+            best_dist = d2;
+            best = enemy;
+          }
+        }
+        if (best) {
+          unit->issue_order(OrderCastTarget{idx, best->id()});
+        }
+      } else {
+        unit->issue_order(OrderCastPoint{idx, point});
+      }
       break;
     }
     case dota::network::UseAbilityCommand::kUnit: {
@@ -175,6 +203,31 @@ void GameSession::generate_snapshot(dota::network::S2C_Snapshot* snapshot) {
   for (dota::Unit* unit : dire_units) {
     auto* entity = snapshot->add_entities();
     serialize_entity(unit, entity);
+  }
+
+  // 序列化玩家技能状态
+  for (const auto& [player_id, unit_id] : player_units_) {
+    dota::Unit* unit = world_->find(unit_id);
+    if (!unit) continue;
+
+    auto* ps = snapshot->add_players();
+    ps->set_player_id(player_id);
+    ps->set_unit_id(unit_id);
+
+    const auto& abilities = unit->abilities().all();
+    for (uint32_t slot = 0; slot < abilities.size(); ++slot) {
+      const auto& ab = abilities[slot];
+      auto* as = ps->add_abilities();
+      as->set_slot(slot);
+      as->set_ability_id(slot);
+      as->set_level(static_cast<uint32_t>(ab->level()));
+      as->set_cooldown_remaining(static_cast<float>(ab->cooldown_remaining()));
+      as->set_name(ab->name());
+      as->set_is_passive(ab->is_passive());
+      as->set_mana_cost(static_cast<float>(ab->mana_cost_for_level()));
+      as->set_max_cooldown(static_cast<float>(ab->cooldown_for_level()));
+      as->set_cast_range(static_cast<float>(ab->cast_range()));
+    }
   }
 
   std::cout << "[GameSession] Generated snapshot tick=" << tick_count_
@@ -227,6 +280,31 @@ void GameSession::generate_delta_snapshot(dota::network::S2C_DeltaSnapshot* delt
   for (const auto& [id, state] : last_snapshot_) {
     if (current_snapshot.find(id) == current_snapshot.end()) {
       delta->add_removed_entities(id);
+    }
+  }
+
+  // 3. 每次都发送玩家技能状态 (技能数据量小, 不做增量)
+  for (const auto& [pid, uid] : player_units_) {
+    dota::Unit* unit = world_->find(uid);
+    if (!unit) continue;
+
+    auto* ps = delta->add_updated_players();
+    ps->set_player_id(pid);
+    ps->set_unit_id(uid);
+
+    const auto& abilities = unit->abilities().all();
+    for (uint32_t slot = 0; slot < abilities.size(); ++slot) {
+      const auto& ab = abilities[slot];
+      auto* as = ps->add_abilities();
+      as->set_slot(slot);
+      as->set_ability_id(slot);
+      as->set_level(static_cast<uint32_t>(ab->level()));
+      as->set_cooldown_remaining(static_cast<float>(ab->cooldown_remaining()));
+      as->set_name(ab->name());
+      as->set_is_passive(ab->is_passive());
+      as->set_mana_cost(static_cast<float>(ab->mana_cost_for_level()));
+      as->set_max_cooldown(static_cast<float>(ab->cooldown_for_level()));
+      as->set_cast_range(static_cast<float>(ab->cast_range()));
     }
   }
 

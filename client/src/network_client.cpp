@@ -199,6 +199,19 @@ void NetworkClient::send_stop_command() {
   send_packet(packet);
 }
 
+void NetworkClient::send_choose_skill(uint32_t skill_index) {
+  if (!connected_) return;
+
+  network::Packet packet;
+  packet.set_sequence(seq_++);
+  packet.set_timestamp(get_time_ms());
+
+  auto* choose = packet.mutable_choose_skill();
+  choose->set_skill_id(skill_index);
+
+  send_packet(packet);
+}
+
 void NetworkClient::send_ping() {
   if (!connected_) return;
 
@@ -263,6 +276,16 @@ void NetworkClient::on_message(const uint8_t* data, size_t len) {
   else if (packet.has_delta_snapshot()) {
     if (delta_snapshot_callback_) {
       delta_snapshot_callback_(packet.delta_snapshot());
+    }
+  }
+  else if (packet.has_level_up()) {
+    if (level_up_callback_) {
+      level_up_callback_(packet.level_up());
+    }
+  }
+  else if (packet.has_skill_learned()) {
+    if (skill_learned_callback_) {
+      skill_learned_callback_(packet.skill_learned());
     }
   }
 }

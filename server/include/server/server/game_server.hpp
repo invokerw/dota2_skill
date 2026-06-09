@@ -6,6 +6,7 @@
 #include <memory>
 #include <cstdint>
 #include <map>
+#include <string>
 
 namespace dota::network {
 class ServerNetwork;
@@ -25,7 +26,7 @@ class GameSession;
  */
 class GameServer {
  public:
-  explicit GameServer(uint16_t port);
+  GameServer(uint16_t port, const std::string& data_dir);
   ~GameServer();
 
   // 启动和停止
@@ -52,6 +53,7 @@ class GameServer {
 
  private:
   uint16_t port_;
+  std::string data_dir_;
   bool running_ = false;
 
   // 网络层

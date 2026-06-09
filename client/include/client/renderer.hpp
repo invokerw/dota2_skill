@@ -33,6 +33,8 @@ class Renderer {
 
   // 渲染 UI
   void draw_ui(uint32_t player_id, float latency);
+  void draw_ability_hud(const GameState& state);
+  void draw_skill_choice(const GameState& state);
 
   // 窗口状态
   bool should_close() const;

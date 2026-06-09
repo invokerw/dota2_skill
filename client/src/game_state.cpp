@@ -17,6 +17,13 @@ void GameState::apply_snapshot(const network::S2C_Snapshot& snapshot) {
   for (const auto& entity_state : snapshot.entities()) {
     apply_entity_state(entity_state);
   }
+
+  // 应用玩家状态
+  for (const auto& ps : snapshot.players()) {
+    if (ps.unit_id() == player_id_) {
+      apply_player_state(ps);
+    }
+  }
 }
 
 void GameState::apply_delta_snapshot(const network::S2C_DeltaSnapshot& delta) {
@@ -30,6 +37,13 @@ void GameState::apply_delta_snapshot(const network::S2C_DeltaSnapshot& delta) {
   // 删除实体
   for (uint32_t removed_id : delta.removed_entities()) {
     entities_.erase(removed_id);
+  }
+
+  // 应用玩家状态
+  for (const auto& ps : delta.updated_players()) {
+    if (ps.unit_id() == player_id_) {
+      apply_player_state(ps);
+    }
   }
 }
 
@@ -150,6 +164,48 @@ void GameState::clear_player_move_target() {
   if (it == entities_.end()) return;
 
   it->second.has_move_target = false;
+}
+
+void GameState::apply_player_state(const network::PlayerState& ps) {
+  abilities_.clear();
+  for (const auto& as : ps.abilities()) {
+    ClientAbility ab;
+    ab.slot = as.slot();
+    ab.name = as.name();
+    ab.level = as.level();
+    ab.cooldown_remaining = as.cooldown_remaining();
+    ab.is_passive = as.is_passive();
+    ab.mana_cost = as.mana_cost();
+    ab.max_cooldown = as.max_cooldown();
+    ab.cast_range = as.cast_range();
+    abilities_.push_back(ab);
+  }
+}
+
+void GameState::apply_level_up(const network::S2C_LevelUp& msg) {
+  pending_choices_.clear();
+  for (const auto& opt : msg.options()) {
+    SkillChoice choice;
+    choice.index = opt.skill_id();
+    choice.name = opt.skill_name();
+    choice.description = opt.description();
+    choice.current_level = opt.current_level();
+    choice.max_level = opt.max_level();
+    for (const auto& sv : opt.special_values()) {
+      SkillSpecialValue ssv;
+      ssv.key = sv.key();
+      for (int i = 0; i < sv.values_size(); ++i) {
+        ssv.values.push_back(sv.values(i));
+      }
+      choice.specials.push_back(ssv);
+    }
+    pending_choices_.push_back(choice);
+  }
+}
+
+void GameState::apply_skill_learned(const network::S2C_SkillLearned& msg) {
+  (void)msg;
+  pending_choices_.clear();
 }
 
 } // namespace dota::client

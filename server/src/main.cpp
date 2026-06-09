@@ -31,8 +31,19 @@ int main(int argc, char* argv[]) {
 
   std::cout << "Starting server on port " << port << "...\n";
 
+  // 数据目录
+  std::string data_dir;
+#ifdef DOTA_DATA_DIR
+  data_dir = DOTA_DATA_DIR;
+#else
+  data_dir = "./data";
+#endif
+  if (argc > 2) data_dir = argv[2];
+
+  std::cout << "Data dir: " << data_dir << "\n";
+
   // 创建服务器
-  auto server = std::make_unique<dota::server::GameServer>(port);
+  auto server = std::make_unique<dota::server::GameServer>(port, data_dir);
   if (!server->start()) {
     std::cerr << "Failed to start server\n";
     return 1;

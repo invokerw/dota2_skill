@@ -18,6 +18,8 @@
 namespace dota {
 class World;
 class Unit;
+class AbilityRegistry;
+class LuaState;
 }
 
 namespace dota::server {
@@ -35,8 +37,8 @@ class GameSession;
  */
 class SurvivorGameMode {
  public:
-  explicit SurvivorGameMode(GameSession* session);
-  ~SurvivorGameMode() = default;
+  explicit SurvivorGameMode(GameSession* session, const std::string& data_dir);
+  ~SurvivorGameMode();
 
   // 初始化模式
   void initialize();
@@ -52,9 +54,12 @@ class SurvivorGameMode {
   void on_unit_killed(uint32_t victim_id, uint32_t killer_id);
   void on_unit_level_up(uint32_t unit_id, uint32_t new_level);
 
-  // 技能选择
+  // 技能选择 (初始选技和升级)
   void request_skill_choices(uint32_t player_id);
   void choose_skill(uint32_t player_id, const std::string& skill_id);
+
+  // AbilityRegistry 访问 (用于快照同步)
+  dota::AbilityRegistry* ability_registry() { return registry_.get(); }
 
   // 按索引选技能 (proto 传 uint32 索引)
   void choose_skill_by_index(uint32_t player_id, uint32_t index);
@@ -74,6 +79,11 @@ class SurvivorGameMode {
  private:
   GameSession* session_;
   dota::World* world_;
+  std::string data_dir_;
+
+  // 技能系统
+  std::unique_ptr<dota::LuaState> lua_state_;
+  std::unique_ptr<dota::AbilityRegistry> registry_;
 
   // 子系统
   std::unique_ptr<WaveSpawner> wave_spawner_;
